@@ -11,8 +11,8 @@ Five minutes to a running VoltLink with the fictional demo fleet.
 ## 2. Clone and configure
 
 ```bash
-git clone https://github.com/Atvriders/voltlank.git
-cd voltlank
+git clone https://github.com/Atvriders/voltlink.git
+cd voltlink
 cp .env.example .env
 ```
 
@@ -37,7 +37,7 @@ Watch startup:
 docker compose logs -f web
 ```
 
-Wait for `[voltlank] web listening on 0.0.0.0:3000`. On first boot the web role
+Wait for `[voltlink] web listening on 0.0.0.0:3000`. On first boot the web role
 applies database migrations under an advisory lock, so replicas can race
 without harm.
 

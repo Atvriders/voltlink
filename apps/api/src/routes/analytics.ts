@@ -15,9 +15,9 @@ analyticsRouter.get('/:vehicleId/battery', async (req, res) => {
   await loadVehicleForUser(req.params.vehicleId, req.user!.id, req.user!.role);
   const days = Math.min(90, Math.max(1, Number(req.query.days) || 14));
   const from = new Date(Date.now() - days * 86400000);
-  await query('SELECT voltlank_ensure_partition($1)', [from]);
+  await query('SELECT voltlink_ensure_partition($1)', [from]);
   const rows = await query<{ ts: string; data: { b: number | null; r: number | null } }>(
-    `SELECT ts, data FROM telemetry_reading WHERE vehicle_id = $1 AND ts >= $2 AND (data->>'b') IS NOT NULL ORDER BY ts ASC`,
+    `SELECT ts, data FROM telemetry.telemetry_reading WHERE vehicle_id = $1 AND ts >= $2 AND (data->>'b') IS NOT NULL ORDER BY ts ASC`,
     [req.params.vehicleId, from],
   );
   // Downsample to ~400 points.

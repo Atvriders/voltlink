@@ -13,7 +13,24 @@ docker compose -f compose.production.yml up -d
 - Roll back by pinning the previous tag:
 
   ```bash
-  VOLTLANK_IMAGE_TAG=<previous-tag> docker compose -f compose.production.yml up -d
+  VOLTLINK_IMAGE_TAG=<previous-tag> docker compose -f compose.production.yml up -d
+
+## Rename to voltlink (technical identifiers)
+
+VoltLink 1.1.0 (unreleased) renames every technical identifier to `voltlink`
+(the previous spelling is recorded only in the CHANGELOG rename entry).
+
+- The Compose project and its named volumes are renamed, so the old project's
+  `*_pgdata` and `*_redisdata` volumes are not picked up by the new project.
+  To migrate data, stop the old stack, then either rename the volumes
+  (`docker volume rename <old>_pgdata voltlink_pgdata`, likewise for the Redis
+  volume), or back up with the old stack (see BACKUP_RESTORE.md) and restore
+  into the new one before starting it.
+- The database role and database are `voltlink`. If you managed them manually, create `voltlink` and grant it ownership of the restored database.
+- Stored user themes are normalized automatically by the theme migration.
+- Metric names and the image-tag env prefix changed as part of the rename (see
+  the CHANGELOG rename entry for the old spelling); update any dashboards that
+  scrape the metrics and any scripts that set the image-tag variable.
   ```
 
   Roll forward-only schema migrations may reject older images — check

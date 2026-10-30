@@ -1,23 +1,23 @@
 # VoltLink production stack — consumes the published GHCR image
-# (ghcr.io/atvriders/voltlank) and performs no local build.
+# (ghcr.io/atvriders/voltlink) and performs no local build.
 #
-#   curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlank/main/compose.production.yml -o compose.production.yml
+#   curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/main/compose.production.yml -o compose.production.yml
 #   docker compose -f compose.production.yml up -d
 
-name: voltlank
+name: voltlink
 
 services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: voltlank
+      POSTGRES_USER: voltlink
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a strong database password}
-      POSTGRES_DB: voltlank
+      POSTGRES_DB: voltlink
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U voltlank -d voltlank"]
+      test: ["CMD-SHELL", "pg_isready -U voltlink -d voltlink"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -32,7 +32,7 @@ services:
       retries: 10
 
   web:
-    image: ghcr.io/atvriders/voltlank:${VOLTLANK_IMAGE_TAG:-latest}
+    image: ghcr.io/atvriders/voltlink:${VOLTLINK_IMAGE_TAG:-latest}
     restart: unless-stopped
     pull_policy: always
     environment: &app_env
@@ -40,7 +40,7 @@ services:
       VL_ROLE: web
       PORT: 3000
       HOST: 0.0.0.0
-      DATABASE_URL: postgresql://voltlank:${POSTGRES_PASSWORD}@postgres:5432/voltlank
+      DATABASE_URL: postgresql://voltlink:${POSTGRES_PASSWORD}@postgres:5432/voltlink
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:?generate one: openssl rand -hex 32}
       VL_MASTER_KEY: ${VL_MASTER_KEY:?generate one: openssl rand -base64 32}
@@ -64,7 +64,7 @@ services:
       - "${WEB_PORT:-3110}:3000"
 
   worker:
-    image: ghcr.io/atvriders/voltlank:${VOLTLANK_IMAGE_TAG:-latest}
+    image: ghcr.io/atvriders/voltlink:${VOLTLINK_IMAGE_TAG:-latest}
     restart: unless-stopped
     pull_policy: always
     environment:
@@ -77,7 +77,7 @@ services:
         condition: service_healthy
 
   scheduler:
-    image: ghcr.io/atvriders/voltlank:${VOLTLANK_IMAGE_TAG:-latest}
+    image: ghcr.io/atvriders/voltlink:${VOLTLINK_IMAGE_TAG:-latest}
     restart: unless-stopped
     pull_policy: always
     environment:

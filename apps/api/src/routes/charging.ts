@@ -140,7 +140,7 @@ chargingRouter.get('/export/csv', async (req, res) => {
     [s.id, s.vehicle.displayName, s.startAt.toISOString(), s.endAt?.toISOString() ?? '', s.locationName ?? '', s.energyAddedKwh, s.batteryStartPct ?? '', s.batteryEndPct ?? '', s.durationSec, s.avgPowerKw, s.peakPowerKw, s.cost, s.currency, s.source, s.rateName ?? ''].map((v) => String(v).replace(/"/g, '""')),
   );
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', 'attachment; filename="voltlank-charging.csv"');
+  res.setHeader('Content-Disposition', 'attachment; filename="voltlink-charging.csv"');
   res.send(csv([header, ...lines]));
 });
 
@@ -149,7 +149,7 @@ chargingRouter.get('/export/json', async (req, res) => {
   const ids = vehicleId ? [vehicleId] : await accessibleVehicleIds(req.user!.id, req.user!.role);
   const rows = await prisma.chargingSession.findMany({ where: { vehicleId: { in: ids } }, orderBy: { startAt: 'desc' }, include: { vehicle: { select: { displayName: true } } } });
   res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Content-Disposition', 'attachment; filename="voltlank-charging.json"');
+  res.setHeader('Content-Disposition', 'attachment; filename="voltlink-charging.json"');
   res.send(JSON.stringify(rows.map(toSessionDto), null, 2));
 });
 

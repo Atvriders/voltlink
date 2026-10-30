@@ -84,12 +84,12 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
   });
   app.get('/metrics', (_req, res) => {
     const body = [
-      '# HELP voltlank_process_info VoltLink process information',
-      `voltlank_process_info{version="${APP_VERSION}",role="${process.env.VL_ROLE ?? 'web'}"} 1`,
-      '# HELP voltlank_process_uptime_seconds Process uptime in seconds',
-      `voltlank_process_uptime_seconds ${Math.round(process.uptime())}`,
-      '# HELP voltlank_process_memory_rss_bytes Resident memory in bytes',
-      `voltlank_process_memory_rss_bytes ${process.memoryUsage().rss}`,
+      '# HELP voltlink_process_info VoltLink process information',
+      `voltlink_process_info{version="${APP_VERSION}",role="${process.env.VL_ROLE ?? 'web'}"} 1`,
+      '# HELP voltlink_process_uptime_seconds Process uptime in seconds',
+      `voltlink_process_uptime_seconds ${Math.round(process.uptime())}`,
+      '# HELP voltlink_process_memory_rss_bytes Resident memory in bytes',
+      `voltlink_process_memory_rss_bytes ${process.memoryUsage().rss}`,
     ].join('\n');
     res.setHeader('Content-Type', 'text/plain; version=0.0.4');
     res.send(`${body}\n`);

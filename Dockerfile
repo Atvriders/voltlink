@@ -37,27 +37,37 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOST=0.0.0.0
 
-RUN groupadd --system voltlank && useradd --system --gid voltlank --no-create-home --home-dir /app voltlank
+ARG VERSION=dev
+ARG REVISION=unknown
+
+LABEL org.opencontainers.image.title="VoltLink" \
+      org.opencontainers.image.description="Self-hosted connected-vehicle platform" \
+      org.opencontainers.image.source="https://github.com/Atvriders/voltlink" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}"
+
+RUN groupadd --system voltlink && useradd --system --gid voltlink --no-create-home --home-dir /app voltlink
 
 WORKDIR /app/apps/api
 
-COPY --from=build --chown=voltlank:voltlank /app/node_modules /app/node_modules
-COPY --from=build --chown=voltlank:voltlank /app/packages/shared/package.json /app/packages/shared/package.json
-COPY --from=build --chown=voltlank:voltlank /app/apps/api/package.json /app/apps/api/package.json
-COPY --from=build --chown=voltlank:voltlank /app/apps/api/dist /app/apps/api/dist
-COPY --from=build --chown=voltlank:voltlank /app/apps/api/prisma /app/apps/api/prisma
-COPY --from=build --chown=voltlank:voltlank /app/apps/api/web-dist /app/apps/api/web-dist
-COPY --from=build --chown=voltlank:voltlank /app/apps/api/openapi.json /app/apps/api/openapi.json
-COPY --chown=voltlank:voltlank docker/entrypoint.sh /usr/local/bin/voltlank-entrypoint
-COPY --chown=voltlank:voltlank docker/healthcheck.sh /usr/local/bin/voltlank-healthcheck
+COPY --from=build --chown=voltlink:voltlink /app/node_modules /app/node_modules
+COPY --from=build --chown=voltlink:voltlink /app/packages/shared/package.json /app/packages/shared/package.json
+COPY --from=build --chown=voltlink:voltlink /app/apps/api/package.json /app/apps/api/package.json
+COPY --from=build --chown=voltlink:voltlink /app/apps/api/dist /app/apps/api/dist
+COPY --from=build --chown=voltlink:voltlink /app/apps/api/prisma /app/apps/api/prisma
+COPY --from=build --chown=voltlink:voltlink /app/apps/api/web-dist /app/apps/api/web-dist
+COPY --from=build --chown=voltlink:voltlink /app/apps/api/openapi.json /app/apps/api/openapi.json
+COPY --chown=voltlink:voltlink docker/entrypoint.sh /usr/local/bin/voltlink-entrypoint
+COPY --chown=voltlink:voltlink docker/healthcheck.sh /usr/local/bin/voltlink-healthcheck
 
-RUN chmod +x /usr/local/bin/voltlank-entrypoint /usr/local/bin/voltlank-healthcheck
+RUN chmod +x /usr/local/bin/voltlink-entrypoint /usr/local/bin/voltlink-healthcheck
 
-USER voltlank
+USER voltlink
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
-  CMD ["/usr/local/bin/voltlank-healthcheck"]
+  CMD ["/usr/local/bin/voltlink-healthcheck"]
 
-ENTRYPOINT ["voltlank-entrypoint"]
+ENTRYPOINT ["voltlink-entrypoint"]
 CMD ["web"]

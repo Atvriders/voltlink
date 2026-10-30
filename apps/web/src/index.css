@@ -21,7 +21,7 @@
 }
 
 :root,
-[data-theme='voltlank-dark'] {
+[data-theme='voltlink-dark'] {
   --vl-canvas: #0b1017;
   --vl-panel: #121a24;
   --vl-panel2: #1a2431;
@@ -41,7 +41,7 @@
   color-scheme: dark;
 }
 
-[data-theme='voltlank-light'] {
+[data-theme='voltlink-light'] {
   --vl-canvas: #f3f6f9;
   --vl-panel: #ffffff;
   --vl-panel2: #e9eef3;
@@ -185,7 +185,7 @@ body {
 .maplibregl-ctrl button .maplibregl-ctrl-icon {
   filter: invert(1) brightness(1.6);
 }
-[data-theme='voltlank-light'] .maplibregl-ctrl button .maplibregl-ctrl-icon,
+[data-theme='voltlink-light'] .maplibregl-ctrl button .maplibregl-ctrl-icon,
 [data-theme='colorblind-safe'] .maplibregl-ctrl button .maplibregl-ctrl-icon {
   filter: none;
 }

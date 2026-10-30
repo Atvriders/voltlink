@@ -4,6 +4,12 @@ All notable changes to VoltLink are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Renamed every technical identifier from the old spelling `voltlank` to `voltlink` (packages, image, database role and name, SQL functions, metrics, Docker user, entrypoint and healthcheck binaries, theme ids, export filenames, env prefix `VOLTLINK_`). The old database objects (`voltlank_ensure_partition`, `voltlank_migrations`) are dropped by the rename migration. Stored themes are normalized to the new ids. This is a breaking change for anyone scraping the old metric names or pinning old volume names; see UPGRADING.md.
+
 ## [1.0.0] — 2026-10-27
 
 ### Added

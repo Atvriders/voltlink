@@ -26,7 +26,7 @@ VoltLink is an original platform (comparable in scope to hosted telematics produ
 
 ```bash
 # Clone
-git clone https://github.com/Atvriders/voltlank.git && cd voltlank
+git clone https://github.com/Atvriders/voltlink.git && cd voltlink
 
 # Generate secrets
 export JWT_SECRET=$(openssl rand -hex 32)
@@ -43,7 +43,7 @@ docker compose up -d
 Production (published image, no local build):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlank/main/compose.production.yml -o compose.production.yml
+curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/main/compose.production.yml -o compose.production.yml
 # set JWT_SECRET, VL_MASTER_KEY, POSTGRES_PASSWORD, PUBLIC_URL
 docker compose -f compose.production.yml up -d
 ```

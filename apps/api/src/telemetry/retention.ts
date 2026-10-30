@@ -13,23 +13,28 @@ export async function runRetention(): Promise<{ telemetryRows: number; routePoin
   const checksCutoff = new Date(Date.now() - 90 * 86400000);
 
   let telemetryRows = 0;
-  // Drop whole monthly partitions older than the cutoff.
+  // Drop whole monthly partitions older than the cutoff. List partitions through
+  // pg_inherits (the parent lives in the telemetry schema, which Prisma never
+  // diffs) and drop them schema-qualified.
   const parts = await query<{ part: string }>(`
-    SELECT tablename AS part FROM pg_tables
-    WHERE schemaname='public' AND tablename LIKE 'telemetry_%'
+    SELECT c.relname AS part
+    FROM pg_inherits i
+    JOIN pg_class c ON c.oid = i.inhrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE i.inhparent = 'telemetry.telemetry_reading'::regclass AND n.nspname = 'telemetry'
   `);
   for (const { part } of parts.rows) {
     const m = part.match(/^telemetry_(\d{4})_(\d{2})$/);
     if (!m) continue;
     const end = new Date(Date.UTC(Number(m[1]), Number(m[2]), 1));
     if (end < telemetryCutoff) {
-      await query(`DROP TABLE IF EXISTS ${part}`);
+      await query(`DROP TABLE IF EXISTS telemetry.${part}`);
       telemetryRows += 1;
     }
   }
   // And prune rows inside current partitions.
   const kept = await query<{ n: string }>(
-    `DELETE FROM telemetry_reading WHERE ts < $1 RETURNING 1`,
+    `DELETE FROM telemetry.telemetry_reading WHERE ts < $1 RETURNING 1`,
     [telemetryCutoff],
   );
   telemetryRows += kept.rowCount;

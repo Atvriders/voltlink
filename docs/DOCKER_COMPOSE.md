@@ -5,7 +5,7 @@ Two compose files are shipped:
 - `docker-compose.yml` — full stack that **builds the image locally**. Use for
   previews, demos, and development on the machine where the repo is checked out.
 - `compose.production.yml` — production stack that **pulls the published image**
-  (`ghcr.io/atvriders/voltlank`) and performs no local build.
+  (`ghcr.io/atvriders/voltlink`) and performs no local build.
 
 ## Development compose
 
@@ -19,7 +19,7 @@ docker compose down -v          # wipe everything including the database
 ## Production compose
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlank/main/compose.production.yml -o compose.production.yml
+curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/main/compose.production.yml -o compose.production.yml
 # .env with real secrets
 docker compose -f compose.production.yml up -d
 docker compose -f compose.production.yml pull  # updates the image
@@ -28,7 +28,7 @@ docker compose -f compose.production.yml pull  # updates the image
 Pin the image tag per environment:
 
 ```bash
-VOLTLANK_IMAGE_TAG=v1.0.0 docker compose -f compose.production.yml up -d
+VOLTLINK_IMAGE_TAG=v1.0.0 docker compose -f compose.production.yml up -d
 ```
 
 Published tags: `latest`, `v1.0.0`, and the full commit SHA for every main push.

@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test';
 import { enableDemo, register } from './helpers';
 
 test('showroom renders GLB assets for all demo vehicle classes', async ({ page }) => {
-  const email = `e2e-glb-${Date.now()}@voltlank.test`;
+  const email = `e2e-glb-${Date.now()}@voltlink.test`;
   await register(page, email);
   await enableDemo(page);
 

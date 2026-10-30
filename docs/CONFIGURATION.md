@@ -9,7 +9,7 @@ All configuration is environment variables. In Docker Compose they come from
 | --- | --- |
 | `JWT_SECRET` | Session-token signing secret, ≥ 32 chars. `openssl rand -hex 32`. Required in every environment. |
 | `VL_MASTER_KEY` | 32-byte base64 master key for envelope encryption of provider credentials. `openssl rand -base64 32`. Required when `NODE_ENV=production`. |
-| `DATABASE_URL` | PostgreSQL connection string, e.g. `postgresql://voltlank:pass@host:5432/voltlank`. |
+| `DATABASE_URL` | PostgreSQL connection string, e.g. `postgresql://voltlink:pass@host:5432/voltlink`. |
 | `PUBLIC_URL` | Public HTTPS origin; must be `https://` in production (secure cookies). |
 
 ## Core

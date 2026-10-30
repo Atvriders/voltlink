@@ -5,20 +5,20 @@
 #   # first-run admin: open http://localhost:3110 and register (first account
 #   # becomes the owner); demo mode is one click on the Providers page.
 
-name: voltlank
+name: voltlink
 
 services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: voltlank
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-voltlank}
-      POSTGRES_DB: voltlank
+      POSTGRES_USER: voltlink
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-voltlink}
+      POSTGRES_DB: voltlink
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U voltlank -d voltlank"]
+      test: ["CMD-SHELL", "pg_isready -U voltlink -d voltlink"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -40,14 +40,14 @@ services:
       VL_ROLE: web
       PORT: 3000
       HOST: 0.0.0.0
-      DATABASE_URL: postgresql://voltlank:${POSTGRES_PASSWORD:-voltlank}@postgres:5432/voltlank
+      DATABASE_URL: postgresql://voltlink:${POSTGRES_PASSWORD:-voltlink}@postgres:5432/voltlink
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:?generate one: openssl rand -hex 32}
       VL_MASTER_KEY: ${VL_MASTER_KEY:?generate one: openssl rand -base64 32}
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3110}
       TRUST_PROXY: ${TRUST_PROXY:-false}
       SMTP_URL: ${SMTP_URL:-}
-      MAIL_FROM: ${MAIL_FROM:-VoltLink <no-reply@voltlank.local>}
+      MAIL_FROM: ${MAIL_FROM:-VoltLink <no-reply@voltlink.local>}
       MAIL_TO_CONSOLE: ${MAIL_TO_CONSOLE:-true}
       TESLA_CLIENT_ID: ${TESLA_CLIENT_ID:-}
       TESLA_CLIENT_SECRET: ${TESLA_CLIENT_SECRET:-}

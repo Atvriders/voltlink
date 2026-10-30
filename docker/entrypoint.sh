@@ -6,7 +6,7 @@ set -eu
 
 role="${VL_ROLE:-web}"
 
-echo "[voltlank] starting role: ${role} (node $(node --version))"
+echo "[voltlink] starting role: ${role} (node $(node --version))"
 
 case "$role" in
   web)
@@ -25,7 +25,7 @@ case "$role" in
     exec node dist/cli/migrateLeader.cjs
     ;;
   *)
-    echo "[voltlank] unknown VL_ROLE: ${role} (expected web|worker|scheduler|status|migrate)" >&2
+    echo "[voltlink] unknown VL_ROLE: ${role} (expected web|worker|scheduler|status|migrate)" >&2
     exit 1
     ;;
 esac

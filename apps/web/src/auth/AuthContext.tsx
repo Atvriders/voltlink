@@ -4,6 +4,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api } from '../api/client';
 import type { UserPublic } from '@voltlink/shared';
+import { normalizeThemeId } from './themes';
+
+export { THEMES, normalizeThemeId } from './themes';
 
 interface AuthState {
   user: UserPublic | null;
@@ -76,19 +79,12 @@ export function useAuth(): AuthState {
 
 export function applyTheme(user?: UserPublic | null): void {
   const saved = localStorage.getItem('voltlink-theme');
-  const theme = saved || (user ? user.theme : null) || 'voltlank-dark';
+  const theme = normalizeThemeId(saved || (user ? user.theme : null));
   document.documentElement.setAttribute('data-theme', theme);
 }
 
 export function setTheme(theme: string): void {
-  localStorage.setItem('voltlink-theme', theme);
-  document.documentElement.setAttribute('data-theme', theme);
+  const id = normalizeThemeId(theme);
+  localStorage.setItem('voltlink-theme', id);
+  document.documentElement.setAttribute('data-theme', id);
 }
-
-export const THEMES = [
-  { id: 'voltlank-dark', name: 'VoltLink Dark' },
-  { id: 'voltlank-light', name: 'VoltLink Light' },
-  { id: 'fleet-ops', name: 'Fleet Operations' },
-  { id: 'high-contrast', name: 'High Contrast' },
-  { id: 'colorblind-safe', name: 'Colorblind Safe' },
-] as const;

@@ -9,8 +9,8 @@
 ## Setup
 
 ```bash
-git clone https://github.com/Atvriders/voltlank.git
-cd voltlank
+git clone https://github.com/Atvriders/voltlink.git
+cd voltlink
 npm ci
 cp .env.example .env                    # then export the values you need
 npx prisma generate --schema apps/api/prisma/schema.prisma
@@ -43,17 +43,19 @@ cd apps/api && PORT=3111 node dist/index.cjs
 ## Database & migrations
 
 ```bash
-# create a migration from schema changes (non-interactive)
-npx prisma migrate dev --name my_change --create-only
-# hand-edit SQL, then apply
+# generate a migration script from schema changes (never interactive)
+npx prisma migrate diff --from-migrations apps/api/prisma/migrations \
+  --to-schema-datamodel apps/api/prisma/schema.prisma \
+  --shadow-database-url "$SHADOW_DATABASE_URL" --script -o apps/api/prisma/migrations/<ts>_name/migration.sql
+# review the SQL by hand, then apply
 npx prisma migrate deploy
 ```
 
-`prisma migrate dev` needs a TTY for drift prompts; use `--create-only` +
-`migrate deploy` in scripts/CI.
+`prisma migrate dev` needs a TTY and aborts without one, so use
+`migrate diff --script` + review + `migrate deploy` in scripts and CI.
 
 The telemetry table is **partitioned by time**; a SQL function
-(`voltlank_ensure_partition()`) creates partitions ahead of ingestion and runs
+(`voltlink_ensure_partition()`) creates partitions ahead of ingestion and runs
 at boot.
 
 ## Code layout

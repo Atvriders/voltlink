@@ -72,7 +72,7 @@ async function main(): Promise<void> {
   checks.unref();
 
   const port = Number(process.env.STATUS_PORT || 3001);
-  const server = app.listen(port, env.HOST, () => console.log(`[voltlank] status listening on ${env.HOST}:${port}`));
+  const server = app.listen(port, env.HOST, () => console.log(`[voltlink] status listening on ${env.HOST}:${port}`));
   const shutdown = () => {
     server.close(() => prisma.$disconnect().then(() => process.exit(0)));
     setTimeout(() => process.exit(0), 5000).unref();
@@ -82,7 +82,7 @@ async function main(): Promise<void> {
 }
 
 void main().catch((err) => {
-  console.error('[voltlank] status fatal error:', err);
+  console.error('[voltlink] status fatal error:', err);
   process.exit(1);
 });
 

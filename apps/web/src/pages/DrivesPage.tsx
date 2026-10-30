@@ -38,7 +38,7 @@ export default function DrivesPage() {
     const blob = new Blob([csv], { type: fmt === 'csv' ? 'text/csv' : 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `voltlank-drives.${fmt}`;
+    a.download = `voltlink-drives.${fmt}`;
     a.click();
   };
 

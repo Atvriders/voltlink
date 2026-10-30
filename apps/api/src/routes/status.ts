@@ -3,9 +3,12 @@
 
 import { Router } from 'express';
 import { prisma } from '../core/db';
+import { env } from '../core/env';
 import { requireAuth, requireRole } from '../auth/middleware';
 import { publicStatusBundle, runStatusChecks, toIncidentDto, ensureComponents } from '../status/service';
 import { randomToken } from '../core/crypto';
+
+const statusPublicUrl = `${env.PUBLIC_URL}/status`;
 
 export const statusRouter = Router();
 
@@ -21,10 +24,10 @@ statusRouter.get('/rss', async (_req, res) => {
   const items = bundle.incidents
     .slice(0, 20)
     .map(
-      (i) => `<item><title>${escapeXml(i.title)}</title><link>${'https://voltlank.local/status'}</link><guid>${i.id}</guid><pubDate>${new Date(bundle.updatedAt).toUTCString()}</pubDate><description>${escapeXml(i.updates[0]?.message ?? i.status)}</description></item>`,
+      (i) => `<item><title>${escapeXml(i.title)}</title><link>${statusPublicUrl}</link><guid>${i.id}</guid><pubDate>${new Date(bundle.updatedAt).toUTCString()}</pubDate><description>${escapeXml(i.updates[0]?.message ?? i.status)}</description></item>`,
     )
     .join('');
-  const xml = `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>VoltLink Status</title><link>https://voltlank.local/status</link><description>VoltLink platform status updates</description>${items}</channel></rss>`;
+  const xml = `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>VoltLink Status</title><link>${statusPublicUrl}</link><description>VoltLink platform status updates</description>${items}</channel></rss>`;
   res.setHeader('Content-Type', 'application/rss+xml; charset=utf-8');
   res.send(xml);
 });

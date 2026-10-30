@@ -14,7 +14,7 @@ automations, fleet, API DTOs).
 
 Express 5 for the API; Prisma 6 over PostgreSQL with `Timestamptz(3)` columns
 everywhere (fixes timezone drift in queue scheduling). Telemetry rows live in
-a **time-partitioned** table with a `voltlank_ensure_partition()` boot guard.
+a **time-partitioned** table with a `voltlink_ensure_partition()` boot guard.
 
 ## AD-03 — Cookie sessions + CSRF, not bearer tokens
 

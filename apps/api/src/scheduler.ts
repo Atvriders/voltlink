@@ -17,7 +17,7 @@ async function main(): Promise<void> {
   await ensureComponents();
 
   poller.start();
-  console.log('[voltlank] scheduler started');
+  console.log('[voltlink] scheduler started');
 
   // Scheduled automations: evaluate each minute.
   const minute = setInterval(async () => {
@@ -47,7 +47,7 @@ async function main(): Promise<void> {
   const retention = setInterval(async () => {
     try {
       const result = await runRetention();
-      console.log('[voltlank] retention:', JSON.stringify(result));
+      console.log('[voltlink] retention:', JSON.stringify(result));
     } catch (err) {
       console.error('retention failed:', (err as Error).message);
     }
@@ -67,7 +67,7 @@ async function main(): Promise<void> {
 }
 
 void main().catch((err) => {
-  console.error('[voltlank] scheduler fatal error:', err);
+  console.error('[voltlink] scheduler fatal error:', err);
   process.exit(1);
 });
 

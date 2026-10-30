@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import { pool, withAdvisoryLock } from '../core/db';
 
 export async function runMigrationLeader(): Promise<void> {
-  await withAdvisoryLock('voltlank:migrations', async () => {
+  await withAdvisoryLock('voltlink:migrations', async () => {
     // Direct SQL connection check first — if the DB is down, fail fast with a
     // clear message instead of a stack of Prisma noise.
     const client = await pool.connect();
@@ -43,11 +43,11 @@ function findPrismaBin(): string {
 if (process.argv[1]?.endsWith('migrateLeader.js') || process.argv[1]?.endsWith('migrateLeader.cjs')) {
   void runMigrationLeader()
     .then(() => {
-      console.log('[voltlank] migrations current');
+      console.log('[voltlink] migrations current');
       process.exit(0);
     })
     .catch((err) => {
-      console.error('[voltlank] migration failed:', err);
+      console.error('[voltlink] migration failed:', err);
       process.exit(1);
     });
 }

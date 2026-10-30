@@ -299,7 +299,7 @@ function PrivacyTab() {
     const blob = await res.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'voltlank-export.json';
+    a.download = 'voltlink-export.json';
     a.click();
   };
 

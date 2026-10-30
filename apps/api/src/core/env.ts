@@ -26,14 +26,30 @@ function numberOpt(name: string, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+// P-ENVDB: a missing DATABASE_URL must never silently fall back to a developer's
+// database. Refuse to load the module at all when it is unset.
+if (!process.env.DATABASE_URL) {
+  throw new Error(
+    'DATABASE_URL is required; refusing to boot without an explicit database URL (set it in apps/api/.env or the environment).',
+  );
+}
+
+const PUBLIC_URL = optional('PUBLIC_URL', 'http://localhost:3000');
+let publicHost = 'localhost';
+try {
+  publicHost = new URL(PUBLIC_URL).hostname;
+} catch {
+  // keep the localhost default; PUBLIC_URL is validated again at boot
+}
+
 export const env = {
   NODE_ENV: optional('NODE_ENV', 'development'),
   PORT: numberOpt('PORT', 3000),
   RATE_LIMIT_PER_MIN: numberOpt('VL_RATE_LIMIT_PER_MIN', 900),
   HOST: optional('HOST', '0.0.0.0'),
-  PUBLIC_URL: optional('PUBLIC_URL', 'http://localhost:3000'),
+  PUBLIC_URL,
 
-  DATABASE_URL: process.env.DATABASE_URL || 'postgresql://voltlank:voltlank@127.0.0.1:5433/voltlank',
+  DATABASE_URL: process.env.DATABASE_URL,
   REDIS_URL: process.env.REDIS_URL || '',
 
   JWT_SECRET: () => requireSecret('JWT_SECRET', 32),
@@ -47,7 +63,7 @@ export const env = {
   SESSION_COOKIE: 'vl_session',
 
   SMTP_URL: process.env.SMTP_URL || '', // smtp://user:pass@host:587
-  MAIL_FROM: optional('MAIL_FROM', 'VoltLink <no-reply@voltlank.local>'),
+  MAIL_FROM: optional('MAIL_FROM', `VoltLink <no-reply@${publicHost}>`),
   MAIL_TO_CONSOLE: process.env.MAIL_TO_CONSOLE !== 'false',
 
   TOTP_ISSUER: optional('VL_TOTP_ISSUER', 'VoltLink'),
@@ -64,7 +80,7 @@ export const env = {
 
   VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY || '',
   VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY || '',
-  VAPID_SUBJECT: optional('VAPID_SUBJECT', 'mailto:admin@voltlank.local'),
+  VAPID_SUBJECT: optional('VAPID_SUBJECT', `mailto:admin@${publicHost}`),
 
   DEMO_DEFAULT_ENABLED: process.env.VL_DEMO_DEFAULT_ENABLED === 'true',
   TRUST_PROXY: process.env.TRUST_PROXY === 'true',

@@ -11,7 +11,7 @@ Two things must be backed up together:
 
 ```bash
 # Logical dump
-docker compose exec -T postgres pg_dump -U voltlank -d voltlank -Fc \
+docker compose exec -T postgres pg_dump -U voltlink -d voltlink -Fc \
   > backup_$(date +%F).dump
 
 # Secrets (one-time export, store securely, e.g. password manager)
@@ -25,7 +25,7 @@ VoltLink runs.
 
 ```bash
 docker compose stop web worker scheduler
-docker compose exec -T postgres pg_restore -U voltlank -d voltlank --clean \
+docker compose exec -T postgres pg_restore -U voltlink -d voltlink --clean \
   --if-exists < backup_2026-10-27.dump
 docker compose start web worker scheduler
 ```
@@ -34,8 +34,8 @@ docker compose start web worker scheduler
 fresh database if you prefer:
 
 ```bash
-docker compose exec -T postgres createdb -U voltlank voltlank_restore
-docker compose exec -T postgres pg_restore -U voltlank -d voltlank_restore \
+docker compose exec -T postgres createdb -U voltlink voltlink_restore
+docker compose exec -T postgres pg_restore -U voltlink -d voltlink_restore \
   < backup_2026-10-27.dump
 ```
 

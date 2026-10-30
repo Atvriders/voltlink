@@ -15,7 +15,7 @@ async function main(): Promise<void> {
 
   const app = buildApp({ serveSpa: true });
   const server = app.listen(env.PORT, env.HOST, () => {
-    console.log(`[voltlank] web listening on ${env.HOST}:${env.PORT} (${env.NODE_ENV})`);
+    console.log(`[voltlink] web listening on ${env.HOST}:${env.PORT} (${env.NODE_ENV})`);
   });
 
   sseStart();
@@ -28,7 +28,7 @@ async function main(): Promise<void> {
   const shutdown = (signal: string) => {
     if (stopping) return;
     stopping = true;
-    console.log(`[voltlank] ${signal} received, draining…`);
+    console.log(`[voltlink] ${signal} received, draining…`);
     setTimeout(() => {
       sseStop();
       server.close(() => {
@@ -42,6 +42,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error('[voltlank] fatal startup error:', err);
+  console.error('[voltlink] fatal startup error:', err);
   process.exit(1);
 });

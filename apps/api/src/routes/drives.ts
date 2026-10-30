@@ -113,7 +113,7 @@ drivesRouter.get('/export/csv', async (req, res) => {
   );
   const body = csv([header, ...lines]);
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', 'attachment; filename="voltlank-drives.csv"');
+  res.setHeader('Content-Disposition', 'attachment; filename="voltlink-drives.csv"');
   res.send(body);
 });
 
@@ -126,7 +126,7 @@ drivesRouter.get('/export/json', async (req, res) => {
     include: { vehicle: { select: { displayName: true } } },
   });
   res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Content-Disposition', 'attachment; filename="voltlank-drives.json"');
+  res.setHeader('Content-Disposition', 'attachment; filename="voltlink-drives.json"');
   res.send(JSON.stringify(rows.map(toDriveDto), null, 2));
 });
 

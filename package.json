@@ -1,17 +1,17 @@
 {
-  "name": "voltlank",
+  "name": "voltlink",
   "private": true,
   "version": "1.0.0",
   "description": "VoltLink \u2014 self-hosted connected-vehicle platform: vehicle telemetry, secure controls, drives, charging, battery analytics, automations, notifications, fleet management, and a full status platform.",
   "license": "MIT",
   "author": "Atvriders",
-  "homepage": "https://github.com/Atvriders/voltlank#readme",
+  "homepage": "https://github.com/Atvriders/voltlink#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Atvriders/voltlank.git"
+    "url": "git+https://github.com/Atvriders/voltlink.git"
   },
   "bugs": {
-    "url": "https://github.com/Atvriders/voltlank/issues"
+    "url": "https://github.com/Atvriders/voltlink/issues"
   },
   "workspaces": [
     "packages/*",
@@ -31,7 +31,8 @@
     "typecheck": "npm -w @voltlink/shared run typecheck && npm -w @voltlink/api run typecheck && npm -w @voltlink/web run typecheck",
     "lint": "eslint . --max-warnings=0",
     "legacy:scan": "tsx scripts/legacy-scan.ts",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "naming:scan": "tsx scripts/naming-scan.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",

@@ -29,11 +29,11 @@ names the automated check or manual proof.
 | 22 | 5 visibly distinct vehicle classes as GLB with LODs | ✅ | `validate_assets.py`; `_lod` variants ~25% lighter; showroom E2E loads each GLB |
 | 23 | State-aware WebGL (R3F) | ✅ | `VehicleViewer` animates doors/lights/charge; `data-asset="glb"` E2E |
 | 24 | SSE realtime with polling fallback | ✅ | `/api/v1/realtime` + `Shell` subscribe/poll fallback |
-| 25 | Docker Compose + GHCR image | ✅ | `Dockerfile`, `docker-compose.yml`, `compose.production.yml`; image published at `ghcr.io/atvriders/voltlank:latest|v1.0.0|<sha>` |
+| 25 | Docker Compose + GHCR image | ✅ | `Dockerfile`, `docker-compose.yml`, `compose.production.yml`; image published at `ghcr.io/atvriders/voltlink:latest|v1.0.0|<sha>` |
 | 26 | GitHub Actions CI | ✅ | `.github/workflows/ci.yml` fully green: secret-scan (gitleaks), build-and-test, assets, e2e, docker (trivy + SBOM + publish) |
 | 27 | Comprehensive tests | ✅ | unit/API (79: shared 24 + api 42 + web 13), E2E (21 incl. visual 13 + WebGL assets), legacy scan, security suite |
 | 28 | Full docs list | ✅ | `docs/` (29 files) + README + CHANGELOG + OpenAPI (`/api/docs`) |
-| 29 | Single final GitHub push | ✅ | one release push to `Atvriders/voltlank` after all local work (subsequent pushes only fixed CI gates + advisories) |
+| 29 | Single final GitHub push | ✅ | one release push to `Atvriders/voltlink` after all local work (subsequent pushes only fixed CI gates + advisories) |
 | 30 | 30-item final report | ✅ | this matrix + closing summary |
 
 ## Final local verification run

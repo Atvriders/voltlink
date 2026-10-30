@@ -9,8 +9,8 @@ import { Badge, Card, EmptyState, Select, Spinner, Stat } from '../components/ui
 import type { BatteryHealth, BatteryPoint, DailyAggregate, EfficiencyPoint, VehicleWithState } from '@voltlink/shared';
 
 const CHART_COLORS: Record<string, string> = {
-  'voltlank-dark': '#0ea5e9',
-  'voltlank-light': '#0284c7',
+  'voltlink-dark': '#0ea5e9',
+  'voltlink-light': '#0284c7',
   'fleet-ops': '#a3e635',
   'high-contrast': '#00e5ff',
   'colorblind-safe': '#0072b2',
@@ -44,7 +44,7 @@ export default function BatteryPage() {
     enabled: !!active,
   });
 
-  const color = CHART_COLORS[document.documentElement.getAttribute('data-theme') ?? 'voltlank-dark'] ?? '#0ea5e9';
+  const color = CHART_COLORS[document.documentElement.getAttribute('data-theme') ?? 'voltlink-dark'] ?? '#0ea5e9';
 
   if (!active) return <EmptyState icon={<Battery size={28} className="text-faint" />} title="No vehicles" body="Connect a vehicle or demo mode to see battery analytics." />;
 

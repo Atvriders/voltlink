@@ -14,7 +14,7 @@ test('sign-in page', async ({ page }) => {
 });
 
 test('overview desktop with demo fleet', async ({ page }) => {
-  await register(page, `e2e-vis-${Date.now()}@voltlank.test`);
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await enableDemo(page);
   await page.goto('/');
   await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
@@ -23,7 +23,7 @@ test('overview desktop with demo fleet', async ({ page }) => {
 });
 
 test('live vehicle controls panel', async ({ page }) => {
-  await register(page, `e2e-vis-${Date.now()}@voltlank.test`);
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await enableDemo(page);
   await page.goto('/');
   await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
@@ -34,7 +34,7 @@ test('live vehicle controls panel', async ({ page }) => {
 });
 
 test('drives page', async ({ page }) => {
-  await register(page, `e2e-vis-${Date.now()}@voltlank.test`);
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await enableDemo(page);
   await page.goto('/drives');
   await expect(page.getByRole('heading', { name: 'Drives' })).toBeVisible({ timeout: 20000 });
@@ -43,7 +43,7 @@ test('drives page', async ({ page }) => {
 });
 
 test('charging page', async ({ page }) => {
-  await register(page, `e2e-vis-${Date.now()}@voltlank.test`);
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await enableDemo(page);
   await page.goto('/charging');
   await expect(page.getByText('Electricity rates')).toBeVisible({ timeout: 20000 });
@@ -52,7 +52,7 @@ test('charging page', async ({ page }) => {
 });
 
 test('automations page', async ({ page }) => {
-  await register(page, `e2e-vis-${Date.now()}@voltlank.test`);
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await enableDemo(page);
   await page.goto('/automations');
   await expect(page.getByRole('heading', { name: 'Automations' })).toBeVisible({ timeout: 20000 });
@@ -61,7 +61,7 @@ test('automations page', async ({ page }) => {
 });
 
 test('fleet page', async ({ page }) => {
-  await register(page, `e2e-vis-${Date.now()}@voltlank.test`);
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await enableDemo(page);
   await page.goto('/fleet');
   await expect(page.getByText('Fleet status')).toBeVisible({ timeout: 20000 });
@@ -77,7 +77,7 @@ test('public status page', async ({ page }) => {
 });
 
 test('settings security tab', async ({ page }) => {
-  await register(page, `e2e-vis-${Date.now()}@voltlank.test`);
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await page.goto('/settings');
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 20000 });
   await page.waitForTimeout(1200);
@@ -85,7 +85,7 @@ test('settings security tab', async ({ page }) => {
 });
 
 test('admin page', async ({ page }) => {
-  await register(page, `e2e-vis-${Date.now()}@voltlank.test`);
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await page.goto('/admin');
   await expect(page.getByText(/Command safety|Platform health|Users/i).first()).toBeVisible({ timeout: 20000 });
   await page.waitForTimeout(1200);
@@ -93,7 +93,7 @@ test('admin page', async ({ page }) => {
 });
 
 test('map page', async ({ page }) => {
-  await register(page, `e2e-vis-${Date.now()}@voltlank.test`);
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await enableDemo(page);
   await page.goto('/map');
   await expect(page.locator('div[aria-label="Map"]')).toBeVisible({ timeout: 25000 });
@@ -102,7 +102,7 @@ test('map page', async ({ page }) => {
 });
 
 test('light theme overview', async ({ page }) => {
-  await register(page, `e2e-vis-${Date.now()}@voltlank.test`);
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await enableDemo(page);
   await page.goto('/');
   await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
@@ -114,7 +114,7 @@ test('light theme overview', async ({ page }) => {
 });
 
 test('mobile overview', async ({ page }) => {
-  await register(page, `e2e-vis-${Date.now()}@voltlank.test`);
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await enableDemo(page);
   await page.goto('/');
   await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });

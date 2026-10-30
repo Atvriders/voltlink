@@ -80,14 +80,14 @@ usersRouter.get('/export', async (req, res) => {
     prisma.appNotification.findMany({ where: { userId }, take: 1000 }),
     prisma.automation.findMany({ where: { userId } }),
     prisma.place.findMany({ where: { userId } }),
-    query<{ n: string }>(`SELECT count(*)::text AS n FROM telemetry_reading WHERE vehicle_id IN (SELECT id FROM "Vehicle" WHERE "ownerId" = $1)`, [userId]),
+    query<{ n: string }>(`SELECT count(*)::text AS n FROM telemetry.telemetry_reading WHERE vehicle_id IN (SELECT id FROM "Vehicle" WHERE "ownerId" = $1)`, [userId]),
   ]);
   res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Content-Disposition', 'attachment; filename="voltlank-export.json"');
+  res.setHeader('Content-Disposition', 'attachment; filename="voltlink-export.json"');
   res.send(
     JSON.stringify(
       {
-        export: 'voltlank',
+        export: 'voltlink',
         version: 1,
         generatedAt: new Date().toISOString(),
         account: { email: user.email, name: user.name, role: user.role, timezone: user.timezone, units: user.units, createdAt: user.createdAt.toISOString() },
@@ -125,7 +125,7 @@ usersRouter.post('/delete', async (req, res) => {
     await removeCredentials(account.id);
   }
   const vehicles = await prisma.vehicle.findMany({ where: { ownerId: user.id }, select: { id: true } });
-  await query(`DELETE FROM telemetry_reading WHERE vehicle_id = ANY($1)`, [vehicles.map((v) => v.id)]);
+  await query(`DELETE FROM telemetry.telemetry_reading WHERE vehicle_id = ANY($1)`, [vehicles.map((v) => v.id)]);
   await prisma.providerAccount.updateMany({ where: { userId: user.id }, data: { status: 'revoked', lastError: 'account deleted' } });
   await prisma.vehicle.updateMany({ where: { ownerId: user.id }, data: { active: false } });
   await prisma.userSession.updateMany({ where: { userId: user.id }, data: { revokedAt: new Date() } });

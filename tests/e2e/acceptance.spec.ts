@@ -21,7 +21,7 @@ test.beforeEach(async ({ page }) => {
 
 
 test('full demo acceptance flow', async ({ page }) => {
-  const email = `e2e-${Date.now()}@voltlank.test`;
+  const email = `e2e-${Date.now()}@voltlink.test`;
   await register(page, email);
 
   // Enable demo mode via providers page if not already
@@ -77,7 +77,7 @@ test('full demo acceptance flow', async ({ page }) => {
 });
 
 test('mobile layout renders', async ({ page }) => {
-  const email = `e2e-m-${Date.now()}@voltlank.test`;
+  const email = `e2e-m-${Date.now()}@voltlink.test`;
   await register(page, email);
   await page.goto('/providers');
   await page.waitForURL(/providers/);
@@ -94,7 +94,7 @@ test('mobile layout renders', async ({ page }) => {
 });
 
 test('onboarding walks through all steps', async ({ page }) => {
-  const email = `e2e-onb-${Date.now()}@voltlank.test`;
+  const email = `e2e-onb-${Date.now()}@voltlink.test`;
   await register(page, email);
   await page.goto('/onboarding');
   await page.waitForURL(/onboarding/);

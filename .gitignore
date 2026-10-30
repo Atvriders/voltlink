@@ -14,12 +14,8 @@ coverage/
 .DS_Store
 apps/api/prisma/dev.db*
 apps/api/test-*.db*
-# Catch-all for SQLite files anywhere in the tree. The two patterns above only
-# cover the dev database and the test fixtures by name, so a scratch database
-# created anywhere else (an ad-hoc migration check, a restored snapshot) showed
-# up as an ordinary new file. This repo tracks no database of any kind — and a
-# committed one would be real member data (names, callsigns, e-mail addresses,
-# check-in history) published to a public repo.
+# Catch-all for SQLite files anywhere in the tree. This repo tracks no database
+# of any kind.
 *.db
 *.db-journal
 *.db-wal
@@ -30,13 +26,16 @@ data/
 
 # Deployment compose files. The tracked docker-compose.yml is a TEMPLATE: it
 # resolves JWT_SECRET from the environment and refuses to start without one,
-# precisely so no signing key is ever published here. An operator running a
-# real server may prefer a self-contained copy with the values inline — these
-# names keep that copy out of the repo. A committed signing key would let
-# anyone mint an ADMIN session for that club.
+# precisely so no signing key is ever published here. Operators may keep a
+# self-contained copy with the values inline — these names keep that copy out
+# of the repo.
 docker-compose.server.yml
 docker-compose.deploy.yml
 docker-compose.local.yml
 docker-compose.*.local.yml
 docker-compose.override.yml
 apps/api/web-dist/
+
+# Hand-off and progress material: never committed.
+context/
+/PROGRESS.md

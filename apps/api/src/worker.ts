@@ -42,7 +42,7 @@ async function main(): Promise<void> {
 
   const beat = setInterval(() => void setSetting('workerBeat', new Date().toISOString()).catch(() => undefined), 30_000);
   beat.unref();
-  console.log('[voltlank] worker started');
+  console.log('[voltlink] worker started');
   const shutdown = () => {
     void Promise.all(consumers.map((c) => c.stop())).then(() => prisma.$disconnect().then(() => process.exit(0)));
     setTimeout(() => process.exit(0), 5000).unref();
@@ -52,7 +52,7 @@ async function main(): Promise<void> {
 }
 
 void main().catch((err) => {
-  console.error('[voltlank] worker fatal error:', err);
+  console.error('[voltlink] worker fatal error:', err);
   process.exit(1);
 });
 

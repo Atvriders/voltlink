@@ -331,7 +331,7 @@ fleetRouter.get('/report', requireRole('FLEET_MANAGER'), async (req, res) => {
     prisma.maintenanceRecord.findMany({ where: { vehicleId: { in: ids } } }),
   ]);
   res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Content-Disposition', 'attachment; filename="voltlank-fleet-report.json"');
+  res.setHeader('Content-Disposition', 'attachment; filename="voltlink-fleet-report.json"');
   res.send(JSON.stringify({
     generatedAt: new Date().toISOString(),
     vehicles: vehicles.map((v) => ({ id: v.id, name: v.displayName, odometerKm: (v.snapshot?.state as { odometerKm?: number } | null)?.odometerKm ?? null })),

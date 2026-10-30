@@ -41,5 +41,5 @@ export async function withAdvisoryLock<T>(key: string, fn: () => Promise<T>): Pr
 
 /** Ensure the current-month partition exists for a telemetry timestamp. */
 export async function ensureTelemetryPartition(ts: Date): Promise<void> {
-  await pool.query('SELECT voltlank_ensure_partition($1)', [ts]);
+  await pool.query('SELECT voltlink_ensure_partition($1)', [ts]);
 }

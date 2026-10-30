@@ -1,6 +1,6 @@
 generator client {
   provider      = "prisma-client-js"
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
+  binaryTargets = ["native"]
 }
 
 datasource db {
@@ -24,7 +24,7 @@ model User {
   timezone         String    @default("UTC")
   units            String    @default("metric")
   locale           String    @default("en-US")
-  theme            String    @default("voltlank-dark")
+  theme            String    @default("voltlink-dark")
   demoEnabled      Boolean   @default(false)
   presentationMode Boolean   @default(false)
   deletedAt        DateTime? @db.Timestamptz(3)

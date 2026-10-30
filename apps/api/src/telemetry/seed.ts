@@ -256,7 +256,7 @@ export async function seedDemoWorld(userId: string, vehicles: { id: string; prov
       params.push(t.vehicleId, t.ts, JSON.stringify(t.data));
       values.push(`($${idx * 3 + 1}, $${idx * 3 + 2}, $${idx * 3 + 3})`);
     });
-    await query(`INSERT INTO telemetry_reading (vehicle_id, ts, data) VALUES ${values.join(',')}`, params);
+    await query(`INSERT INTO telemetry.telemetry_reading (vehicle_id, ts, data) VALUES ${values.join(',')}`, params);
   }
 
   // ---- Automations ----

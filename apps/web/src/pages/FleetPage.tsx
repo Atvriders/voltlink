@@ -17,7 +17,7 @@ export default function FleetPage() {
     const blob = await res.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'voltlank-fleet-report.json';
+    a.download = 'voltlink-fleet-report.json';
     a.click();
   };
 

@@ -20,7 +20,7 @@ env:
   # never used by any deployment.
   JWT_SECRET: da1ed84cbe380e8b2639006b5bdfcdce0ebc47754ca248e1277b16a8f8be4093
   VL_MASTER_KEY: MWY0MjZiYTc5OGIxMzQ3M2FkYTlmNjJmYzM3M2I0YzQ=
-  DATABASE_URL: postgresql://voltlank:voltlank@127.0.0.1:5432/voltlank
+  DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink
 
 jobs:
   build-and-test:
@@ -29,12 +29,12 @@ jobs:
       postgres:
         image: postgres:17-alpine
         env:
-          POSTGRES_USER: voltlank
-          POSTGRES_PASSWORD: voltlank
-          POSTGRES_DB: voltlank
+          POSTGRES_USER: voltlink
+          POSTGRES_PASSWORD: voltlink
+          POSTGRES_DB: voltlink
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U voltlank -d voltlank"
+          --health-cmd "pg_isready -U voltlink -d voltlink"
           --health-interval 10s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v5
@@ -51,6 +51,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run legacy:scan
+      - run: npm run naming:scan
       - run: python3 blender/scripts/validate_assets.py
       - name: Dependency audit (fails on critical)
         run: npm audit --audit-level=critical
@@ -65,12 +66,12 @@ jobs:
       postgres:
         image: postgres:17-alpine
         env:
-          POSTGRES_USER: voltlank
-          POSTGRES_PASSWORD: voltlank
-          POSTGRES_DB: voltlank
+          POSTGRES_USER: voltlink
+          POSTGRES_PASSWORD: voltlink
+          POSTGRES_DB: voltlink
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U voltlank -d voltlank"
+          --health-cmd "pg_isready -U voltlink -d voltlink"
           --health-interval 10s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v5
@@ -150,14 +151,14 @@ jobs:
           file: Dockerfile
           load: true
           push: false
-          tags: voltlank:ci
+          tags: voltlink:ci
       - name: Scan image for HIGH/CRITICAL vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         env:
           TRIVY_USERNAME: ${{ github.actor }}
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         with:
-          image-ref: voltlank:ci
+          image-ref: voltlink:ci
           format: table
           severity: HIGH,CRITICAL
           ignore-unfixed: true
@@ -172,9 +173,9 @@ jobs:
           provenance: true
           sbom: true
           tags: |
-            ghcr.io/atvriders/voltlank:latest
-            ghcr.io/atvriders/voltlank:v1.0.0
-            ghcr.io/atvriders/voltlank:${{ github.sha }}
+            ghcr.io/atvriders/voltlink:latest
+            ghcr.io/atvriders/voltlink:v1.0.0
+            ghcr.io/atvriders/voltlink:${{ github.sha }}
 
   secret-scan:
     runs-on: ubuntu-latest

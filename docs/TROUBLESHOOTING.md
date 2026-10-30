@@ -59,6 +59,6 @@ docker compose up -d
 
 ## Getting help
 
-File an issue at <https://github.com/Atvriders/voltlank/issues> with:
+File an issue at <https://github.com/Atvriders/voltlink/issues> with:
 `docker compose ps`, the failing container's logs, and the exact error text.
 Redact secrets before pasting logs anywhere.

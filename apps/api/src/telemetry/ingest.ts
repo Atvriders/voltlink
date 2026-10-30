@@ -57,7 +57,7 @@ export async function ingestVehicleState(vehicle: VehicleWithState, state: Vehic
     };
     const { query } = await import('../core/db');
     await query(
-      `INSERT INTO telemetry_reading (vehicle_id, ts, data) VALUES ($1, $2, $3)`,
+      `INSERT INTO telemetry.telemetry_reading (vehicle_id, ts, data) VALUES ($1, $2, $3)`,
       [vehicle.id, fetchedAt, JSON.stringify(data)],
     );
   } catch (err) {

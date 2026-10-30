@@ -33,7 +33,7 @@ export default function ChargingPage() {
     const body = await apiCsv(`/api/v1/charging/export/${fmt}`);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([body], { type: fmt === 'csv' ? 'text/csv' : 'application/json' }));
-    a.download = `voltlank-charging.${fmt}`;
+    a.download = `voltlink-charging.${fmt}`;
     a.click();
   };
 
