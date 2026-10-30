@@ -2,10 +2,9 @@
 // flow, Tessie token connection, vehicle import, disconnection, and webhook
 // ingestion (provider push where supported).
 
-import { Router } from 'express';
+import { policyRouter, sessionActor } from '../authz/policy';
 import { prisma } from '../core/db';
 import { audit } from '../core/settings';
-import { requireAuth } from '../auth/middleware';
 import { buildContext, connectDemoAccount, getProvider, removeCredentials, saveCredentials, listProviders } from '../providers/registry';
 import { env } from '../core/env';
 import { teslaAuthorizeUrl, teslaExchangeCode } from '../providers/tesla';
@@ -16,13 +15,11 @@ import { getQueue } from '../core/queue';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { validateWebhookUrl } from '../notifications/simpleWebhooks';
 
-export const providersRouter = Router();
+export const providersRouter = policyRouter('/api/v1/providers');
 
-providersRouter.use(requireAuth);
-
-providersRouter.get('/', async (req, res) => {
+providersRouter.get('/', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
   const accounts = await prisma.providerAccount.findMany({
-    where: { userId: req.user!.id },
+    where: { organization: { memberships: { some: { userId: sessionActor(req).userId, status: 'ACTIVE' } } } },
     include: { vehicles: { select: { id: true } } },
     orderBy: { createdAt: 'asc' },
   });
@@ -41,39 +38,47 @@ providersRouter.get('/', async (req, res) => {
   });
 });
 
-providersRouter.get('/readiness', async (req, res) => {
-  const accounts = await prisma.providerAccount.findMany({ where: { userId: req.user!.id } });
+providersRouter.get('/readiness', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
+  const accounts = await prisma.providerAccount.findMany({
+    where: { organization: { memberships: { some: { userId: sessionActor(req).userId, status: 'ACTIVE' } } } },
+  });
   const out = [];
   for (const p of listProviders()) {
     if (!p.enabled && p.id !== 'mock') continue;
     const provider = getProvider(p.id);
     const account = accounts.find((a) => a.provider === p.id);
     const ctx = account ? await buildContext(account) : null;
-    const readiness = ctx ? await provider.readiness(ctx).catch(() => ({ ok: false, checks: [{ name: 'error', ok: false, detail: 'Readiness check failed.' }] })) : await provider.readiness({ accountId: '', userId: req.user!.id, credentials: {}, meta: { provider: p.id, label: p.label, demo: false, scopes: [] } }).catch(() => ({ ok: false, checks: [{ name: 'error', ok: false, detail: 'Readiness check failed.' }] }));
+    const readiness = ctx ? await provider.readiness(ctx).catch(() => ({ ok: false, checks: [{ name: 'error', ok: false, detail: 'Readiness check failed.' }] })) : await provider.readiness({ accountId: '', userId: sessionActor(req).userId, credentials: {}, meta: { provider: p.id, label: p.label, demo: false, scopes: [] } }).catch(() => ({ ok: false, checks: [{ name: 'error', ok: false, detail: 'Readiness check failed.' }] }));
     out.push({ provider: p.id, label: p.label, configured: !!account, ok: readiness.ok, checks: readiness.checks, accountId: account?.id });
   }
   res.json({ data: out });
 });
 
-providersRouter.post('/demo/connect', async (req, res) => {
-  const { accountId, vehiclesImported } = await connectDemoAccount(req.user!.id);
+providersRouter.post('/demo/connect', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
+  const actor = sessionActor(req);
+  const membership = await prisma.membership.findFirst({ where: { userId: actor.userId, status: 'ACTIVE' }, orderBy: { createdAt: 'asc' } });
+  if (!membership) {
+    res.status(403).json({ error: { code: 'FORBIDDEN', message: 'No organization available.' } });
+    return;
+  }
+  const { accountId, vehiclesImported } = await connectDemoAccount(membership.organizationId, actor.userId);
   const vehicles = await prisma.vehicle.findMany({ where: { providerAccountId: accountId }, select: { id: true, providerVehicleId: true } });
-  await seedDemoWorld(req.user!.id, vehicles);
+  await seedDemoWorld(membership.organizationId, actor.userId, vehicles);
   res.json({ data: { accountId, vehiclesImported, demo: true, note: 'Demo mode uses fictional data and never contacts real services.' } });
 });
 
 // ---- Tesla OAuth ----
 
-providersRouter.get('/tesla/authorize', (req, res) => {
+providersRouter.get('/tesla/authorize', { auth: 'session', target: { kind: 'none' } }, (req, res) => {
   if (!env.TESLA_CLIENT_ID || !env.TESLA_CLIENT_SECRET) {
     res.status(503).json({ error: { code: 'NOT_CONFIGURED', message: 'Tesla OAuth is not configured. Set TESLA_CLIENT_ID, TESLA_CLIENT_SECRET, and TESLA_REDIRECT_URI (docs/TESLA_SETUP.md).' } });
     return;
   }
-  const state = encodeURIComponent(JSON.stringify({ u: req.user!.id }));
+  const state = encodeURIComponent(JSON.stringify({ u: sessionActor(req).userId }));
   res.json({ data: { url: teslaAuthorizeUrl(state) } });
 });
 
-providersRouter.get('/tesla/callback', async (req, res) => {
+providersRouter.get('/tesla/callback', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
   const code = String(req.query.code ?? '');
   const stateRaw = String(req.query.state ?? '{}');
   let state: { u?: string } = {};
@@ -88,9 +93,15 @@ providersRouter.get('/tesla/callback', async (req, res) => {
   }
   try {
     const tokens = await teslaExchangeCode(code);
+    const membership = await prisma.membership.findFirst({ where: { userId: state.u, status: 'ACTIVE' }, orderBy: { createdAt: 'asc' } });
+    if (!membership) {
+      res.status(403).send('No organization available for this account. Return to the app and try again.');
+      return;
+    }
     const account = await prisma.providerAccount.create({
       data: {
-        userId: state.u,
+        organizationId: membership.organizationId,
+        connectedById: state.u,
         provider: 'tesla',
         label: 'Tesla',
         status: 'connected',
@@ -114,25 +125,32 @@ providersRouter.get('/tesla/callback', async (req, res) => {
 
 // ---- Tessie (optional) ----
 
-providersRouter.post('/tessie/connect', async (req, res) => {
+providersRouter.post('/tessie/connect', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
   const { token, label } = (req.body ?? {}) as { token?: string; label?: string };
   if (!token || token.length < 8) {
     res.status(400).json({ error: { code: 'VALIDATION', message: 'A valid Tessie API token is required.' } });
     return;
   }
+  const actor = sessionActor(req);
+  const membership = await prisma.membership.findFirst({ where: { userId: actor.userId, status: 'ACTIVE' }, orderBy: { createdAt: 'asc' } });
+  if (!membership) {
+    res.status(403).json({ error: { code: 'FORBIDDEN', message: 'No organization available.' } });
+    return;
+  }
   const account = await prisma.providerAccount.create({
-    data: { userId: req.user!.id, provider: 'tessie', label: label?.slice(0, 60) || 'Tessie', status: 'pending', scopes: JSON.parse('["user_token"]') },
+    data: { organizationId: membership.organizationId, connectedById: actor.userId, provider: 'tessie', label: label?.slice(0, 60) || 'Tessie', status: 'pending', scopes: JSON.parse('["user_token"]') },
   });
   await saveCredentials(account.id, { token });
-  await audit({ actorId: req.user!.id, action: 'provider.connect_tessie', entityType: 'provider', entityId: account.id });
+  await audit({ actorId: sessionActor(req).userId, action: 'provider.connect_tessie', entityType: 'provider', entityId: account.id });
   res.status(201).json({ data: { accountId: account.id, status: 'pending' } });
 });
 
 // ---- Import vehicles for a connected account ----
 
-providersRouter.post('/:accountId/import', async (req, res) => {
-  const account = await prisma.providerAccount.findUnique({ where: { id: req.params.accountId }, include: { vehicles: true } });
-  if (!account || account.userId !== req.user!.id) {
+providersRouter.post('/:accountId/import', { auth: 'session', target: { kind: 'resource', resource: 'providerAccount', from: 'param:accountId', perm: 'providers.manage' } }, async (req, res) => {
+  const account = await prisma.providerAccount.findUnique({ where: { id: String(req.params.accountId) }, include: { vehicles: true } });
+  const membership = await prisma.membership.findFirst({ where: { userId: sessionActor(req).userId, status: 'ACTIVE', organizationId: account?.organizationId } });
+  if (!account || !membership) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Provider account not found.' } });
     return;
   }
@@ -148,7 +166,8 @@ providersRouter.post('/:accountId/import', async (req, res) => {
       if (existing) continue;
       await prisma.vehicle.create({
         data: {
-          ownerId: req.user!.id,
+          organizationId: account.organizationId,
+          addedById: sessionActor(req).userId,
           providerAccountId: account.id,
           provider: account.provider,
           providerVehicleId: d.providerVehicleId,
@@ -168,7 +187,7 @@ providersRouter.post('/:accountId/import', async (req, res) => {
       await getQueue().enqueue('telemetry', { accountId: account.id, vehicleId: (await prisma.vehicle.findUniqueOrThrow({ where: { provider_providerVehicleId_providerAccountId: { provider: account.provider, providerVehicleId: d.providerVehicleId, providerAccountId: account.id } } })).id, providerVehicleId: d.providerVehicleId });
     }
     await prisma.providerAccount.update({ where: { id: account.id }, data: { status: 'connected', lastSyncAt: new Date(), lastError: null } });
-    await audit({ actorId: req.user!.id, action: 'provider.import_vehicles', entityType: 'provider', entityId: account.id, details: { imported } });
+    await audit({ actorId: sessionActor(req).userId, action: 'provider.import_vehicles', entityType: 'provider', entityId: account.id, details: { imported } });
     res.json({ data: { imported, total: descriptors.length } });
   } catch (err) {
     await prisma.providerAccount.update({ where: { id: account.id }, data: { status: 'error', lastError: (err as Error).message.slice(0, 500) } });
@@ -178,23 +197,24 @@ providersRouter.post('/:accountId/import', async (req, res) => {
 
 // ---- Disconnect: revoke vehicles + remove encrypted credentials ----
 
-providersRouter.post('/:accountId/disconnect', async (req, res) => {
-  const account = await prisma.providerAccount.findUnique({ where: { id: req.params.accountId } });
-  if (!account || account.userId !== req.user!.id) {
+providersRouter.post('/:accountId/disconnect', { auth: 'session', target: { kind: 'resource', resource: 'providerAccount', from: 'param:accountId', perm: 'providers.manage' } }, async (req, res) => {
+  const account = await prisma.providerAccount.findUnique({ where: { id: String(req.params.accountId) } });
+  const membership = await prisma.membership.findFirst({ where: { userId: sessionActor(req).userId, status: 'ACTIVE', organizationId: account?.organizationId } });
+  if (!account || !membership) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Provider account not found.' } });
     return;
   }
   await prisma.vehicle.updateMany({ where: { providerAccountId: account.id }, data: { active: false } });
   await removeCredentials(account.id);
   await prisma.providerAccount.update({ where: { id: account.id }, data: { status: 'revoked' } });
-  await audit({ actorId: req.user!.id, action: 'provider.disconnect', entityType: 'provider', entityId: account.id });
+  await audit({ actorId: sessionActor(req).userId, action: 'provider.disconnect', entityType: 'provider', entityId: account.id });
   res.json({ data: { ok: true, note: 'Stored credentials were removed. Revoke access on the provider side as well.' } });
 });
 
 // ---- Provider webhook ingestion (for providers that support push) ----
 
-providersRouter.post('/:provider/webhook', async (req, res) => {
-  const provider = req.params.provider;
+providersRouter.post('/:provider/webhook', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
+  const provider = String(req.params.provider);
   if (!['tesla', 'tessie', 'demo'].includes(provider)) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Unknown provider webhook.' } });
     return;
@@ -206,7 +226,7 @@ providersRouter.post('/:provider/webhook', async (req, res) => {
     if (vehicle) {
       if (body.type === 'trigger') {
         const { dispatchTrigger } = await import('../automations/engine');
-        await dispatchTrigger({ type: (body.payload?.type ?? 'webhook') as never, userId: req.user?.id, vehicleId: vehicle.id, data: body.payload ?? {} });
+        await dispatchTrigger({ type: (body.payload?.type ?? 'webhook') as never, userId: sessionActor(req).userId, vehicleId: vehicle.id, data: body.payload ?? {} });
       }
     }
   }
@@ -215,7 +235,7 @@ providersRouter.post('/:provider/webhook', async (req, res) => {
 
 // ---- Demo provider degradation toggle (demo/testing) ----
 
-providersRouter.post('/demo/degraded', async (req, res) => {
+providersRouter.post('/demo/degraded', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
   const { degraded } = (req.body ?? {}) as { degraded?: boolean };
   const { setDemoDegraded } = await import('../providers/demo');
   setDemoDegraded(!!degraded);

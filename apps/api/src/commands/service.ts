@@ -7,9 +7,12 @@ import { getQueue } from '../core/queue';
 import { audit } from '../core/settings';
 import { getSetting } from '../core/settings';
 import { ssePublish } from '../core/sse';
-import { assertCommandPermission, loadVehicleForUser } from '../access';
+import { assertVehicleAccess } from '../authz/access';
+import { requireRecentStepUp } from '../authz/policy';
+import { AccessDenied } from '../authz/errors';
+import type { Actor } from '../authz/types';
 import { buildContext, getProvider } from '../providers/registry';
-import { randomId } from '../core/crypto';
+import { randomId, sha256hex } from '../core/crypto';
 import { COMMAND_DEFINITIONS, HIGH_RISK_COMMANDS, type CommandParams, type CommandStatus, type CommandType, type RiskLevel, type VehicleCommand } from '@voltlink/shared';
 
 export class CommandError extends Error {
@@ -46,25 +49,41 @@ const CONFIRM_TIMEOUT_MS = 60_000;
 
 export interface IssueOptions {
   idempotencyKey?: string;
-  stepUp?: { password?: string; totp?: string };
-  source?: 'user' | 'automation';
 }
 
 export async function issueCommand(
-  userId: string,
-  role: string,
+  actor: Actor,
   vehicleId: string,
   type: CommandType,
   params: CommandParams,
   opts: IssueOptions = {},
   meta: { ip?: string; requestId?: string } = {},
-): Promise<VehicleCommand> {
+): Promise<{ command: VehicleCommand; replayed: boolean }> {
   const def = COMMAND_DEFINITIONS[type];
   if (!def) throw new CommandError('UNKNOWN_COMMAND', 'Unknown command type.', 400);
+  if ((params as Record<string, unknown>).stepUp !== undefined) {
+    throw new CommandError('STEP_UP_INLINE_REMOVED', 'Commands no longer accept inline credentials; step up first, then resend the command.', 400);
+  }
 
-  const vehicle = await loadVehicleForUser(vehicleId, userId, role);
   const highRisk = HIGH_RISK_COMMANDS.includes(type);
-  await assertCommandPermission(vehicle, userId, role, highRisk);
+  const { vehicle, permissions } = await assertVehicleAccess(
+    actor,
+    vehicleId,
+    highRisk ? 'vehicles.command_high_risk' : 'vehicles.command',
+  );
+
+  // High-risk: sessions need a recent step-up; API keys never get high-risk.
+  if (highRisk) {
+    if (actor.kind === 'session') requireRecentStepUp(actor);
+    else if (actor.kind === 'apiKey') throw new AccessDenied('FORBIDDEN', 'API keys cannot run high-risk commands.', 403);
+    else if (actor.kind === 'automation') {
+      const a = await prisma.automation.findUnique({ where: { id: actor.automationId } });
+      const hash = sha256hex(JSON.stringify({ trigger: a?.triggerType ?? '', vehicleId, actions: [type] }));
+      if (!a?.highRiskApprovedAt || a.approvedActionsHash !== hash) {
+        throw new CommandError('AUTOMATION_HIGH_RISK_NOT_APPROVED', 'This automation no longer holds a valid high-risk approval.', 403);
+      }
+    }
+  }
 
   // Kill switches (global, provider, vehicle).
   const [globalOn, providerOn, vehicleOn] = await Promise.all([
@@ -82,26 +101,33 @@ export async function issueCommand(
     throw new CommandError('UNSUPPORTED', `This vehicle does not support "${def.label}".`, 422);
   }
 
-  // High-risk step-up verification.
-  if (highRisk && opts.source !== 'automation') {
-    const { stepUpCheck } = await import('../auth/service');
-    if (!opts.stepUp || !(await stepUpCheck(userId, opts.stepUp))) {
-      throw new CommandError('REAUTH_REQUIRED', 'Re-authenticate to run this high-risk command.', 403);
+  checkRate(actor.kind === 'apiKey' ? actor.apiKeyId : actor.kind === 'system' ? 'system' : actor.userId, vehicleId, highRisk);
+
+  // Idempotency is scoped per actor kind (Z-IDEMP).
+  const scope = actor.kind === 'apiKey' ? `apikey:${actor.apiKeyId}` : actor.kind === 'automation' ? `automation:${actor.automationId}` : actor.kind === 'system' ? 'system:system' : `user:${actor.userId}`;
+  const idempotencyKey = opts.idempotencyKey ?? `cmd:${scope}:${vehicleId}:${type}:${randomId()}`;
+  const requestHash = sha256hex(JSON.stringify({ vehicleId, type, params: sanitizeParams(type, params) }));
+  const prior = await prisma.commandIdempotency.findUnique({ where: { scope_key: { scope, key: idempotencyKey } } });
+  if (prior && prior.expiresAt > new Date()) {
+    if (prior.requestHash !== requestHash) {
+      throw new CommandError('IDEMPOTENCY_KEY_REUSED', 'This idempotency key was already used with a different request.', 409);
     }
+    const original = await prisma.vehicleCommand.findUnique({ where: { id: prior.commandId } });
+    if (original) return { command: serializeCommand(original), replayed: true };
   }
-
-  checkRate(userId, vehicleId, highRisk);
-
-  const idempotencyKey = opts.idempotencyKey ?? `cmd:${userId}:${vehicleId}:${type}:${randomId()}`;
-  const existing = await prisma.vehicleCommand.findUnique({ where: { idempotencyKey } });
-  if (existing) return serializeCommand(existing);
 
   const command = await prisma.vehicleCommand.create({
     data: {
       vehicleId,
-      vehicleName: vehicle.displayName,
+      vehicleName: String(vehicle.displayName),
       providerAccountId: vehicle.providerAccountId,
-      userId,
+      organizationId: vehicle.organizationId,
+      userId: actor.kind === 'system' ? '' : actor.userId,
+      actorKind: actor.kind,
+      apiKeyId: actor.kind === 'apiKey' ? actor.apiKeyId : null,
+      automationId: actor.kind === 'automation' ? actor.automationId : null,
+      sourceIp: meta.ip?.slice(0, 64),
+      authzDecision: JSON.parse(JSON.stringify({ perm: highRisk ? 'vehicles.command_high_risk' : 'vehicles.command', permissions: [...permissions] })),
       type,
       params: JSON.parse(JSON.stringify(sanitizeParams(type, params))),
       status: 'queued',
@@ -109,27 +135,35 @@ export async function issueCommand(
       idempotencyKey,
     },
   });
+  try {
+    await prisma.commandIdempotency.create({
+      data: { scope, key: idempotencyKey, requestHash, commandId: command.id, expiresAt: new Date(Date.now() + 86_400_000) },
+    });
+  } catch (e) {
+    if ((e as { code?: string }).code === 'P2002') {
+      const prior = await prisma.commandIdempotency.findUniqueOrThrow({ where: { scope_key: { scope, key: idempotencyKey } } });
+      if (prior.requestHash !== requestHash) throw new CommandError('IDEMPOTENCY_KEY_REUSED', 'This idempotency key was already used with a different request.', 409);
+      const original = await prisma.vehicleCommand.findUnique({ where: { id: prior.commandId } });
+      if (original) return { command: serializeCommand(original), replayed: true };
+    }
+    throw e;
+  }
+  const actorUserId = actor.kind === 'session' || actor.kind === 'automation' || actor.kind === 'apiKey' ? actor.userId : '';
   await prisma.commandAuditEvent.create({
-    data: { commandId: command.id, event: 'queued', actor: userId, detail: `Command "${def.label}" queued${highRisk ? ' (high risk, step-up passed)' : ''}.` },
+    data: { commandId: command.id, event: 'queued', actor: actor.kind, detail: `Command "${def.label}" queued${highRisk ? ' (high risk, step-up passed)' : ''}.` },
   });
   await audit({
-    actorId: userId,
+    actorId: actorUserId || undefined,
     action: 'command.issue',
     entityType: 'vehicle',
     entityId: vehicleId,
-    details: { commandId: command.id, type, risk: def.risk, source: opts.source ?? 'user' },
+    details: { commandId: command.id, type, risk: def.risk, actorKind: actor.kind },
     ip: meta.ip,
     requestId: meta.requestId,
   });
   await getQueue().enqueue('vehicle-commands', { commandId: command.id }, { dedupeKey: `cmd:${command.id}` });
-  ssePublish({ type: 'command', data: { command: serializeCommand(command) }, userId });
-  return serializeCommand(command);
-}
-
-export async function issueCommandInternal(userId: string, vehicleId: string, type: CommandType, params: CommandParams, opts: IssueOptions = {}): Promise<VehicleCommand> {
-  const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
-  if (!vehicle) throw new CommandError('NOT_FOUND', 'Vehicle not found.', 404);
-  return issueCommand(userId, 'OWNER', vehicleId, type, params, { ...opts, source: 'automation' });
+  ssePublish({ type: 'command', data: { command: serializeCommand(command) }, userId: actorUserId });
+  return { command: serializeCommand(command), replayed: false };
 }
 
 function sanitizeParams(type: CommandType, params: CommandParams): CommandParams {
@@ -146,7 +180,7 @@ function sanitizeParams(type: CommandType, params: CommandParams): CommandParams
 
 function serializeCommand(c: {
   id: string; vehicleId: string; vehicleName: string; providerAccountId: string; type: string; params: unknown;
-  status: string; risk: string; idempotencyKey: string; userId: string; createdAt: Date; submittedAt: Date | null;
+  status: string; risk: string; idempotencyKey: string | null; userId: string; createdAt: Date; submittedAt: Date | null;
   completedAt: Date | null; providerResponse: string | null; errorMessage: string | null; confirmed: boolean;
 }): VehicleCommand {
   return {
@@ -158,7 +192,7 @@ function serializeCommand(c: {
     params: (c.params ?? {}) as CommandParams,
     status: c.status as CommandStatus,
     risk: c.risk as RiskLevel,
-    idempotencyKey: c.idempotencyKey,
+    idempotencyKey: c.idempotencyKey ?? '',
     userId: c.userId,
     createdAt: c.createdAt.toISOString(),
     submittedAt: c.submittedAt?.toISOString(),
@@ -288,21 +322,20 @@ async function notifyCommandFinished(command: { id: string; userId: string; vehi
   ssePublish({ type: 'command_finished', data: { commandId: command.id, outcome }, userId: command.userId });
 }
 
-export async function cancelCommand(userId: string, commandId: string): Promise<VehicleCommand> {
+export async function cancelCommand(commandId: string): Promise<VehicleCommand> {
   const command = await prisma.vehicleCommand.findUnique({ where: { id: commandId } });
   if (!command) throw new CommandError('NOT_FOUND', 'Command not found.', 404);
-  if (command.userId !== userId) throw new CommandError('FORBIDDEN', 'Not your command.', 403);
   if (['confirmed', 'failed', 'rejected', 'unsupported', 'timed_out', 'canceled'].includes(command.status)) {
     throw new CommandError('ALREADY_FINAL', 'Command is already in a final state.', 409);
   }
   await updateStatus(command.id, 'canceled');
-  await auditEvent(command.id, 'canceled', userId, 'Canceled by user.');
+  await auditEvent(command.id, 'canceled', command.actorKind, 'Canceled by user.');
   const updated = await prisma.vehicleCommand.findUniqueOrThrow({ where: { id: commandId } });
   return serializeCommand(updated);
 }
 
-export async function listCommands(userId: string, vehicleId: string | null, page: number, pageSize: number) {
-  const where = vehicleId ? { vehicleId, userId } : { userId };
+export async function listCommands(vehicleIds: string[], page: number, pageSize: number) {
+  const where = { vehicleId: { in: vehicleIds } };
   const [items, total] = await Promise.all([
     prisma.vehicleCommand.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * pageSize, take: pageSize }),
     prisma.vehicleCommand.count({ where }),
@@ -310,9 +343,9 @@ export async function listCommands(userId: string, vehicleId: string | null, pag
   return { items: items.map(serializeCommand), total };
 }
 
-export async function getCommand(userId: string, commandId: string): Promise<{ command: VehicleCommand; events: { id: string; commandId: string; event: string; actor: string; detail: string; createdAt: string }[] }> {
+export async function getCommand(commandId: string): Promise<{ command: VehicleCommand; events: { id: string; commandId: string; event: string; actor: string; detail: string; createdAt: string }[] }> {
   const command = await prisma.vehicleCommand.findUnique({ where: { id: commandId } });
-  if (!command || command.userId !== userId) throw new CommandError('NOT_FOUND', 'Command not found.', 404);
+  if (!command) throw new CommandError('NOT_FOUND', 'Command not found.', 404);
   const events = await prisma.commandAuditEvent.findMany({ where: { commandId }, orderBy: { createdAt: 'asc' } });
   return {
     command: serializeCommand(command),

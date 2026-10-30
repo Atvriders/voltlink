@@ -1,25 +1,24 @@
 // Status routes: public status JSON/RSS/badge, incident management,
 // maintenance windows, component overrides, and subscriptions.
 
-import { Router } from 'express';
+import { policyRouter, sessionActor } from '../authz/policy';
 import { prisma } from '../core/db';
 import { env } from '../core/env';
-import { requireAuth, requireRole } from '../auth/middleware';
 import { publicStatusBundle, runStatusChecks, toIncidentDto, ensureComponents } from '../status/service';
 import { randomToken } from '../core/crypto';
 
 const statusPublicUrl = `${env.PUBLIC_URL}/status`;
 
-export const statusRouter = Router();
+export const statusRouter = policyRouter('/api/v1/status');
 
 // ---- Public endpoints (no auth) ----
 
-statusRouter.get('/', async (_req, res) => {
+statusRouter.get('/', { auth: 'public', target: { kind: 'none' } }, async (_req, res) => {
   await ensureComponents();
   res.json({ data: await publicStatusBundle() });
 });
 
-statusRouter.get('/rss', async (_req, res) => {
+statusRouter.get('/rss', { auth: 'public', target: { kind: 'none' } }, async (_req, res) => {
   const bundle = (await publicStatusBundle()) as { incidents: { id: string; title: string; severity: string; status: string; updates: { message: string; createdAt: string }[] }[]; updatedAt: string };
   const items = bundle.incidents
     .slice(0, 20)
@@ -32,7 +31,7 @@ statusRouter.get('/rss', async (_req, res) => {
   res.send(xml);
 });
 
-statusRouter.get('/badge.svg', async (_req, res) => {
+statusRouter.get('/badge.svg', { auth: 'public', target: { kind: 'none' } }, async (_req, res) => {
   const bundle = (await publicStatusBundle()) as { overall: string };
   const labels: Record<string, [string, string]> = {
     operational: ['Operational', '#2e7d32'],
@@ -50,7 +49,7 @@ statusRouter.get('/badge.svg', async (_req, res) => {
   res.send(svg);
 });
 
-statusRouter.post('/subscribe', async (req, res) => {
+statusRouter.post('/subscribe', { auth: 'public', target: { kind: 'none' } }, async (req, res) => {
   const { email } = (req.body ?? {}) as { email?: string };
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     res.status(400).json({ error: { code: 'VALIDATION', message: 'Valid email required.' } });
@@ -65,8 +64,8 @@ statusRouter.post('/subscribe', async (req, res) => {
   res.json({ data: { ok: true, note: 'Subscription recorded. (Confirmation email requires SMTP configuration.)' } });
 });
 
-statusRouter.get('/subscriptions/confirm/:token', async (req, res) => {
-  const sub = await prisma.statusSubscription.findUnique({ where: { token: req.params.token } });
+statusRouter.get('/subscriptions/confirm/:token', { auth: 'public', target: { kind: 'none' } }, async (req, res) => {
+  const sub = await prisma.statusSubscription.findUnique({ where: { token: String(req.params.token) } });
   if (!sub) {
     res.status(404).send('Invalid confirmation token.');
     return;
@@ -77,9 +76,7 @@ statusRouter.get('/subscriptions/confirm/:token', async (req, res) => {
 
 // ---- Authenticated management ----
 
-statusRouter.use(requireAuth);
-
-statusRouter.get('/checks/history', async (req, res) => {
+statusRouter.get('/checks/history', { auth: 'public', target: { kind: 'none' } }, async (req, res) => {
   const key = typeof req.query.key === 'string' ? req.query.key : undefined;
   const hours = Math.min(24 * 30, Math.max(1, Number(req.query.hours) || 24));
   const from = new Date(Date.now() - hours * 3600000);
@@ -91,13 +88,13 @@ statusRouter.get('/checks/history', async (req, res) => {
   res.json({ data: rows.map((r) => ({ at: r.at.toISOString(), componentKey: r.componentKey, ok: r.ok, latencyMs: r.latencyMs ?? undefined, detail: r.detail ?? undefined })) });
 });
 
-statusRouter.post('/checks/run', requireRole('STATUS_MANAGER'), async (_req, res) => {
+statusRouter.post('/checks/run', { auth: 'session', target: { kind: 'operator', perm: 'status.manage' } }, async (_req, res) => {
   await runStatusChecks();
   res.json({ data: { ok: true } });
 });
 
-statusRouter.patch('/components/:key', requireRole('STATUS_MANAGER'), async (req, res) => {
-  const component = await prisma.statusComponent.findUnique({ where: { key: String(req.params.key) } });
+statusRouter.patch('/components/:key', { auth: 'session', target: { kind: 'operator', perm: 'status.manage' } }, async (req, res) => {
+  const component = await prisma.statusComponent.findUnique({ where: { key: String(String(req.params.key)) } });
   if (!component) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Component not found.' } });
     return;
@@ -117,12 +114,12 @@ statusRouter.patch('/components/:key', requireRole('STATUS_MANAGER'), async (req
 
 // ---- Incidents ----
 
-statusRouter.get('/incidents', async (_req, res) => {
+statusRouter.get('/incidents', { auth: 'public', target: { kind: 'none' } }, async (_req, res) => {
   const incidents = await prisma.incident.findMany({ include: { updates: { orderBy: { createdAt: 'asc' } } }, orderBy: { createdAt: 'desc' } });
   res.json({ data: incidents.map(toIncidentDto) });
 });
 
-statusRouter.post('/incidents', requireRole('STATUS_MANAGER'), async (req, res) => {
+statusRouter.post('/incidents', { auth: 'session', target: { kind: 'operator', perm: 'incidents.manage' } }, async (req, res) => {
   const { title, severity, components, public: isPublic, message } = (req.body ?? {}) as { title?: string; severity?: string; components?: string[]; public?: boolean; message?: string };
   if (!title) {
     res.status(400).json({ error: { code: 'VALIDATION', message: 'Incident title required.' } });
@@ -139,7 +136,7 @@ statusRouter.post('/incidents', requireRole('STATUS_MANAGER'), async (req, res) 
     },
   });
   if (message) {
-    await prisma.incidentUpdate.create({ data: { incidentId: incident.id, phase: 'investigating', message: message.slice(0, 2000), author: req.user!.name } });
+    await prisma.incidentUpdate.create({ data: { incidentId: incident.id, phase: 'investigating', message: message.slice(0, 2000), author: sessionActor(req).userId } });
   }
   // reflect incident on components
   for (const key of (components ?? []).slice(0, 20)) {
@@ -152,8 +149,8 @@ statusRouter.post('/incidents', requireRole('STATUS_MANAGER'), async (req, res) 
   res.status(201).json({ data: { id: incident.id } });
 });
 
-statusRouter.post('/incidents/:id/updates', requireRole('STATUS_MANAGER'), async (req, res) => {
-  const incident = await prisma.incident.findUnique({ where: { id: String(req.params.id) } });
+statusRouter.post('/incidents/:id/updates', { auth: 'session', target: { kind: 'operator', perm: 'incidents.manage' } }, async (req, res) => {
+  const incident = await prisma.incident.findUnique({ where: { id: String(String(req.params.id)) } });
   if (!incident) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Incident not found.' } });
     return;
@@ -165,7 +162,7 @@ statusRouter.post('/incidents/:id/updates', requireRole('STATUS_MANAGER'), async
     return;
   }
   const ph = phase as string;
-  await prisma.incidentUpdate.create({ data: { incidentId: incident.id, phase: ph, message: message.slice(0, 2000), author: req.user!.name } });
+  await prisma.incidentUpdate.create({ data: { incidentId: incident.id, phase: ph, message: message.slice(0, 2000), author: sessionActor(req).userId } });
   const current = (incident.phases ?? {}) as Record<string, string | null>;
   current[ph] = new Date().toISOString();
   await prisma.incident.update({ where: { id: incident.id }, data: { phases: current as never, status: ph } });
@@ -181,8 +178,8 @@ statusRouter.post('/incidents/:id/updates', requireRole('STATUS_MANAGER'), async
   res.status(201).json({ data: { ok: true } });
 });
 
-statusRouter.patch('/incidents/:id', requireRole('STATUS_MANAGER'), async (req, res) => {
-  const incident = await prisma.incident.findUnique({ where: { id: String(req.params.id) } });
+statusRouter.patch('/incidents/:id', { auth: 'session', target: { kind: 'operator', perm: 'incidents.manage' } }, async (req, res) => {
+  const incident = await prisma.incident.findUnique({ where: { id: String(String(req.params.id)) } });
   if (!incident) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Incident not found.' } });
     return;
@@ -197,12 +194,12 @@ statusRouter.patch('/incidents/:id', requireRole('STATUS_MANAGER'), async (req, 
 
 // ---- Maintenance windows ----
 
-statusRouter.get('/maintenance', async (_req, res) => {
+statusRouter.get('/maintenance', { auth: 'public', target: { kind: 'none' } }, async (_req, res) => {
   const rows = await prisma.maintenanceWindow.findMany({ orderBy: { startsAt: 'desc' }, take: 30 });
   res.json({ data: rows.map((m) => ({ ...m, startsAt: m.startsAt.toISOString(), endsAt: m.endsAt.toISOString(), components: m.components ?? [] })) });
 });
 
-statusRouter.post('/maintenance', requireRole('STATUS_MANAGER'), async (req, res) => {
+statusRouter.post('/maintenance', { auth: 'session', target: { kind: 'operator', perm: 'status.manage' } }, async (req, res) => {
   const { title, description, startsAt, endsAt, components } = (req.body ?? {}) as Record<string, unknown>;
   if (!title || !startsAt || !endsAt) {
     res.status(400).json({ error: { code: 'VALIDATION', message: 'title, startsAt, endsAt required.' } });
@@ -224,8 +221,8 @@ statusRouter.post('/maintenance', requireRole('STATUS_MANAGER'), async (req, res
   res.status(201).json({ data: { id: m.id } });
 });
 
-statusRouter.patch('/maintenance/:id', requireRole('STATUS_MANAGER'), async (req, res) => {
-  const m = await prisma.maintenanceWindow.findUnique({ where: { id: String(req.params.id) } });
+statusRouter.patch('/maintenance/:id', { auth: 'session', target: { kind: 'operator', perm: 'status.manage' } }, async (req, res) => {
+  const m = await prisma.maintenanceWindow.findUnique({ where: { id: String(String(req.params.id)) } });
   if (!m) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Maintenance window not found.' } });
     return;

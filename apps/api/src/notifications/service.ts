@@ -33,7 +33,7 @@ export async function notify(input: NotifyInput): Promise<void> {
     channels = ['in_app', ...channels];
   }
   const user = await prisma.user.findUnique({ where: { id: input.userId } });
-  if (!user || user.deletedAt) return;
+  if (!user || user.deletionRequestedAt || user.suspendedAt) return;
 
   for (const channel of new Set(channels)) {
     await deliver({ ...input, channel, severity, email: user.email });

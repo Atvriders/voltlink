@@ -135,7 +135,7 @@ async function evaluateCondition(
 export async function executeActions(
   userId: string,
   actions: { type: ActionType; params: Record<string, unknown> }[],
-  ctx: { vehicleId?: string; vehicleName?: string; dryRun: boolean },
+  ctx: { vehicleId?: string; vehicleName?: string; dryRun: boolean; automationId?: string; organizationId?: string },
 ): Promise<{ action: ActionType; ok: boolean; detail: string }[]> {
   const results: { action: ActionType; ok: boolean; detail: string }[] = [];
   for (const a of actions) {
@@ -152,7 +152,7 @@ export async function executeActions(
 async function executeAction(
   userId: string,
   action: { type: ActionType; params: Record<string, unknown> },
-  ctx: { vehicleId?: string; vehicleName?: string; dryRun: boolean },
+  ctx: { vehicleId?: string; vehicleName?: string; dryRun: boolean; automationId?: string; organizationId?: string },
 ): Promise<string> {
   const dry = ctx.dryRun ? ' [dry run]' : '';
   switch (action.type) {
@@ -189,8 +189,13 @@ async function executeAction(
     default: {
       // Vehicle commands go through the command pipeline (safe by design).
       if (ctx.dryRun || !ctx.vehicleId) return `Vehicle action skipped${dry}`;
-      const { issueCommandInternal } = await import('../commands/service');
-      const command = await issueCommandInternal(userId, ctx.vehicleId, action.type as never, action.params as never, { source: 'automation' });
+      const { issueCommand } = await import('../commands/service');
+      const { command } = await issueCommand(
+        { kind: 'automation', userId, automationId: ctx.automationId ?? '', organizationId: ctx.organizationId ?? '' },
+        ctx.vehicleId,
+        action.type as never,
+        action.params as never,
+      );
       return `Vehicle command ${command.status}`;
     }
   }
@@ -229,6 +234,8 @@ export async function runAutomation(automationId: string, event: TriggerEvent, o
     vehicleId: event.vehicleId ?? undefined,
     vehicleName: vehicle?.displayName,
     dryRun: !!opts.dryRun,
+    automationId: row.id,
+    organizationId: row.organizationId,
   });
   const ok = actionResults.every((r) => r.ok);
   const result = opts.dryRun ? 'dry_run' : ok ? 'success' : 'failed';

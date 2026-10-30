@@ -15,6 +15,7 @@ const API_ROOT = path.resolve(__dirname, '..');
 const PRISMA_DIR = path.join(API_ROOT, 'prisma');
 const SCHEMA = path.join(PRISMA_DIR, 'schema.prisma');
 const MIGRATIONS_DIR = path.join(PRISMA_DIR, 'migrations');
+const FIXTURE = path.join(__dirname, 'fixtures', 'legacy-seed.sql');
 
 function prismaBin(): string {
   const candidates = [
@@ -166,8 +167,11 @@ describe('Migration A: telemetry schema and voltlink rename', () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'voltlink-upgrade-'));
     const oldMigrations = path.join(tmp, 'migrations');
     fs.cpSync(MIGRATIONS_DIR, oldMigrations, { recursive: true });
+    // The old database predates all three shipped migrations: it has the legacy
+    // public.telemetry_reading table and no tenancy tables (see migration.test.ts
+    // for the same pattern with the same legacy fixture).
     for (const name of fs.readdirSync(oldMigrations)) {
-      if (name.includes('telemetry_schema_voltlink_rename') || name === '20261030213700_theme_voltlink') {
+      if (name.startsWith('20261030213636') || name.startsWith('20261030213700') || name.startsWith('20261030214947')) {
         fs.rmSync(path.join(oldMigrations, name), { recursive: true, force: true });
       }
     }
@@ -178,21 +182,20 @@ describe('Migration A: telemetry schema and voltlink rename', () => {
     try {
       deploy(oldSchema, upgradeUrl);
       await pre.connect();
-      await pre.query(`SELECT voltlank_ensure_partition(now())`);
-      await pre.query(
-        `INSERT INTO public.telemetry_reading (vehicle_id, ts, data)
-         VALUES ('upgrade-1', '2026-10-15T00:00:00Z', '{"k":1}'::jsonb),
-                ('upgrade-2', '2026-10-20T00:00:00Z', '{"k":2}'::jsonb)`,
-      );
+      await pre.query(fs.readFileSync(FIXTURE, 'utf8'));
       const before = await pre.query(`SELECT count(*)::int AS n FROM public.telemetry_reading`);
-      expect(before.rows[0].n).toBe(2);
+      expect(before.rows[0].n).toBe(3);
       await pre.end();
 
       deploy(SCHEMA, upgradeUrl);
       const post = new Client({ connectionString: upgradeUrl });
       await post.connect();
+      // The tenancy migration honours past deletion requests (Z-DELETE): v2's
+      // soft-deleted owner is purged, leaving the two v1 rows intact.
       const after = await post.query(`SELECT count(*)::int AS n FROM telemetry.telemetry_reading`);
       expect(after.rows[0].n).toBe(2);
+      const v2 = await post.query(`SELECT count(*)::int AS n FROM telemetry.telemetry_reading WHERE vehicle_id = 'v2'`);
+      expect(v2.rows[0].n).toBe(0);
       const inPublic = await post.query(
         `SELECT to_regclass('public.telemetry_reading') IS NOT NULL AS still_public`,
       );

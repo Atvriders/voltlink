@@ -63,16 +63,26 @@ describe('authentication enforcement', () => {
 describe('brute-force protection', () => {
   it('locks out repeated failed logins', async () => {
     const email = `vl-sec-${Date.now()}@example.test`;
-    // First create the account through the API with CSRF.
-    const csrfRes = await fetch(`${base()}/api/v1/auth/csrf`);
-    const csrfCookie = csrfRes.headers.getSetCookie()[0]!.split(';')[0]!;
-    const csrfToken = ((await csrfRes.json()) as { data: { token: string } }).data.token;
-    const reg = await fetch(`${base()}/api/v1/auth/register`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', cookie: csrfCookie, 'x-vl-csrf': csrfToken },
-      body: JSON.stringify({ name: 'Sec Tester', email, password: 'security-pass-123' }),
+    await prisma.user.create({
+      data: {
+        email,
+        name: 'Sec Tester',
+        passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
+        webauthnUserId: crypto.randomBytes(16).toString('hex'),
+        emailVerifiedAt: new Date(),
+      },
     });
-    expect(reg.status).toBe(201);
+
+    // The API issues the CSRF cookie on the first mutating request; the header
+    // must echo it on the retry (middleware/core.ts csrf()).
+    const first = await fetch(`${base()}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password: 'wrong-password' }),
+    });
+    expect(first.status).toBe(403);
+    const csrfCookie = first.headers.getSetCookie()[0]!.split(';')[0]!;
+    const csrfToken = csrfCookie.split('=')[1]!;
 
     // Hammer the login endpoint with wrong passwords.
     let last = 0;

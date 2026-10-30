@@ -7,7 +7,7 @@ import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import path from 'node:path';
 import fs from 'node:fs';
-import { env } from './core/env';
+import { env, parseTrustProxy } from './core/env';
 import { requestId, csrf, notFound, errorHandler } from './middleware/core';
 import { authRouter } from './routes/auth';
 import { usersRouter } from './routes/users';
@@ -23,7 +23,8 @@ import { fleetRouter } from './routes/fleet';
 import { statusRouter } from './routes/status';
 import { adminRouter } from './routes/admin';
 import { sseAddClient } from './core/sse';
-import { requireAuth } from './auth/middleware';
+import { authenticate } from './authz/authenticate';
+import { AccessDenied } from './authz/errors';
 import { getQueue } from './core/queue';
 import { APP_VERSION } from '@voltlink/shared';
 
@@ -40,7 +41,8 @@ const OPENAPI_SPEC: string = (() => {
 export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
   const app = express();
   app.disable('x-powered-by');
-  if (env.TRUST_PROXY) app.set('trust proxy', 1);
+  const trust = parseTrustProxy(env.TRUST_PROXY);
+  if (trust !== false) app.set('trust proxy', trust);
 
   app.use(
     helmet({
@@ -95,24 +97,26 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
     res.send(`${body}\n`);
   });
 
-  app.use('/api/v1/auth', authRouter);
-  app.use('/api/v1/users', usersRouter);
-  app.use('/api/v1/providers', providersRouter);
-  app.use('/api/v1/vehicles', vehiclesRouter);
-  app.use('/api/v1/commands', commandsRouter);
-  app.use('/api/v1/drives', drivesRouter);
-  app.use('/api/v1/charging', chargingRouter);
-  app.use('/api/v1/analytics', analyticsRouter);
-  app.use('/api/v1/automations', automationsRouter);
-  app.use('/api/v1/notifications', notificationsRouter);
-  app.use('/api/v1/fleet', fleetRouter);
-  app.use('/api/v1/status', statusRouter);
-  app.use('/api/v1/admin', adminRouter);
-  app.use('/api/v1/exports', usersRouter);
+  app.use(authRouter.prefix, authRouter.router);
+  app.use(usersRouter.prefix, usersRouter.router);
+  app.use(providersRouter.prefix, providersRouter.router);
+  app.use(vehiclesRouter.prefix, vehiclesRouter.router);
+  app.use(commandsRouter.prefix, commandsRouter.router);
+  app.use(drivesRouter.prefix, drivesRouter.router);
+  app.use(chargingRouter.prefix, chargingRouter.router);
+  app.use(analyticsRouter.prefix, analyticsRouter.router);
+  app.use(automationsRouter.prefix, automationsRouter.router);
+  app.use(notificationsRouter.prefix, notificationsRouter.router);
+  app.use(fleetRouter.prefix, fleetRouter.router);
+  app.use(statusRouter.prefix, statusRouter.router);
+  app.use(adminRouter.prefix, adminRouter.router);
+  app.use('/api/v1/exports', usersRouter.router);
 
   // Real-time events (SSE).
-  app.get('/api/v1/realtime', requireAuth, (req, res) => {
-    sseAddClient(req.user!.id, res);
+  app.get('/api/v1/realtime', async (req, res) => {
+    const actor = await authenticate(req, 'session');
+    if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
+    sseAddClient(actor.userId, res);
   });
 
   // API root / 404.

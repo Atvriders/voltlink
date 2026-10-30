@@ -1,22 +1,18 @@
 // Drives routes: listing, route replay, totals, CSV/JSON export, tags.
 
-import { Router } from 'express';
+import { policyRouter, type RoutePolicy } from '../authz/policy';
 import { prisma } from '../core/db';
-import { requireAuth } from '../auth/middleware';
-import { loadVehicleForUser } from '../access';
 import { csv } from '../core/util';
 
-export const drivesRouter = Router();
+export const drivesRouter = policyRouter('/api/v1/drives');
 
-drivesRouter.use(requireAuth);
+const readAll: RoutePolicy = {
+  auth: 'any',
+  apiScope: 'vehicles:read',
+  target: { kind: 'vehicle', from: 'query:vehicleId', perm: 'vehicles.read', optional: true },
+};
 
-async function accessibleVehicleIds(userId: string, role: string): Promise<string[]> {
-  const { listVehiclesForUser } = await import('../access');
-  const vehicles = await listVehiclesForUser(userId, role);
-  return vehicles.map((v) => v.id);
-}
-
-drivesRouter.get('/', async (req, res) => {
+drivesRouter.get('/', readAll, async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const pageSize = Math.min(200, Math.max(1, Number(req.query.pageSize) || 20));
   const vehicleId = typeof req.query.vehicleId === 'string' && req.query.vehicleId ? req.query.vehicleId : undefined;
@@ -27,7 +23,11 @@ drivesRouter.get('/', async (req, res) => {
   const sort = String(req.query.sort ?? 'startAt');
   const order = req.query.order === 'asc' ? 'asc' : 'desc';
 
-  const ids = vehicleId ? [vehicleId] : await accessibleVehicleIds(req.user!.id, req.user!.role);
+  const ids = vehicleId ? [vehicleId] : req.access!.vehicleIds!;
+  if (ids.length === 0) {
+    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No vehicles accessible.' } });
+    return;
+  }
   const where: Record<string, unknown> = {
     vehicleId: { in: ids },
     ...(from || to ? { startAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}),
@@ -49,9 +49,13 @@ drivesRouter.get('/', async (req, res) => {
   res.json({ data: { items: rows.map(toDriveDto), page, pageSize, total } });
 });
 
-drivesRouter.get('/totals', async (req, res) => {
+drivesRouter.get('/totals', readAll, async (req, res) => {
   const vehicleId = typeof req.query.vehicleId === 'string' && req.query.vehicleId ? req.query.vehicleId : undefined;
-  const ids = vehicleId ? [vehicleId] : await accessibleVehicleIds(req.user!.id, req.user!.role);
+  const ids = vehicleId ? [vehicleId] : req.access!.vehicleIds!;
+  if (ids.length === 0) {
+    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No vehicles accessible.' } });
+    return;
+  }
   const agg = await prisma.drive.aggregate({
     where: { vehicleId: { in: ids } },
     _sum: { distanceKm: true, energyKwh: true },
@@ -66,13 +70,12 @@ drivesRouter.get('/totals', async (req, res) => {
   });
 });
 
-drivesRouter.get('/:id', async (req, res) => {
-  const drive = await prisma.drive.findUnique({ where: { id: req.params.id }, include: { vehicle: { select: { displayName: true, ownerId: true } } } });
+drivesRouter.get('/:id', { auth: 'any', apiScope: 'vehicles:read', target: { kind: 'resource', resource: 'drive', from: 'param:id', perm: 'vehicles.read' } }, async (req, res) => {
+  const drive = await prisma.drive.findUnique({ where: { id: String(req.params.id) }, include: { vehicle: { select: { displayName: true } } } });
   if (!drive) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Drive not found.' } });
     return;
   }
-  await loadVehicleForUser(drive.vehicleId, req.user!.id, req.user!.role);
   const withRoute = typeof req.query.route === 'string' && req.query.route !== 'false';
   let route;
   if (withRoute) {
@@ -82,13 +85,12 @@ drivesRouter.get('/:id', async (req, res) => {
   res.json({ data: { ...toDriveDto(drive), route } });
 });
 
-drivesRouter.patch('/:id', async (req, res) => {
-  const drive = await prisma.drive.findUnique({ where: { id: req.params.id }, include: { vehicle: { select: { ownerId: true } } } });
+drivesRouter.patch('/:id', { auth: 'any', apiScope: 'history:write', target: { kind: 'resource', resource: 'drive', from: 'param:id', perm: 'vehicles.history_edit' } }, async (req, res) => {
+  const drive = await prisma.drive.findUnique({ where: { id: String(req.params.id) }, include: { vehicle: { select: { displayName: true } } } });
   if (!drive) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Drive not found.' } });
     return;
   }
-  await loadVehicleForUser(drive.vehicleId, req.user!.id, req.user!.role);
   const body = (req.body ?? {}) as { classification?: string; tags?: string[]; notes?: string };
   const data: Record<string, unknown> = {};
   if (['business', 'personal', 'unknown'].includes(body.classification ?? '')) data.classification = body.classification;
@@ -98,9 +100,13 @@ drivesRouter.patch('/:id', async (req, res) => {
   res.json({ data: { ok: true } });
 });
 
-drivesRouter.get('/export/csv', async (req, res) => {
+drivesRouter.get('/export/csv', readAll, async (req, res) => {
   const vehicleId = typeof req.query.vehicleId === 'string' && req.query.vehicleId ? req.query.vehicleId : undefined;
-  const ids = vehicleId ? [vehicleId] : await accessibleVehicleIds(req.user!.id, req.user!.role);
+  const ids = vehicleId ? [vehicleId] : req.access!.vehicleIds!;
+  if (ids.length === 0) {
+    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No vehicles accessible.' } });
+    return;
+  }
   const rows = await prisma.drive.findMany({
     where: { vehicleId: { in: ids } },
     orderBy: { startAt: 'desc' },
@@ -117,9 +123,13 @@ drivesRouter.get('/export/csv', async (req, res) => {
   res.send(body);
 });
 
-drivesRouter.get('/export/json', async (req, res) => {
+drivesRouter.get('/export/json', readAll, async (req, res) => {
   const vehicleId = typeof req.query.vehicleId === 'string' && req.query.vehicleId ? req.query.vehicleId : undefined;
-  const ids = vehicleId ? [vehicleId] : await accessibleVehicleIds(req.user!.id, req.user!.role);
+  const ids = vehicleId ? [vehicleId] : req.access!.vehicleIds!;
+  if (ids.length === 0) {
+    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No vehicles accessible.' } });
+    return;
+  }
   const rows = await prisma.drive.findMany({
     where: { vehicleId: { in: ids } },
     orderBy: { startAt: 'desc' },

@@ -1,26 +1,26 @@
 // Vehicle routes: listing, state, places, geofences, privacy zones, and
-// per-vehicle permissions.
+// per-vehicle grants. Organization-scoped; never trusts client-supplied ids.
 
-import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../core/db';
-import { requireAuth } from '../auth/middleware';
-import { loadVehicleForUser, listVehiclesForUser } from '../access';
+import { env } from '../core/env';
+import { sha256hex, randomToken } from '../core/crypto';
+import { policyRouter, sessionActor, type RoutePolicy } from '../authz/policy';
+import { accessibleVehicleIds } from '../authz/access';
+import { AccessDenied } from '../authz/errors';
 import { ingestVehicleState } from '../telemetry/ingest';
-import { getProvider } from '../providers/registry';
-import { buildContext } from '../providers/registry';
+import { getProvider, buildContext } from '../providers/registry';
 import { getQueue } from '../core/queue';
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { haversineKm } from '../core/geo';
+import { audit } from '../core/settings';
+import { sendMail } from '../auth/service';
 
-export const vehiclesRouter = Router();
+export const vehiclesRouter = policyRouter('/api/v1/vehicles');
 
-vehiclesRouter.use(requireAuth);
 
 function toVehicleWithState(v: {
   id: string; displayName: string; provider: string; providerVehicleId: string; vehicleClass: string;
   make: string | null; model: string | null; year: number | null; exteriorColor: string | null;
-  wheelStyle: string | null; vinLast4: string | null; capabilities: unknown; demo: boolean; ownerId: string;
+  wheelStyle: string | null; vinLast4: string | null; capabilities: unknown; demo: boolean; organizationId: string;
   providerAccountId: string; createdAt: Date; updatedAt: Date;
   snapshot: { state: unknown; fetchedAt: Date; freshness: string } | null;
   providerAccount: { label: string };
@@ -39,7 +39,7 @@ function toVehicleWithState(v: {
     vinLast4: v.vinLast4 ?? undefined,
     capabilities: (v.capabilities ?? []) as string[],
     demo: v.demo,
-    ownerId: v.ownerId,
+    organizationId: v.organizationId,
     providerAccountId: v.providerAccountId,
     providerAccountLabel: v.providerAccount.label,
     groupIds: [] as string[],
@@ -48,56 +48,86 @@ function toVehicleWithState(v: {
   };
 }
 
-vehiclesRouter.get('/', async (req, res) => {
-  const vehicles = await listVehiclesForUser(req.user!.id, req.user!.role);
-  const groupLinks = await prisma.fleetGroupVehicle.findMany({
-    where: { vehicleId: { in: vehicles.map((v) => v.id) } },
+const listPolicy: RoutePolicy = { auth: 'any', apiScope: 'vehicles:read', target: { kind: 'none' } };
+
+// ---- Listing ----
+
+vehiclesRouter.get('/', listPolicy, async (req, res) => {
+  const actor = req.actor!;
+  const ids = await accessibleVehicleIds(actor, 'vehicles.read');
+  const vehicles = await prisma.vehicle.findMany({
+    where: { id: { in: ids }, active: true },
+    include: { snapshot: true, providerAccount: true },
+    orderBy: { displayName: 'asc' },
   });
+  const groupLinks = await prisma.fleetGroupVehicle.findMany({ where: { vehicleId: { in: ids } } });
   const groups = new Map<string, string[]>();
-  for (const g of groupLinks) {
-    groups.set(g.vehicleId, [...(groups.get(g.vehicleId) ?? []), g.fleetGroupId]);
-  }
+  for (const g of groupLinks) groups.set(g.vehicleId, [...(groups.get(g.vehicleId) ?? []), g.fleetGroupId]);
   res.json({ data: vehicles.map((v) => ({ ...toVehicleWithState(v), groupIds: groups.get(v.id) ?? [] })) });
 });
 
-// ---- Privacy zones ----
+// ---- Privacy zones (privacy.manage; retroactive redaction enqueued in Phase 2
+// privacy work) ----
 
-vehiclesRouter.get('/privacy-zones', async (req, res) => {
-  const rows = await prisma.privacyZone.findMany({ where: { userId: req.user!.id }, orderBy: { name: 'asc' } });
+vehiclesRouter.get('/privacy-zones', { auth: 'session', target: { kind: 'org', own: true, perm: 'privacy.manage' } }, async (req, res) => {
+  const orgId = req.access!.organizationId!;
+  const rows = await prisma.privacyZone.findMany({ where: { organizationId: orgId }, orderBy: { name: 'asc' } });
   res.json({ data: rows });
 });
 
-const privacySchema = z.object({ name: z.string().min(1).max(60), lat: z.number(), lon: z.number(), radiusM: z.number().min(50).max(10000) });
+const zoneSchema = z.object({ name: z.string().min(1).max(60), lat: z.number(), lon: z.number(), radiusM: z.number().min(10).max(10000), enabled: z.boolean().optional() });
 
-vehiclesRouter.post('/privacy-zones', async (req, res) => {
-  const parsed = privacySchema.safeParse(req.body);
+vehiclesRouter.post('/privacy-zones', { auth: 'session', target: { kind: 'org', own: true, perm: 'privacy.manage' } }, async (req, res) => {
+  const orgId = req.access!.organizationId!;
+  const parsed = zoneSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: { code: 'VALIDATION', message: 'Privacy zone needs name, lat, lon, radiusM.' } });
+    res.status(400).json({ error: { code: 'VALIDATION', message: 'Privacy zone needs name, lat, lon.' } });
     return;
   }
-  const z = await prisma.privacyZone.create({ data: { userId: req.user!.id, ...parsed.data } });
+  const z = await prisma.privacyZone.create({ data: { organizationId: orgId, createdById: sessionActor(req).userId, ...parsed.data } });
+  await audit({ actorId: sessionActor(req).userId, action: 'privacy.zone_created', entityType: 'privacyZone', entityId: z.id });
   res.status(201).json({ data: z });
 });
 
+vehiclesRouter.patch('/privacy-zones/:id', { auth: 'session', target: { kind: 'resource', resource: 'privacyZone', from: 'param:id', perm: 'privacy.manage' } }, async (req, res) => {
+  const zone = req.access!.resource!;
+  const body = (req.body ?? {}) as { enabled?: boolean; name?: string; radiusM?: number };
+  const data: Record<string, unknown> = {};
+  if (typeof body.enabled === 'boolean') data.enabled = body.enabled;
+  if (typeof body.name === 'string' && body.name.trim()) data.name = body.name.trim().slice(0, 60);
+  if (typeof body.radiusM === 'number') data.radiusM = body.radiusM;
+  await prisma.privacyZone.update({ where: { id: zone.id }, data });
+  await audit({ actorId: sessionActor(req).userId, action: 'privacy.zone_updated', entityType: 'privacyZone', entityId: zone.id });
+  res.json({ data: { ok: true } });
+});
 
-vehiclesRouter.get('/:id', async (req, res) => {
-  const vehicle = await loadVehicleForUser(req.params.id, req.user!.id, req.user!.role);
+vehiclesRouter.delete('/privacy-zones/:id', { auth: 'session', target: { kind: 'resource', resource: 'privacyZone', from: 'param:id', perm: 'privacy.manage' } }, async (req, res) => {
+  await prisma.privacyZone.delete({ where: { id: req.access!.resource!.id } });
+  res.json({ data: { ok: true } });
+});
+
+// ---- Single vehicle ----
+
+vehiclesRouter.get('/:id', { auth: 'any', apiScope: 'vehicles:read', target: { kind: 'vehicle', from: 'param:id', perm: 'vehicles.read' } }, async (req, res) => {
+  const vehicle = await prisma.vehicle.findUnique({ where: { id: req.access!.vehicle!.id }, include: { snapshot: true, providerAccount: true } });
+  if (!vehicle) throw new AccessDenied('NOT_FOUND', 'Vehicle not found.', 404);
   res.json({ data: toVehicleWithState(vehicle) });
 });
 
-vehiclesRouter.get('/:id/state', async (req, res) => {
-  const vehicle = await loadVehicleForUser(req.params.id, req.user!.id, req.user!.role);
+vehiclesRouter.get('/:id/state', { auth: 'any', apiScope: 'vehicles:read', target: { kind: 'vehicle', from: 'param:id', perm: 'vehicles.read' } }, async (req, res) => {
+  const vehicle = await prisma.vehicle.findUnique({ where: { id: req.access!.vehicle!.id }, include: { snapshot: true } });
+  if (!vehicle) throw new AccessDenied('NOT_FOUND', 'Vehicle not found.', 404);
   res.json({ data: vehicle.snapshot?.state ?? null });
 });
 
 /** Refresh state on demand (rate limited by the queue dedupe). */
-vehiclesRouter.post('/:id/refresh', async (req, res) => {
-  const vehicle = await loadVehicleForUser(req.params.id, req.user!.id, req.user!.role);
+vehiclesRouter.post('/:id/refresh', { auth: 'any', apiScope: 'vehicles:read', target: { kind: 'vehicle', from: 'param:id', perm: 'vehicles.read' } }, async (req, res) => {
+  const vehicle = await prisma.vehicle.findUnique({ where: { id: req.access!.vehicle!.id }, include: { providerAccount: true } });
+  if (!vehicle) throw new AccessDenied('NOT_FOUND', 'Vehicle not found.', 404);
   if (vehicle.demo) {
-    // Demo refresh is synchronous and cheap.
     const ctx = await buildContext(vehicle.providerAccount);
     const result = await getProvider('demo').fetchState(ctx, vehicle.providerVehicleId);
-    await ingestVehicleState(vehicle, { ...(result.state as Record<string, unknown>), vehicleId: vehicle.id, provider: 'demo', providerVehicleId: vehicle.providerVehicleId, fetchedAt: new Date().toISOString() } as never, { live: true });
+    await ingestVehicleState(vehicle as never, { ...(result.state as Record<string, unknown>), vehicleId: vehicle.id, provider: 'demo', providerVehicleId: vehicle.providerVehicleId, fetchedAt: new Date().toISOString() } as never, { live: true });
     res.json({ data: { queued: false } });
     return;
   }
@@ -105,28 +135,20 @@ vehiclesRouter.post('/:id/refresh', async (req, res) => {
   res.json({ data: { queued: true } });
 });
 
-vehiclesRouter.patch('/:id', async (req, res) => {
-  const vehicle = await loadVehicleForUser(req.params.id, req.user!.id, req.user!.role);
-  const owner = vehicle.ownerId === req.user!.id;
+vehiclesRouter.patch('/:id', { auth: 'session', target: { kind: 'vehicle', from: 'param:id', perm: 'vehicles.manage' } }, async (req, res) => {
+  const vehicle = req.access!.vehicle!;
   const body = (req.body ?? {}) as { displayName?: string; exteriorColor?: string };
   const data: Record<string, unknown> = {};
-  if (owner && typeof body.displayName === 'string' && body.displayName.trim()) data.displayName = body.displayName.trim().slice(0, 60);
+  if (typeof body.displayName === 'string' && body.displayName.trim()) data.displayName = body.displayName.trim().slice(0, 60);
   if (typeof body.exteriorColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(body.exteriorColor)) data.exteriorColor = body.exteriorColor;
-  if (Object.keys(data).length > 0) {
-    await prisma.vehicle.update({ where: { id: vehicle.id }, data });
-  }
+  if (Object.keys(data).length > 0) await prisma.vehicle.update({ where: { id: vehicle.id }, data });
   res.json({ data: { ok: true } });
 });
 
-// ---- Per-vehicle permissions ----
+// ---- Grants (NEW-02: sharing goes through step-up and invitations) ----
 
-vehiclesRouter.get('/:id/permissions', async (req, res) => {
-  const vehicle = await loadVehicleForUser(req.params.id, req.user!.id, req.user!.role);
-  if (vehicle.ownerId !== req.user!.id) {
-    res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Only the owner manages permissions.' } });
-    return;
-  }
-  const rows = await prisma.vehiclePermission.findMany({ where: { vehicleId: vehicle.id } });
+vehiclesRouter.get('/:id/shares', { auth: 'session', target: { kind: 'vehicle', from: 'param:id', perm: 'vehicles.share' } }, async (req, res) => {
+  const rows = await prisma.vehicleGrant.findMany({ where: { vehicleId: req.access!.vehicle!.id } });
   const users = await prisma.user.findMany({ where: { id: { in: rows.map((r) => r.userId) } }, select: { id: true, email: true, name: true } });
   const byId = new Map(users.map((u) => [u.id, u]));
   res.json({
@@ -134,105 +156,127 @@ vehiclesRouter.get('/:id/permissions', async (req, res) => {
       id: r.id,
       userId: r.userId,
       userEmail: byId.get(r.userId)?.email ?? 'unknown',
-      level: r.level,
-      createdAt: r.createdAt.toISOString(),
+      level: r.level.toLowerCase(),
+      allowHighRisk: r.allowHighRisk,
+      expiresAt: r.expiresAt?.toISOString() ?? undefined,
     })),
   });
 });
 
-vehiclesRouter.post('/:id/permissions', async (req, res) => {
-  const vehicle = await loadVehicleForUser(req.params.id, req.user!.id, req.user!.role);
-  if (vehicle.ownerId !== req.user!.id) {
-    res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Only the owner manages permissions.' } });
-    return;
-  }
-  const { email, level } = (req.body ?? {}) as { email?: string; level?: string };
-  if (!email || !['driver', 'viewer'].includes(level ?? '')) {
-    res.status(400).json({ error: { code: 'VALIDATION', message: 'email and level (driver|viewer) required.' } });
+vehiclesRouter.post('/:id/shares', { auth: 'session', verifiedEmail: true, stepUp: {}, target: { kind: 'vehicle', from: 'param:id', perm: 'vehicles.share' } }, async (req, res) => {
+  const vehicle = req.access!.vehicle!;
+  const actor = sessionActor(req);
+  const { email, level, allowHighRisk } = (req.body ?? {}) as { email?: string; level?: string; allowHighRisk?: boolean };
+  if (!email || !['viewer', 'driver', 'manager'].includes(level ?? '')) {
+    res.status(400).json({ error: { code: 'VALIDATION', message: 'email and level (viewer|driver|manager) required.' } });
     return;
   }
   const target = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
-  if (!target || target.id === req.user!.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No other user with that email exists.' } });
-    return;
-  }
-  await prisma.vehiclePermission.upsert({
-    where: { vehicleId_userId: { vehicleId: vehicle.id, userId: target.id } },
-    update: { level },
-    create: { ownerId: req.user!.id, vehicleId: vehicle.id, userId: target.id, level },
+  const token = randomToken();
+  await prisma.invitation.create({
+    data: {
+      organizationId: vehicle.organizationId,
+      kind: 'vehicle_share',
+      email: email.trim().toLowerCase(),
+      vehicleId: vehicle.id,
+      grantLevel: (level as 'VIEWER' | 'DRIVER' | 'MANAGER').toUpperCase() as never,
+      allowHighRisk: allowHighRisk === true,
+      tokenHash: sha256hex(token),
+      invitedById: actor.userId,
+      deliveredByEmail: !!env.SMTP_URL,
+      expiresAt: new Date(Date.now() + 7 * 86_400_000),
+    },
   });
-  res.status(201).json({ data: { ok: true } });
+  if (target && target.id !== actor.userId) {
+    await prisma.vehicleGrant.upsert({
+      where: { vehicleId_userId: { vehicleId: vehicle.id, userId: target.id } },
+      update: { level: (level as 'VIEWER' | 'DRIVER' | 'MANAGER').toUpperCase() as never, allowHighRisk: allowHighRisk === true, grantedById: actor.userId },
+      create: { vehicleId: vehicle.id, userId: target.id, level: (level as 'VIEWER' | 'DRIVER' | 'MANAGER').toUpperCase() as never, allowHighRisk: allowHighRisk === true, grantedById: actor.userId },
+    });
+  } else if (target) {
+    const link = `${env.PUBLIC_URL}/invite?token=${token}`;
+    await sendMail({
+      to: email.trim().toLowerCase(),
+      subject: 'VoltLink vehicle invite',
+      text: `You were invited to access a vehicle in VoltLink. Open ${link} to accept.`,
+      html: `<p>You were invited to access a vehicle in VoltLink.</p><p><a href="${link}">Accept invitation</a></p>`,
+    });
+  }
+  await audit({ actorId: actor.userId, action: 'vehicle.share_invited', entityType: 'vehicle', entityId: vehicle.id });
+  res.status(202).json({ data: { status: 'invited' } });
 });
 
-vehiclesRouter.delete('/:id/permissions/:permId', async (req, res) => {
-  const vehicle = await loadVehicleForUser(req.params.id, req.user!.id, req.user!.role);
-  if (vehicle.ownerId !== req.user!.id) {
-    res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Only the owner manages permissions.' } });
-    return;
-  }
-  const row = await prisma.vehiclePermission.findUnique({ where: { id: req.params.permId } });
-  if (!row || row.vehicleId !== vehicle.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Permission not found.' } });
-    return;
-  }
-  await prisma.vehiclePermission.delete({ where: { id: row.id } });
+vehiclesRouter.delete('/:id/shares/:shareId', { auth: 'session', target: { kind: 'vehicle', from: 'param:id', perm: 'vehicles.share' } }, async (req, res) => {
+  const vehicle = req.access!.vehicle!;
+  const row = await prisma.vehicleGrant.findUnique({ where: { id: String(req.params.shareId) } });
+  if (!row || row.vehicleId !== vehicle.id) throw new AccessDenied('NOT_FOUND', 'Share not found.', 404);
+  await prisma.vehicleGrant.delete({ where: { id: row.id } });
+  await audit({ actorId: sessionActor(req).userId, action: 'vehicle.share_revoked', entityType: 'vehicle', entityId: vehicle.id });
   res.json({ data: { ok: true } });
 });
 
-// ---- Places ----
+// ---- Places (fleet.read / fleet.manage per organization) ----
 
-vehiclesRouter.get('/places/all', async (req, res) => {
-  const places = await prisma.place.findMany({ where: { userId: req.user!.id }, orderBy: { name: 'asc' } });
-  res.json({ data: places.map((p) => ({ ...p, createdAt: undefined })) });
+vehiclesRouter.get('/places/all', { auth: 'session', target: { kind: 'org', own: true, perm: 'fleet.read' } }, async (req, res) => {
+  const orgId = req.access!.organizationId!;
+  const places = await prisma.place.findMany({ where: { organizationId: orgId }, orderBy: { name: 'asc' } });
+  res.json({ data: places });
 });
 
-const placeSchema = z.object({ name: z.string().min(1).max(60), type: z.string(), lat: z.number(), lon: z.number(), radiusM: z.number().min(10).max(5000).optional() });
+const placeSchema = z.object({ name: z.string().min(1).max(60), type: z.string().min(1).max(30), lat: z.number(), lon: z.number(), radiusM: z.number().min(10).max(5000).optional() });
 
-vehiclesRouter.post('/places/all', async (req, res) => {
+vehiclesRouter.post('/places/all', { auth: 'session', target: { kind: 'org', own: true, perm: 'fleet.manage' } }, async (req, res) => {
+  const orgId = req.access!.organizationId!;
   const parsed = placeSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: { code: 'VALIDATION', message: 'Place needs name, type, lat, lon.' } });
     return;
   }
-  const place = await prisma.place.create({ data: { userId: req.user!.id, ...parsed.data, radiusM: parsed.data.radiusM ?? 100 } });
+  const place = await prisma.place.create({ data: { organizationId: orgId, createdById: sessionActor(req).userId, ...parsed.data, radiusM: parsed.data.radiusM ?? 100 } });
   res.status(201).json({ data: place });
 });
 
-vehiclesRouter.delete('/places/all/:id', async (req, res) => {
-  const place = await prisma.place.findUnique({ where: { id: req.params.id } });
-  if (!place || place.userId !== req.user!.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Place not found.' } });
-    return;
-  }
-  await prisma.place.delete({ where: { id: place.id } });
+vehiclesRouter.patch('/places/all/:id', { auth: 'session', target: { kind: 'resource', resource: 'place', from: 'param:id', perm: 'fleet.manage' } }, async (req, res) => {
+  const place = req.access!.resource!;
+  const body = (req.body ?? {}) as { name?: string; type?: string; lat?: number; lon?: number; radiusM?: number };
+  const data: Record<string, unknown> = {};
+  if (typeof body.name === 'string' && body.name.trim()) data.name = body.name.trim().slice(0, 60);
+  if (typeof body.type === 'string' && body.type.trim()) data.type = body.type.trim().slice(0, 30);
+  if (typeof body.lat === 'number') data.lat = body.lat;
+  if (typeof body.lon === 'number') data.lon = body.lon;
+  if (typeof body.radiusM === 'number') data.radiusM = body.radiusM;
+  await prisma.place.update({ where: { id: place.id }, data });
+  res.json({ data: { ok: true } });
+});
+
+vehiclesRouter.delete('/places/all/:id', { auth: 'session', target: { kind: 'resource', resource: 'place', from: 'param:id', perm: 'fleet.manage' } }, async (req, res) => {
+  await prisma.place.delete({ where: { id: req.access!.resource!.id } });
   res.json({ data: { ok: true } });
 });
 
 // ---- Geofences ----
 
-vehiclesRouter.get('/geofences/all', async (req, res) => {
-  const rows = await prisma.geofence.findMany({ where: { userId: req.user!.id }, orderBy: { name: 'asc' } });
+vehiclesRouter.get('/geofences/all', { auth: 'session', target: { kind: 'org', own: true, perm: 'fleet.read' } }, async (req, res) => {
+  const orgId = req.access!.organizationId!;
+  const rows = await prisma.geofence.findMany({ where: { organizationId: orgId }, orderBy: { name: 'asc' } });
   res.json({ data: rows.map((g) => ({ ...g, lastTriggeredAt: g.lastTriggeredAt?.toISOString() })) });
 });
 
 const fenceSchema = z.object({ name: z.string().min(1).max(60), lat: z.number(), lon: z.number(), radiusM: z.number().min(10).max(10000), alertOn: z.enum(['enter', 'leave', 'both']) });
 
-vehiclesRouter.post('/geofences/all', async (req, res) => {
+vehiclesRouter.post('/geofences/all', { auth: 'session', target: { kind: 'org', own: true, perm: 'fleet.manage' } }, async (req, res) => {
+  const orgId = req.access!.organizationId!;
   const parsed = fenceSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: { code: 'VALIDATION', message: 'Geofence needs name, lat, lon, radiusM, alertOn.' } });
     return;
   }
-  const g = await prisma.geofence.create({ data: { userId: req.user!.id, ...parsed.data } });
+  const g = await prisma.geofence.create({ data: { organizationId: orgId, createdById: sessionActor(req).userId, ...parsed.data } });
   res.status(201).json({ data: g });
 });
 
-vehiclesRouter.patch('/geofences/all/:id', async (req, res) => {
-  const row = await prisma.geofence.findUnique({ where: { id: req.params.id } });
-  if (!row || row.userId !== req.user!.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Geofence not found.' } });
-    return;
-  }
+vehiclesRouter.patch('/geofences/all/:id', { auth: 'session', target: { kind: 'resource', resource: 'geofence', from: 'param:id', perm: 'fleet.manage' } }, async (req, res) => {
+  const row = req.access!.resource!;
   const body = (req.body ?? {}) as { enabled?: boolean; name?: string; radiusM?: number; alertOn?: string };
   const data: Record<string, unknown> = {};
   if (typeof body.enabled === 'boolean') data.enabled = body.enabled;
@@ -243,33 +287,7 @@ vehiclesRouter.patch('/geofences/all/:id', async (req, res) => {
   res.json({ data: { ok: true } });
 });
 
-vehiclesRouter.delete('/geofences/all/:id', async (req, res) => {
-  const row = await prisma.geofence.findUnique({ where: { id: req.params.id } });
-  if (!row || row.userId !== req.user!.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Geofence not found.' } });
-    return;
-  }
-  await prisma.geofence.delete({ where: { id: row.id } });
-  res.json({ data: { ok: true } });
-});
-
-vehiclesRouter.patch('/privacy-zones/:id', async (req, res) => {
-  const row = await prisma.privacyZone.findUnique({ where: { id: req.params.id } });
-  if (!row || row.userId !== req.user!.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Privacy zone not found.' } });
-    return;
-  }
-  const body = (req.body ?? {}) as { enabled?: boolean };
-  await prisma.privacyZone.update({ where: { id: row.id }, data: { enabled: body.enabled ?? row.enabled } });
-  res.json({ data: { ok: true } });
-});
-
-vehiclesRouter.delete('/privacy-zones/:id', async (req, res) => {
-  const row = await prisma.privacyZone.findUnique({ where: { id: req.params.id } });
-  if (!row || row.userId !== req.user!.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Privacy zone not found.' } });
-    return;
-  }
-  await prisma.privacyZone.delete({ where: { id: row.id } });
+vehiclesRouter.delete('/geofences/all/:id', { auth: 'session', target: { kind: 'resource', resource: 'geofence', from: 'param:id', perm: 'fleet.manage' } }, async (req, res) => {
+  await prisma.geofence.delete({ where: { id: req.access!.resource!.id } });
   res.json({ data: { ok: true } });
 });

@@ -43,11 +43,15 @@ try {
 }
 
 export const env = {
-  NODE_ENV: optional('NODE_ENV', 'development'),
+  NODE_ENV: optional('NODE_ENV', 'production'),
   PORT: numberOpt('PORT', 3000),
-  RATE_LIMIT_PER_MIN: numberOpt('VL_RATE_LIMIT_PER_MIN', 900),
+  RATE_LIMIT_PER_MIN: numberOpt('VL_RATE_LIMIT_PER_MIN', process.env.NODE_ENV === 'test' ? 100_000 : 900),
   HOST: optional('HOST', '0.0.0.0'),
   PUBLIC_URL,
+  STEPUP_WINDOW_SEC: Math.min(900, Math.max(60, numberOpt('VL_STEPUP_WINDOW_SEC', 300))),
+  WEBAUTHN_RP_ID: optional('VL_WEBAUTHN_RP_ID', publicHost),
+  TRUST_PROXY: optional('TRUST_PROXY', 'false'),
+  DEV_ECHO_TOKENS: process.env.VL_DEV_ECHO_TOKENS === '1',
 
   DATABASE_URL: process.env.DATABASE_URL,
   REDIS_URL: process.env.REDIS_URL || '',
@@ -67,7 +71,6 @@ export const env = {
   MAIL_TO_CONSOLE: process.env.MAIL_TO_CONSOLE !== 'false',
 
   TOTP_ISSUER: optional('VL_TOTP_ISSUER', 'VoltLink'),
-  WEBAUTHN_RP_ID: optional('VL_WEBAUTHN_RP_ID', 'localhost'),
   WEBAUTHN_RP_NAME: optional('VL_WEBAUTHN_RP_NAME', 'VoltLink'),
 
   // Tesla official API (https://developer.tesla.com) OAuth app credentials.
@@ -83,19 +86,51 @@ export const env = {
   VAPID_SUBJECT: optional('VAPID_SUBJECT', `mailto:admin@${publicHost}`),
 
   DEMO_DEFAULT_ENABLED: process.env.VL_DEMO_DEFAULT_ENABLED === 'true',
-  TRUST_PROXY: process.env.TRUST_PROXY === 'true',
   LOG_LEVEL: optional('LOG_LEVEL', 'info'),
 };
+
+/**
+ * Parse TRUST_PROXY. `true` lets a client choose its own X-Forwarded-For and
+ * defeats every per-IP limit, so it makes the web role refuse to start. The
+ * accepted values are false (default, also empty or 0), a hop count, or a
+ * comma list of proxy addresses/CIDRs (e.g. `loopback,172.16.0.0/12`).
+ */
+export function parseTrustProxy(value: string): number | string[] | false {
+  const v = value.trim();
+  if (v === '' || v === '0' || v === 'false') return false;
+  if (v === 'true') {
+    throw new Error("TRUST_PROXY=true is unsafe (client-spoofable X-Forwarded-For); use a hop count or an address/CIDR list, or false.");
+  }
+  if (/^\d+$/.test(v)) return Number(v);
+  const entries = v.split(',').map((e) => e.trim()).filter(Boolean);
+  if (entries.length === 0) return false;
+  for (const e of entries) {
+    if (!/^(loopback|linklocal|uniquelocal|\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?|[0-9a-f:]+(\/\d{1,3})?)$/i.test(e)) {
+      throw new Error(`TRUST_PROXY entry ${JSON.stringify(e)} is not a hop count, address or CIDR.`);
+    }
+  }
+  return entries;
+}
 
 export function validateEnv() {
   // JWT secret required for any real run; tests inject their own.
   if (env.NODE_ENV !== 'test' || process.env.JWT_SECRET) {
     env.JWT_SECRET();
   }
+  parseTrustProxy(env.TRUST_PROXY); // throws on the unsafe `true` value
   if (env.NODE_ENV === 'production') {
     env.MASTER_KEY();
-    if (!/^https:\/\//.test(env.PUBLIC_URL) && !env.PUBLIC_URL.startsWith('http://localhost')) {
-      throw new Error('PUBLIC_URL must be an https:// URL in production (required for secure cookies).');
+    const httpInsecure = !/^https:\/\//.test(env.PUBLIC_URL) && !env.PUBLIC_URL.startsWith('http://localhost');
+    if (httpInsecure && process.env.VL_ALLOW_INSECURE_HTTP !== 'true') {
+      throw new Error('PUBLIC_URL must be an https:// URL in production, or set VL_ALLOW_INSECURE_HTTP=true for a plain-HTTP LAN deployment (passkeys and web push stay unavailable there).');
     }
+  }
+  const host = publicHost;
+  const rpId = env.WEBAUTHN_RP_ID;
+  if (rpId && host !== rpId && !host.endsWith('.' + rpId) && host !== 'localhost') {
+    throw new Error(`VL_WEBAUTHN_RP_ID (${rpId}) must equal the PUBLIC_URL host (${host}) or be a parent domain of it.`);
+  }
+  if (env.DEV_ECHO_TOKENS && !(env.NODE_ENV === 'development' && ['localhost', '127.0.0.1'].includes(host))) {
+    throw new Error('VL_DEV_ECHO_TOKENS=1 is only allowed in development with a localhost PUBLIC_URL.');
   }
 }

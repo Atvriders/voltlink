@@ -1,104 +1,112 @@
 // Fleet routes: groups, drivers, departments, cost centers, assignments,
-// maintenance, and the fleet overview.
+// maintenance, and the fleet overview. Everything is organization-scoped;
+// a route never trusts a client-supplied id.
 
-import { Router } from 'express';
 import { prisma } from '../core/db';
-import { requireAuth, requireRole } from '../auth/middleware';
-import { listVehiclesForUser } from '../access';
+import { policyRouter, sessionActor, type RoutePolicy } from '../authz/policy';
+import { assertOrgPermission, assertVehicleAccess, accessibleVehicleIds } from '../authz/access';
+import { AccessDenied } from '../authz/errors';
+import type { Actor } from '../authz/types';
+import { ROLE_PERMISSIONS } from '@voltlink/shared';
 
-export const fleetRouter = Router();
+export const fleetRouter = policyRouter('/api/v1/fleet');
 
-fleetRouter.use(requireAuth);
+async function fleetOrg(req: { actor?: Actor; query: { orgId?: unknown } }, perm: 'fleet.read' | 'fleet.manage'): Promise<string> {
+  const actor = sessionActor(req as never);
+  const requested = typeof req.query.orgId === 'string' ? req.query.orgId : undefined;
+  if (requested) {
+    await assertOrgPermission(actor, requested, perm);
+    return requested;
+  }
+  const memberships = await prisma.membership.findMany({ where: { userId: actor.userId, status: 'ACTIVE' } });
+  for (const m of memberships) {
+    if ((ROLE_PERMISSIONS[m.role] as readonly string[]).includes(perm)) return m.organizationId;
+  }
+  throw new AccessDenied('FORBIDDEN', `Missing ${perm} in any organization.`, 403);
+}
+
+const fleetRead: RoutePolicy = { auth: 'session', target: { kind: 'org', own: true, perm: 'fleet.read' } };
+const fleetManage: RoutePolicy = { auth: 'session', target: { kind: 'org', own: true, perm: 'fleet.manage' } };
 
 // ---- Overview ----
 
-fleetRouter.get('/overview', async (req, res) => {
-  const vehicles = await listVehiclesForUser(req.user!.id, req.user!.role);
-  const assignments = await prisma.vehicleAssignment.findMany({
-    where: { vehicleId: { in: vehicles.map((v) => v.id) } },
-    include: {},
-  });
-  const [drivers, departments, costCenters, groups, maintenance] = await Promise.all([
-    prisma.driver.findMany({ where: { ownerId: req.user!.id } }),
-    prisma.department.findMany({ where: { ownerId: req.user!.id } }),
-    prisma.costCenter.findMany({ where: { ownerId: req.user!.id } }),
-    prisma.fleetGroup.findMany({ where: { ownerId: req.user!.id }, include: { vehicles: true } }),
-    prisma.maintenanceRecord.findMany({ where: { vehicleId: { in: vehicles.map((v) => v.id) }, completedAt: null } }),
+fleetRouter.get('/overview', fleetRead, async (req, res) => {
+  const orgId = typeof req.query.orgId === 'string' ? await fleetOrg(req, 'fleet.read') : req.access!.organizationId!;
+  const vehicleIds = await accessibleVehicleIds(sessionActor(req), 'vehicles.read', { organizationId: orgId });
+  const [vehicles, drivers, departments, costCenters, groups] = await Promise.all([
+    prisma.vehicle.findMany({ where: { organizationId: orgId, id: { in: vehicleIds }, active: true }, include: { snapshot: true }, orderBy: { displayName: 'asc' } }),
+    prisma.driver.findMany({ where: { organizationId: orgId } }),
+    prisma.department.findMany({ where: { organizationId: orgId } }),
+    prisma.costCenter.findMany({ where: { organizationId: orgId } }),
+    prisma.fleetGroup.findMany({ where: { organizationId: orgId }, include: { vehicles: true } }),
   ]);
-  const driverById = new Map(drivers.map((d) => [d.id, d]));
-  const deptById = new Map(departments.map((d) => [d.id, d]));
-  const ccById = new Map(costCenters.map((c) => [c.id, c]));
-  const groupByVehicle = new Map<string, string[]>();
-  for (const g of groups) for (const gv of g.vehicles) groupByVehicle.set(gv.vehicleId, [...(groupByVehicle.get(gv.vehicleId) ?? []), g.id]);
-
-  const rows = vehicles.map((v) => {
-    const assignment = assignments.find((a) => a.vehicleId === v.id);
-    const state = (v.snapshot?.state ?? {}) as { status?: string; batteryPercent?: number; chargingState?: string; odometerKm?: number };
-    const attention: string[] = [];
-    const maint = maintenance.filter((m) => m.vehicleId === v.id);
-    if (maint.some((m) => m.dueAt && m.dueAt < new Date())) attention.push('maintenance overdue');
-    if (maint.length > 0 && !attention.length) attention.push(`${maint.length} maintenance item${maint.length > 1 ? 's' : ''}`);
-    if (state.chargingState === 'charging') attention.push('charging');
-    if (state.status === 'offline') attention.push('offline');
-    return {
-      vehicle: { id: v.id, name: v.displayName, vehicleClass: v.vehicleClass },
-      status: state.status ?? 'unknown',
-      batteryPct: state.batteryPercent,
-      charging: state.chargingState === 'charging',
-      odometerKm: state.odometerKm,
-      driver: assignment ? driverById.get(assignment.driverId)?.name : undefined,
-      department: assignment?.departmentId ? deptById.get(assignment.departmentId)?.name : undefined,
-      costCenter: assignment?.costCenterId ? ccById.get(assignment.costCenterId)?.name : undefined,
-      groupIds: groupByVehicle.get(v.id) ?? [],
-      lastSeenAt: v.snapshot?.fetchedAt.toISOString(),
-      attention,
-    };
-  });
-
-  const totalBattery = rows.filter((r) => typeof r.batteryPct === 'number');
+  const now = Date.now();
   res.json({
     data: {
-      rows,
-      summary: {
-        vehicles: rows.length,
-        charging: rows.filter((r) => r.charging).length,
-        offline: rows.filter((r) => r.status === 'offline').length,
-        attention: rows.filter((r) => r.attention.length > 0).length,
-        avgBatteryPct: totalBattery.length ? Math.round(totalBattery.reduce((s, r) => s + (r.batteryPct ?? 0), 0) / totalBattery.length) : null,
-      },
+      vehicles: vehicles.map((v) => {
+        const st = v.snapshot?.state as Record<string, unknown> | null;
+        return {
+          id: v.id,
+          displayName: v.displayName,
+          make: v.make,
+          model: v.model,
+          vehicleClass: v.vehicleClass,
+          batteryPct: st?.b ?? null,
+          charging: st?.cp === true || st?.charging === true,
+          offline: st?.offline === true,
+          demo: v.demo,
+          fetchedAt: v.snapshot?.fetchedAt?.toISOString(),
+        };
+      }),
+      driverCount: drivers.length,
+      departmentCount: departments.length,
+      costCenterCount: costCenters.length,
+      groupCount: groups.length,
+      maintenanceDue: await prisma.maintenanceRecord.count({ where: { vehicle: { organizationId: orgId }, completedAt: null, dueAt: { not: null } } }),
+      cachedAt: new Date(now).toISOString(),
     },
   });
 });
 
 // ---- Groups ----
 
-fleetRouter.get('/groups', async (req, res) => {
-  const groups = await prisma.fleetGroup.findMany({ where: { ownerId: req.user!.id }, include: { vehicles: true } });
+fleetRouter.get('/groups', fleetRead, async (req, res) => {
+  const orgId = typeof req.query.orgId === 'string' ? await fleetOrg(req, 'fleet.read') : req.access!.organizationId!;
+  const groups = await prisma.fleetGroup.findMany({ where: { organizationId: orgId }, include: { vehicles: true } });
   res.json({ data: groups.map((g) => ({ id: g.id, name: g.name, description: g.description ?? undefined, vehicleIds: g.vehicles.map((v) => v.vehicleId) })) });
 });
 
-fleetRouter.post('/groups', async (req, res) => {
+fleetRouter.post('/groups', fleetManage, async (req, res) => {
+  const orgId = typeof req.query.orgId === 'string' ? await fleetOrg(req, 'fleet.manage') : req.access!.organizationId!;
   const { name, description, vehicleIds } = (req.body ?? {}) as { name?: string; description?: string; vehicleIds?: string[] };
   if (!name) {
     res.status(400).json({ error: { code: 'VALIDATION', message: 'Group name required.' } });
     return;
   }
-  const group = await prisma.fleetGroup.create({ data: { ownerId: req.user!.id, name: name.slice(0, 60), description: description?.slice(0, 200) } });
+  if (Array.isArray(vehicleIds)) {
+    const rows = await prisma.vehicle.findMany({ where: { id: { in: vehicleIds }, organizationId: orgId }, select: { id: true } });
+    if (rows.length !== vehicleIds.length) {
+      res.status(400).json({ error: { code: 'VALIDATION', message: 'Every vehicleId must be in this organization.' } });
+      return;
+    }
+  }
+  const group = await prisma.fleetGroup.create({ data: { organizationId: orgId, createdById: sessionActor(req).userId, name: name.slice(0, 60), description: description?.slice(0, 200) } });
   if (Array.isArray(vehicleIds)) {
     await prisma.fleetGroupVehicle.createMany({ data: vehicleIds.map((vehicleId) => ({ fleetGroupId: group.id, vehicleId })) });
   }
   res.status(201).json({ data: { id: group.id } });
 });
 
-fleetRouter.put('/groups/:id/vehicles', async (req, res) => {
-  const group = await prisma.fleetGroup.findUnique({ where: { id: req.params.id } });
-  if (!group || group.ownerId !== req.user!.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Group not found.' } });
-    return;
-  }
+fleetRouter.put('/groups/:id/vehicles', { auth: 'session', target: { kind: 'resource', resource: 'fleetGroup', from: 'param:id', perm: 'fleet.manage' } }, async (req, res) => {
+  const group = req.access!.resource!;
   const { vehicleIds } = (req.body ?? {}) as { vehicleIds?: string[] };
   if (!Array.isArray(vehicleIds)) {
     res.status(400).json({ error: { code: 'VALIDATION', message: 'vehicleIds array required.' } });
+    return;
+  }
+  const rows = await prisma.vehicle.findMany({ where: { id: { in: vehicleIds }, organizationId: group.organizationId }, select: { id: true } });
+  if (rows.length !== vehicleIds.length) {
+    res.status(400).json({ error: { code: 'VALIDATION', message: 'Every vehicleId must be in this organization.' } });
     return;
   }
   await prisma.fleetGroupVehicle.deleteMany({ where: { fleetGroupId: group.id } });
@@ -106,98 +114,84 @@ fleetRouter.put('/groups/:id/vehicles', async (req, res) => {
   res.json({ data: { ok: true } });
 });
 
-fleetRouter.delete('/groups/:id', async (req, res) => {
-  const group = await prisma.fleetGroup.findUnique({ where: { id: req.params.id } });
-  if (!group || group.ownerId !== req.user!.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Group not found.' } });
-    return;
-  }
-  await prisma.fleetGroup.delete({ where: { id: group.id } });
+fleetRouter.delete('/groups/:id', { auth: 'session', target: { kind: 'resource', resource: 'fleetGroup', from: 'param:id', perm: 'fleet.manage' } }, async (req, res) => {
+  await prisma.fleetGroup.delete({ where: { id: req.access!.resource!.id } });
   res.json({ data: { ok: true } });
 });
 
 // ---- Drivers / departments / cost centers ----
 
-fleetRouter.get('/drivers', async (req, res) => {
-  const rows = await prisma.driver.findMany({ where: { ownerId: req.user!.id }, orderBy: { name: 'asc' } });
-  res.json({ data: rows });
+fleetRouter.get('/drivers', fleetRead, async (req, res) => {
+  const orgId = typeof req.query.orgId === 'string' ? await fleetOrg(req, 'fleet.read') : req.access!.organizationId!;
+  res.json({ data: await prisma.driver.findMany({ where: { organizationId: orgId }, orderBy: { name: 'asc' } }) });
 });
 
-fleetRouter.post('/drivers', async (req, res) => {
+fleetRouter.post('/drivers', fleetManage, async (req, res) => {
+  const orgId = typeof req.query.orgId === 'string' ? await fleetOrg(req, 'fleet.manage') : req.access!.organizationId!;
   const { name, email, phone } = (req.body ?? {}) as { name?: string; email?: string; phone?: string };
   if (!name) {
     res.status(400).json({ error: { code: 'VALIDATION', message: 'Driver name required.' } });
     return;
   }
-  const d = await prisma.driver.create({ data: { ownerId: req.user!.id, name: name.slice(0, 80), email: email?.slice(0, 120), phone: phone?.slice(0, 40) } });
+  const d = await prisma.driver.create({ data: { organizationId: orgId, createdById: sessionActor(req).userId, name: name.slice(0, 80), email: email?.slice(0, 120), phone: phone?.slice(0, 40) } });
   res.status(201).json({ data: d });
 });
 
-fleetRouter.delete('/drivers/:id', async (req, res) => {
-  const d = await prisma.driver.findUnique({ where: { id: req.params.id } });
-  if (!d || d.ownerId !== req.user!.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Driver not found.' } });
-    return;
-  }
-  await prisma.driver.delete({ where: { id: d.id } });
+fleetRouter.delete('/drivers/:id', { auth: 'session', target: { kind: 'resource', resource: 'driver', from: 'param:id', perm: 'fleet.manage' } }, async (req, res) => {
+  await prisma.driver.delete({ where: { id: req.access!.resource!.id } });
   res.json({ data: { ok: true } });
 });
 
-fleetRouter.get('/departments', async (req, res) => {
-  res.json({ data: await prisma.department.findMany({ where: { ownerId: req.user!.id }, orderBy: { name: 'asc' } }) });
+fleetRouter.get('/departments', fleetRead, async (req, res) => {
+  const orgId = typeof req.query.orgId === 'string' ? await fleetOrg(req, 'fleet.read') : req.access!.organizationId!;
+  res.json({ data: await prisma.department.findMany({ where: { organizationId: orgId }, orderBy: { name: 'asc' } }) });
 });
 
-fleetRouter.post('/departments', async (req, res) => {
+fleetRouter.post('/departments', fleetManage, async (req, res) => {
+  const orgId = typeof req.query.orgId === 'string' ? await fleetOrg(req, 'fleet.manage') : req.access!.organizationId!;
   const { name } = (req.body ?? {}) as { name?: string };
   if (!name) {
     res.status(400).json({ error: { code: 'VALIDATION', message: 'Department name required.' } });
     return;
   }
-  const d = await prisma.department.create({ data: { ownerId: req.user!.id, name: name.slice(0, 80) } });
+  const d = await prisma.department.create({ data: { organizationId: orgId, createdById: sessionActor(req).userId, name: name.slice(0, 80) } });
   res.status(201).json({ data: d });
 });
 
-fleetRouter.delete('/departments/:id', async (req, res) => {
-  const d = await prisma.department.findUnique({ where: { id: req.params.id } });
-  if (!d || d.ownerId !== req.user!.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Department not found.' } });
-    return;
-  }
-  await prisma.department.delete({ where: { id: d.id } });
+fleetRouter.delete('/departments/:id', { auth: 'session', target: { kind: 'resource', resource: 'department', from: 'param:id', perm: 'fleet.manage' } }, async (req, res) => {
+  await prisma.department.delete({ where: { id: req.access!.resource!.id } });
   res.json({ data: { ok: true } });
 });
 
-fleetRouter.get('/cost-centers', async (req, res) => {
-  res.json({ data: await prisma.costCenter.findMany({ where: { ownerId: req.user!.id }, orderBy: { name: 'asc' } }) });
+fleetRouter.get('/cost-centers', fleetRead, async (req, res) => {
+  const orgId = typeof req.query.orgId === 'string' ? await fleetOrg(req, 'fleet.read') : req.access!.organizationId!;
+  res.json({ data: await prisma.costCenter.findMany({ where: { organizationId: orgId }, orderBy: { name: 'asc' } }) });
 });
 
-fleetRouter.post('/cost-centers', async (req, res) => {
+fleetRouter.post('/cost-centers', fleetManage, async (req, res) => {
+  const orgId = typeof req.query.orgId === 'string' ? await fleetOrg(req, 'fleet.manage') : req.access!.organizationId!;
   const { name, code } = (req.body ?? {}) as { name?: string; code?: string };
   if (!name) {
     res.status(400).json({ error: { code: 'VALIDATION', message: 'Cost center name required.' } });
     return;
   }
-  const c = await prisma.costCenter.create({ data: { ownerId: req.user!.id, name: name.slice(0, 80), code: code?.slice(0, 20) ?? '' } });
+  const c = await prisma.costCenter.create({ data: { organizationId: orgId, createdById: sessionActor(req).userId, name: name.slice(0, 80), code: code?.slice(0, 20) ?? '' } });
   res.status(201).json({ data: c });
 });
 
-fleetRouter.delete('/cost-centers/:id', async (req, res) => {
-  const c = await prisma.costCenter.findUnique({ where: { id: req.params.id } });
-  if (!c || c.ownerId !== req.user!.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Cost center not found.' } });
-    return;
-  }
-  await prisma.costCenter.delete({ where: { id: c.id } });
+fleetRouter.delete('/cost-centers/:id', { auth: 'session', target: { kind: 'resource', resource: 'costCenter', from: 'param:id', perm: 'fleet.manage' } }, async (req, res) => {
+  await prisma.costCenter.delete({ where: { id: req.access!.resource!.id } });
   res.json({ data: { ok: true } });
 });
 
 // ---- Assignments ----
 
-fleetRouter.get('/assignments', async (req, res) => {
-  const rows = await prisma.vehicleAssignment.findMany({ where: { ownerId: req.user!.id } });
+fleetRouter.get('/assignments', fleetRead, async (req, res) => {
+  const orgId = typeof req.query.orgId === 'string' ? await fleetOrg(req, 'fleet.read') : req.access!.organizationId!;
+  const rows = await prisma.vehicleAssignment.findMany({ where: { organizationId: orgId } });
   const [drivers, vehicles] = await Promise.all([
-    prisma.driver.findMany({ where: { ownerId: req.user!.id } }),
-    prisma.vehicle.findMany({ where: { ownerId: req.user!.id }, select: { id: true, displayName: true } }),
+    prisma.driver.findMany({ where: { organizationId: orgId } }),
+    prisma.vehicle.findMany({ where: { organizationId: orgId }, select: { id: true, displayName: true } }),
   ]);
   const dById = new Map(drivers.map((d) => [d.id, d.name]));
   const vById = new Map(vehicles.map((v) => [v.id, v.displayName]));
@@ -216,127 +210,140 @@ fleetRouter.get('/assignments', async (req, res) => {
   });
 });
 
-fleetRouter.post('/assignments', async (req, res) => {
+fleetRouter.post('/assignments', fleetManage, async (req, res) => {
+  const orgId = typeof req.query.orgId === 'string' ? await fleetOrg(req, 'fleet.manage') : req.access!.organizationId!;
   const { vehicleId, driverId, departmentId, costCenterId } = (req.body ?? {}) as Record<string, string | undefined>;
   if (!vehicleId || !driverId) {
     res.status(400).json({ error: { code: 'VALIDATION', message: 'vehicleId and driverId required.' } });
     return;
   }
   const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
-  if (!vehicle || vehicle.ownerId !== req.user!.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Vehicle not found.' } });
+  if (!vehicle || vehicle.organizationId !== orgId) {
+    res.status(400).json({ error: { code: 'VALIDATION', message: 'Vehicle must be in this organization.' } });
+    return;
+  }
+  const driver = await prisma.driver.findUnique({ where: { id: driverId } });
+  if (!driver || driver.organizationId !== orgId) {
+    res.status(400).json({ error: { code: 'VALIDATION', message: 'Driver must be in this organization.' } });
     return;
   }
   const a = await prisma.vehicleAssignment.create({
-    data: { ownerId: req.user!.id, vehicleId, driverId, departmentId: departmentId || null, costCenterId: costCenterId || null, fromAt: new Date() },
+    data: { organizationId: orgId, vehicleId, driverId, departmentId: departmentId || null, costCenterId: costCenterId || null, fromAt: new Date() },
   });
   res.status(201).json({ data: { id: a.id } });
 });
 
-fleetRouter.delete('/assignments/:id', async (req, res) => {
-  const a = await prisma.vehicleAssignment.findUnique({ where: { id: req.params.id } });
-  if (!a || a.ownerId !== req.user!.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Assignment not found.' } });
-    return;
-  }
-  await prisma.vehicleAssignment.delete({ where: { id: a.id } });
+fleetRouter.delete('/assignments/:id', { auth: 'session', target: { kind: 'resource', resource: 'assignment', from: 'param:id', perm: 'fleet.manage' } }, async (req, res) => {
+  await prisma.vehicleAssignment.delete({ where: { id: req.access!.resource!.id } });
   res.json({ data: { ok: true } });
 });
 
-// ---- Maintenance ----
+// ---- Maintenance (Z-FLEETDEL: deletes use the resource policy) ----
 
-fleetRouter.get('/maintenance', async (req, res) => {
-  const vehicles = await listVehiclesForUser(req.user!.id, req.user!.role);
-  const rows = await prisma.maintenanceRecord.findMany({ where: { vehicleId: { in: vehicles.map((v) => v.id) } }, orderBy: { dueAt: 'asc' } });
-  const vById = new Map(vehicles.map((v) => [v.id, v.displayName]));
-  res.json({
-    data: rows.map((m) => ({
-      id: m.id,
-      vehicleId: m.vehicleId,
-      vehicleName: vById.get(m.vehicleId) ?? m.vehicleId,
-      title: m.title,
-      kind: m.kind,
-      dueAt: m.dueAt?.toISOString(),
-      dueOdometerKm: m.dueOdometerKm ?? undefined,
-      completedAt: m.completedAt?.toISOString(),
-      cost: m.cost ?? undefined,
-      currency: m.currency,
-      notes: m.notes ?? undefined,
-    })),
-  });
-});
-
-fleetRouter.post('/maintenance', async (req, res) => {
-  const { vehicleId, title, kind, dueAt, dueOdometerKm, cost, notes } = (req.body ?? {}) as Record<string, unknown>;
-  if (!vehicleId || !title) {
-    res.status(400).json({ error: { code: 'VALIDATION', message: 'vehicleId and title required.' } });
+fleetRouter.get('/maintenance', fleetRead, async (req, res) => {
+  const orgId = typeof req.query.orgId === 'string' ? await fleetOrg(req, 'fleet.read') : req.access!.organizationId!;
+  const vehicleId = typeof req.query.vehicleId === 'string' ? req.query.vehicleId : undefined;
+  if (vehicleId) {
+    const { vehicle } = await assertVehicleAccess(sessionActor(req), vehicleId, 'vehicles.read');
+    const rows = await prisma.maintenanceRecord.findMany({ where: { vehicleId: vehicle.id }, orderBy: { dueAt: 'asc' } });
+    res.json({ data: rows.map(maintenanceDto) });
     return;
   }
-  const vehicle = await prisma.vehicle.findUnique({ where: { id: String(vehicleId) } });
-  if (!vehicle || vehicle.ownerId !== req.user!.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Vehicle not found.' } });
+  const rows = await prisma.maintenanceRecord.findMany({ where: { vehicle: { organizationId: orgId } }, orderBy: { dueAt: 'asc' } });
+  res.json({ data: rows.map(maintenanceDto) });
+});
+
+function maintenanceDto(m: { id: string; vehicleId: string; title: string; kind: string; dueAt: Date | null; dueOdometerKm: number | null; completedAt: Date | null; cost: number | null; currency: string; notes: string | null }) {
+  return {
+    id: m.id,
+    vehicleId: m.vehicleId,
+    title: m.title,
+    kind: m.kind,
+    dueAt: m.dueAt?.toISOString(),
+    dueOdometerKm: m.dueOdometerKm ?? undefined,
+    completedAt: m.completedAt?.toISOString(),
+    cost: m.cost ?? undefined,
+    currency: m.currency,
+    notes: m.notes ?? undefined,
+  };
+}
+
+fleetRouter.post('/maintenance', { auth: 'session', target: { kind: 'vehicle', from: 'body:vehicleId', perm: 'vehicles.manage' } }, async (req, res) => {
+  const vehicle = req.access!.vehicle!;
+  const { title, kind, dueAt, dueOdometerKm, cost, notes } = (req.body ?? {}) as Record<string, unknown>;
+  if (!title) {
+    res.status(400).json({ error: { code: 'VALIDATION', message: 'title required.' } });
     return;
   }
   const m = await prisma.maintenanceRecord.create({
     data: {
-      vehicleId: String(vehicleId),
+      vehicleId: vehicle.id,
       title: String(title).slice(0, 120),
       kind: ['service', 'registration', 'insurance', 'tires', 'inspection', 'other'].includes(String(kind ?? 'service')) ? String(kind) : 'service',
-      dueAt: typeof dueAt === 'string' ? new Date(dueAt) : null,
+      dueAt: typeof dueAt === 'string' && dueAt ? new Date(dueAt) : null,
       dueOdometerKm: typeof dueOdometerKm === 'number' ? dueOdometerKm : null,
       cost: typeof cost === 'number' ? cost : null,
-      notes: typeof notes === 'string' ? notes.slice(0, 1000) : null,
+      notes: typeof notes === 'string' ? notes.slice(0, 500) : null,
     },
   });
   res.status(201).json({ data: { id: m.id } });
 });
 
-fleetRouter.patch('/maintenance/:id', async (req, res) => {
-  const m = await prisma.maintenanceRecord.findUnique({ where: { id: req.params.id } });
-  if (!m) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Maintenance record not found.' } });
-    return;
-  }
-  const vehicle = await prisma.vehicle.findUnique({ where: { id: m.vehicleId } });
-  if (!vehicle || vehicle.ownerId !== req.user!.id) {
-    res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Not your vehicle.' } });
-    return;
-  }
-  const body = (req.body ?? {}) as { completedAt?: string | null; dueAt?: string | null };
-  const data: Record<string, unknown> = {};
-  if ('completedAt' in body) data.completedAt = body.completedAt ? new Date(body.completedAt) : null;
-  if ('dueAt' in body) data.dueAt = body.dueAt ? new Date(body.dueAt) : null;
-  await prisma.maintenanceRecord.update({ where: { id: m.id }, data });
+fleetRouter.patch('/maintenance/:id', { auth: 'session', target: { kind: 'resource', resource: 'maintenanceRecord', from: 'param:id', perm: 'vehicles.manage' } }, async (req, res) => {
+  const rec = req.access!.resource!;
+  const { title, kind, dueAt, dueOdometerKm, completedAt, cost, notes } = (req.body ?? {}) as Record<string, unknown>;
+  await prisma.maintenanceRecord.update({
+    where: { id: rec.id },
+    data: {
+      ...(typeof title === 'string' ? { title: title.slice(0, 120) } : {}),
+      ...(typeof kind === 'string' ? { kind: kind.slice(0, 40) } : {}),
+      ...(typeof dueAt === 'string' ? { dueAt: dueAt ? new Date(dueAt) : null } : {}),
+      ...(typeof dueOdometerKm === 'number' ? { dueOdometerKm } : {}),
+      ...(typeof completedAt === 'string' ? { completedAt: completedAt ? new Date(completedAt) : null } : {}),
+      ...(typeof cost === 'number' ? { cost } : {}),
+      ...(typeof notes === 'string' ? { notes: notes.slice(0, 500) } : {}),
+    },
+  });
   res.json({ data: { ok: true } });
 });
 
-fleetRouter.delete('/maintenance/:id', async (req, res) => {
-  const m = await prisma.maintenanceRecord.findUnique({ where: { id: req.params.id } });
-  if (!m) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Maintenance record not found.' } });
-    return;
-  }
-  await prisma.maintenanceRecord.delete({ where: { id: m.id } });
+fleetRouter.delete('/maintenance/:id', { auth: 'session', target: { kind: 'resource', resource: 'maintenanceRecord', from: 'param:id', perm: 'vehicles.manage' } }, async (req, res) => {
+  await prisma.maintenanceRecord.delete({ where: { id: req.access!.resource!.id } });
   res.json({ data: { ok: true } });
 });
 
-// ---- Reports (JSON export) ----
-
-fleetRouter.get('/report', requireRole('FLEET_MANAGER'), async (req, res) => {
-  const vehicles = await listVehiclesForUser(req.user!.id, req.user!.role);
-  const ids = vehicles.map((v) => v.id);
-  const [drives, charges, maintenance] = await Promise.all([
-    prisma.drive.findMany({ where: { vehicleId: { in: ids } }, select: { vehicleId: true, distanceKm: true, energyKwh: true, startAt: true } }),
-    prisma.chargingSession.findMany({ where: { vehicleId: { in: ids } }, select: { vehicleId: true, energyAddedKwh: true, cost: true, startAt: true } }),
-    prisma.maintenanceRecord.findMany({ where: { vehicleId: { in: ids } } }),
+fleetRouter.get('/report', fleetManage, async (req, res) => {
+  const orgId = typeof req.query.orgId === 'string' ? await fleetOrg(req, 'fleet.manage') : req.access!.organizationId!;
+  const vehicleIds = await accessibleVehicleIds(sessionActor(req), 'vehicles.read', { organizationId: orgId });
+  const [vehicles, drives, charging, assignments] = await Promise.all([
+    prisma.vehicle.findMany({ where: { organizationId: orgId, id: { in: vehicleIds }, active: true }, select: { id: true, displayName: true, demo: true } }),
+    prisma.drive.findMany({ where: { vehicleId: { in: vehicleIds } }, select: { vehicleId: true, distanceKm: true, energyKwh: true, estCost: true, startAt: true } }),
+    prisma.chargingSession.findMany({ where: { vehicleId: { in: vehicleIds } }, select: { vehicleId: true, energyAddedKwh: true, cost: true, startAt: true } }),
+    prisma.vehicleAssignment.findMany({ where: { organizationId: orgId }, include: { vehicle: { select: { displayName: true } } } }),
   ]);
-  res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Content-Disposition', 'attachment; filename="voltlink-fleet-report.json"');
-  res.send(JSON.stringify({
-    generatedAt: new Date().toISOString(),
-    vehicles: vehicles.map((v) => ({ id: v.id, name: v.displayName, odometerKm: (v.snapshot?.state as { odometerKm?: number } | null)?.odometerKm ?? null })),
-    drives: drives.map((d) => ({ vehicleId: d.vehicleId, distanceKm: d.distanceKm, energyKwh: d.energyKwh, startAt: d.startAt.toISOString() })),
-    charging: charges.map((c) => ({ vehicleId: c.vehicleId, energyKwh: c.energyAddedKwh, cost: c.cost, startAt: c.startAt.toISOString() })),
-    maintenance,
-  }, null, 2));
+  const per = new Map<string, { distanceKm: number; energyKwh: number; driveCost: number; chargeEnergyKwh: number; chargeCost: number }>();
+  for (const v of vehicles) per.set(v.id, { distanceKm: 0, energyKwh: 0, driveCost: 0, chargeEnergyKwh: 0, chargeCost: 0 });
+  for (const d of drives) {
+    const e = per.get(d.vehicleId);
+    if (e) {
+      e.distanceKm += d.distanceKm;
+      e.energyKwh += d.energyKwh;
+      e.driveCost += d.estCost ?? 0;
+    }
+  }
+  for (const c of charging) {
+    const e = per.get(c.vehicleId);
+    if (e) {
+      e.chargeEnergyKwh += c.energyAddedKwh;
+      e.chargeCost += c.cost;
+    }
+  }
+  res.json({
+    data: {
+      generatedAt: new Date().toISOString(),
+      organizationId: orgId,
+      vehicles: vehicles.map((v) => ({ id: v.id, displayName: v.displayName, demo: v.demo, ...(per.get(v.id) ?? { distanceKm: 0, energyKwh: 0, driveCost: 0, chargeEnergyKwh: 0, chargeCost: 0 }) })),
+      assignments: assignments.map((a) => ({ id: a.id, vehicleId: a.vehicleId, vehicleName: a.vehicle.displayName, driverId: a.driverId, fromAt: a.fromAt?.toISOString(), toAt: a.toAt?.toISOString() })),
+    },
+  });
 });

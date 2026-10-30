@@ -10,20 +10,20 @@ import { getQueue } from '../core/queue';
 
 const DAY = 86400000;
 
-export async function seedDemoWorld(userId: string, vehicles: { id: string; providerVehicleId: string }[]): Promise<void> {
-  const rng = seededRng(hashString(userId) ^ 0x9e3779b9);
+export async function seedDemoWorld(organizationId: string, userId: string, vehicles: { id: string; providerVehicleId: string }[]): Promise<void> {
+  const rng = seededRng(hashString(organizationId) ^ 0x9e3779b9);
   const now = new Date();
 
   // ---- Places ----
-  const placeHome = await prisma.place.create({ data: { userId, name: 'Home', type: 'home', lat: DEMO_HOME.lat, lon: DEMO_HOME.lon, radiusM: 150 } });
-  const placeWork = await prisma.place.create({ data: { userId, name: 'Work', type: 'work', lat: DEMO_WORK.lat, lon: DEMO_WORK.lon, radiusM: 200 } });
-  const placeCharger = await prisma.place.create({ data: { userId, name: 'Rivermark Supercharge', type: 'charger', lat: DEMO_CHARGER.lat, lon: DEMO_CHARGER.lon, radiusM: 100 } });
-  await prisma.place.create({ data: { userId, name: 'Hawk Ridge Trailhead', type: 'custom', lat: DEMO_SITE.lat, lon: DEMO_SITE.lon, radiusM: 300 } });
+  const placeHome = await prisma.place.create({ data: { organizationId, createdById: null, name: 'Home', type: 'home', lat: DEMO_HOME.lat, lon: DEMO_HOME.lon, radiusM: 150 } });
+  const placeWork = await prisma.place.create({ data: { organizationId, createdById: null, name: 'Work', type: 'work', lat: DEMO_WORK.lat, lon: DEMO_WORK.lon, radiusM: 200 } });
+  const placeCharger = await prisma.place.create({ data: { organizationId, createdById: null, name: 'Rivermark Supercharge', type: 'charger', lat: DEMO_CHARGER.lat, lon: DEMO_CHARGER.lon, radiusM: 100 } });
+  await prisma.place.create({ data: { organizationId, createdById: null, name: 'Hawk Ridge Trailhead', type: 'custom', lat: DEMO_SITE.lat, lon: DEMO_SITE.lon, radiusM: 300 } });
 
   // ---- Rate rules ----
   const tou = await prisma.rateRule.create({
     data: {
-      userId, name: 'Home TOU', type: 'tou', pricePerKwh: 0.12, currency: 'USD', placeId: placeHome.id,
+      organizationId, createdById: null, name: 'Home TOU', type: 'tou', pricePerKwh: 0.12, currency: 'USD', placeId: placeHome.id,
       periods: JSON.parse(JSON.stringify([
         { startMin: 0, endMin: 360, pricePerKwh: 0.09 },
         { startMin: 360, endMin: 960, pricePerKwh: 0.16 },
@@ -32,24 +32,24 @@ export async function seedDemoWorld(userId: string, vehicles: { id: string; prov
       ])),
     },
   });
-  const workFlat = await prisma.rateRule.create({ data: { userId, name: 'Work flat rate', type: 'location', pricePerKwh: 0.31, currency: 'USD', placeId: placeWork.id } });
-  const fast = await prisma.rateRule.create({ data: { userId, name: 'Fast charging', type: 'location', pricePerKwh: 0.45, currency: 'USD', placeId: placeCharger.id } });
+  const workFlat = await prisma.rateRule.create({ data: { organizationId, createdById: null, name: 'Work flat rate', type: 'location', pricePerKwh: 0.31, currency: 'USD', placeId: placeWork.id } });
+  const fast = await prisma.rateRule.create({ data: { organizationId, createdById: null, name: 'Fast charging', type: 'location', pricePerKwh: 0.45, currency: 'USD', placeId: placeCharger.id } });
 
   // ---- Geofences and privacy zones ----
-  await prisma.geofence.create({ data: { userId, name: 'Home', lat: DEMO_HOME.lat, lon: DEMO_HOME.lon, radiusM: 250, alertOn: 'both' } });
-  await prisma.geofence.create({ data: { userId, name: 'Work', lat: DEMO_WORK.lat, lon: DEMO_WORK.lon, radiusM: 300, alertOn: 'both' } });
-  await prisma.privacyZone.create({ data: { userId, name: 'Home privacy zone', lat: DEMO_HOME.lat, lon: DEMO_HOME.lon, radiusM: 400 } });
+  await prisma.geofence.create({ data: { organizationId, createdById: null, name: 'Home', lat: DEMO_HOME.lat, lon: DEMO_HOME.lon, radiusM: 250, alertOn: 'both' } });
+  await prisma.geofence.create({ data: { organizationId, createdById: null, name: 'Work', lat: DEMO_WORK.lat, lon: DEMO_WORK.lon, radiusM: 300, alertOn: 'both' } });
+  await prisma.privacyZone.create({ data: { organizationId, createdById: null, name: 'Home privacy zone', lat: DEMO_HOME.lat, lon: DEMO_HOME.lon, radiusM: 400 } });
 
   // ---- Fleet structures ----
-  const group = await prisma.fleetGroup.create({ data: { ownerId: userId, name: 'Demo fleet' } });
-  const deptOps = await prisma.department.create({ data: { ownerId: userId, name: 'Operations' } });
-  const deptSales = await prisma.department.create({ data: { ownerId: userId, name: 'Field Sales' } });
-  const ccOps = await prisma.costCenter.create({ data: { ownerId: userId, name: 'Operations', code: 'OPS-01' } });
-  const ccSales = await prisma.costCenter.create({ data: { ownerId: userId, name: 'Sales', code: 'SAL-02' } });
+  const group = await prisma.fleetGroup.create({ data: { organizationId, createdById: null, name: 'Demo fleet' } });
+  const deptOps = await prisma.department.create({ data: { organizationId, createdById: null, name: 'Operations' } });
+  const deptSales = await prisma.department.create({ data: { organizationId, createdById: null, name: 'Field Sales' } });
+  const ccOps = await prisma.costCenter.create({ data: { organizationId, createdById: null, name: 'Operations', code: 'OPS-01' } });
+  const ccSales = await prisma.costCenter.create({ data: { organizationId, createdById: null, name: 'Sales', code: 'SAL-02' } });
   const drivers = [
-    await prisma.driver.create({ data: { ownerId: userId, name: 'Mara Voss', email: 'mara.voss@example.invalid', phone: '+1-555-0101' } }),
-    await prisma.driver.create({ data: { ownerId: userId, name: 'Dmitri Hale', email: 'dmitri.hale@example.invalid' } }),
-    await prisma.driver.create({ data: { ownerId: userId, name: 'Priya Anand', email: 'priya.anand@example.invalid' } }),
+    await prisma.driver.create({ data: { organizationId, createdById: null, name: 'Mara Voss', email: 'mara.voss@example.invalid', phone: '+1-555-0101' } }),
+    await prisma.driver.create({ data: { organizationId, createdById: null, name: 'Dmitri Hale', email: 'dmitri.hale@example.invalid' } }),
+    await prisma.driver.create({ data: { organizationId, createdById: null, name: 'Priya Anand', email: 'priya.anand@example.invalid' } }),
   ];
   await prisma.fleetGroupVehicle.createMany({
     data: vehicles.map((v) => ({ fleetGroupId: group.id, vehicleId: v.id })),
@@ -59,10 +59,10 @@ export async function seedDemoWorld(userId: string, vehicles: { id: string; prov
   const comet = bySpec.get('demo-comet');
   const terra = bySpec.get('demo-terra');
   const bison = bySpec.get('demo-bison');
-  if (aurora) await prisma.vehicleAssignment.create({ data: { ownerId: userId, vehicleId: aurora, driverId: drivers[0]!.id, departmentId: deptOps.id, costCenterId: ccOps.id, fromAt: new Date(now.getTime() - 30 * DAY) } });
-  if (comet) await prisma.vehicleAssignment.create({ data: { ownerId: userId, vehicleId: comet, driverId: drivers[1]!.id, departmentId: deptSales.id, costCenterId: ccSales.id, fromAt: new Date(now.getTime() - 30 * DAY) } });
-  if (terra) await prisma.vehicleAssignment.create({ data: { ownerId: userId, vehicleId: terra, driverId: drivers[2]!.id, departmentId: deptOps.id, costCenterId: ccOps.id, fromAt: new Date(now.getTime() - 30 * DAY) } });
-  if (bison) await prisma.vehicleAssignment.create({ data: { ownerId: userId, vehicleId: bison, driverId: drivers[1]!.id, departmentId: deptSales.id, costCenterId: ccSales.id, fromAt: new Date(now.getTime() - 30 * DAY) } });
+  if (aurora) await prisma.vehicleAssignment.create({ data: { organizationId, vehicleId: aurora, driverId: drivers[0]!.id, departmentId: deptOps.id, costCenterId: ccOps.id, fromAt: new Date(now.getTime() - 30 * DAY) } });
+  if (comet) await prisma.vehicleAssignment.create({ data: { organizationId, vehicleId: comet, driverId: drivers[1]!.id, departmentId: deptSales.id, costCenterId: ccSales.id, fromAt: new Date(now.getTime() - 30 * DAY) } });
+  if (terra) await prisma.vehicleAssignment.create({ data: { organizationId, vehicleId: terra, driverId: drivers[2]!.id, departmentId: deptOps.id, costCenterId: ccOps.id, fromAt: new Date(now.getTime() - 30 * DAY) } });
+  if (bison) await prisma.vehicleAssignment.create({ data: { organizationId, vehicleId: bison, driverId: drivers[1]!.id, departmentId: deptSales.id, costCenterId: ccSales.id, fromAt: new Date(now.getTime() - 30 * DAY) } });
   await prisma.maintenanceRecord.create({ data: { vehicleId: bison ?? vehicles[0]!.id, title: 'Annual inspection', kind: 'inspection', dueAt: new Date(now.getTime() + 14 * DAY), notes: 'Scheduled by service plan.' } });
   await prisma.maintenanceRecord.create({ data: { vehicleId: aurora ?? vehicles[0]!.id, title: 'Registration renewal', kind: 'registration', dueAt: new Date(now.getTime() + 60 * DAY) } });
   await prisma.maintenanceRecord.create({ data: { vehicleId: terra ?? vehicles[0]!.id, title: 'Tire rotation', kind: 'tires', dueOdometerKm: 15000 } });
@@ -262,7 +262,7 @@ export async function seedDemoWorld(userId: string, vehicles: { id: string; prov
   // ---- Automations ----
   const auto1 = await prisma.automation.create({
     data: {
-      userId, name: 'Charge-complete notification', description: 'Notify when charging completes.', enabled: true,
+      organizationId, userId, createdById: null, name: 'Charge-complete notification', description: 'Notify when charging completes.', enabled: true,
       triggerType: 'charging_completed', triggerParams: JSON.parse('{}'),
       conditions: JSON.parse('[]'),
       actions: JSON.parse('[{"type":"notify_app","params":{"message":"Charging completed for your vehicle."}}]'),
@@ -271,7 +271,7 @@ export async function seedDemoWorld(userId: string, vehicles: { id: string; prov
   });
   const auto2 = await prisma.automation.create({
     data: {
-      userId, name: 'Low battery alert', description: 'Warn when the battery falls below 20%.', enabled: true,
+      organizationId, userId, createdById: null, name: 'Low battery alert', description: 'Warn when the battery falls below 20%.', enabled: true,
       triggerType: 'battery_threshold', triggerParams: JSON.parse('{"pct":20}'),
       conditions: JSON.parse('[{"type":"battery_below","params":{"pct":20}}]'),
       actions: JSON.parse('[{"type":"notify_app","params":{"message":"Battery is below 20% — plug in soon."}},{"type":"notify_email","params":{"message":"Battery is below 20%."}}]'),
@@ -280,7 +280,7 @@ export async function seedDemoWorld(userId: string, vehicles: { id: string; prov
   });
   const auto3 = await prisma.automation.create({
     data: {
-      userId, name: 'Precondition before commute', description: 'Start climate on weekday mornings.', enabled: true,
+      organizationId, userId, createdById: null, name: 'Precondition before commute', description: 'Start climate on weekday mornings.', enabled: true,
       triggerType: 'scheduled', triggerParams: JSON.parse('{"cron":"0 7 * * 1-5"}'),
       conditions: JSON.parse('[{"type":"day","params":{"days":[1,2,3,4,5]}}]'),
       actions: JSON.parse('[{"type":"climate_start","params":{}}]'),
@@ -289,7 +289,7 @@ export async function seedDemoWorld(userId: string, vehicles: { id: string; prov
   });
   await prisma.automation.create({
     data: {
-      userId, name: 'Late-night door check', description: 'Alert if a door is open after 22:00.', enabled: false,
+      organizationId, userId, createdById: null, name: 'Late-night door check', description: 'Alert if a door is open after 22:00.', enabled: false,
       triggerType: 'door_open', triggerParams: JSON.parse('{}'),
       conditions: JSON.parse('[{"type":"time_range","params":{"start":"22:00","end":"06:00"}}]'),
       actions: JSON.parse('[{"type":"notify_push","params":{"message":"A door is open late at night."}}]'),
@@ -334,7 +334,7 @@ export async function seedDemoWorld(userId: string, vehicles: { id: string; prov
   if (aurora) {
     await prisma.vehicleCommand.create({
       data: {
-        vehicleId: aurora, vehicleName: 'Aurora', providerAccountId: (await prisma.vehicle.findUniqueOrThrow({ where: { id: aurora } })).providerAccountId,
+        organizationId, vehicleId: aurora, vehicleName: 'Aurora', providerAccountId: (await prisma.vehicle.findUniqueOrThrow({ where: { id: aurora } })).providerAccountId,
         userId, type: 'lock', params: JSON.parse('{}'), status: 'confirmed', risk: 'low', idempotencyKey: `seed:${aurora}:lock`, confirmed: true,
         createdAt: new Date(now.getTime() - DAY), submittedAt: new Date(now.getTime() - DAY + 1000), completedAt: new Date(now.getTime() - DAY + 9000),
       },
@@ -343,14 +343,14 @@ export async function seedDemoWorld(userId: string, vehicles: { id: string; prov
   if (bison) {
     await prisma.vehicleCommand.create({
       data: {
-        vehicleId: bison, vehicleName: 'Bison', providerAccountId: (await prisma.vehicle.findUniqueOrThrow({ where: { id: bison } })).providerAccountId,
+        organizationId, vehicleId: bison, vehicleName: 'Bison', providerAccountId: (await prisma.vehicle.findUniqueOrThrow({ where: { id: bison } })).providerAccountId,
         userId, type: 'open_trunk', params: JSON.parse('{}'), status: 'rejected', risk: 'low', idempotencyKey: `seed:${bison}:trunk`,
         errorMessage: 'Vehicle is offline.', createdAt: new Date(now.getTime() - DAY), completedAt: new Date(now.getTime() - DAY + 4000),
       },
     });
     await prisma.vehicleCommand.create({
       data: {
-        vehicleId: bison, vehicleName: 'Bison', providerAccountId: (await prisma.vehicle.findUniqueOrThrow({ where: { id: bison } })).providerAccountId,
+        organizationId, vehicleId: bison, vehicleName: 'Bison', providerAccountId: (await prisma.vehicle.findUniqueOrThrow({ where: { id: bison } })).providerAccountId,
         userId, type: 'wake', params: JSON.parse('{}'), status: 'timed_out', risk: 'low', idempotencyKey: `seed:${bison}:wake`,
         errorMessage: 'Vehicle did not confirm the command within the timeout.', createdAt: new Date(now.getTime() - 2 * DAY), completedAt: new Date(now.getTime() - 2 * DAY + 61000),
       },

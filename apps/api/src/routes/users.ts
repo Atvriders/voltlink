@@ -1,24 +1,22 @@
-// User settings, privacy/retention, data export and account deletion.
+// User settings, activity, export and account deletion. Retention is per
+// organization now (Z-RETENTION): the old global /retention route is gone.
 
-import { Router } from 'express';
-import { prisma } from '../core/db';
-import { requireAuth } from '../auth/middleware';
+import { prisma, query } from '../core/db';
+import { policyRouter, sessionActor } from '../authz/policy';
+import { AccessDenied } from '../authz/errors';
 import { hashPassword, verifyPassword, randomToken } from '../core/crypto';
-import { audit } from '../core/settings';
-import { getSettingsBundle, setSetting } from '../core/settings';
-import { query } from '../core/db';
+import { audit, getSettingsBundle } from '../core/settings';
+import { getQueue } from '../core/queue';
 import { removeCredentials } from '../providers/registry';
+import { sha256hex } from '../core/crypto';
 
-export const usersRouter = Router();
+export const usersRouter = policyRouter('/api/v1/users');
 
-usersRouter.use(requireAuth);
+const self: { auth: 'session'; stepUp?: { possession?: boolean }; target: { kind: 'self' } } = { auth: 'session', target: { kind: 'self' } };
 
-usersRouter.get('/settings', async (req, res) => {
-  const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
-  if (!user) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found.' } });
-    return;
-  }
+usersRouter.get('/settings', { auth: 'session', target: { kind: 'self' } }, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: sessionActor(req).userId } });
+  if (!user) throw new AccessDenied('NOT_FOUND', 'User not found.', 404);
   const bundle = await getSettingsBundle();
   res.json({
     data: {
@@ -29,59 +27,59 @@ usersRouter.get('/settings', async (req, res) => {
       demoMode: user.demoEnabled,
       presentationMode: user.presentationMode,
       orgName: bundle.orgName,
-      telemetryRetentionDays: Number(bundle.telemetryRetentionDays || 365),
-      locationRetentionDays: Number(bundle.locationRetentionDays || 90),
     },
   });
 });
 
-usersRouter.patch('/settings', async (req, res) => {
+usersRouter.patch('/settings', { auth: 'session', target: { kind: 'self' } }, async (req, res) => {
   const body = (req.body ?? {}) as { units?: string; timezone?: string; theme?: string; presentationMode?: boolean };
   const data: Record<string, unknown> = {};
   if (['metric', 'imperial'].includes(body.units ?? '')) data.units = body.units;
   if (typeof body.timezone === 'string' && /^[A-Za-z_+\-0-9/]{2,40}$/.test(body.timezone)) data.timezone = body.timezone;
   if (typeof body.theme === 'string' && body.theme.length <= 40) data.theme = body.theme;
   if (typeof body.presentationMode === 'boolean') data.presentationMode = body.presentationMode;
-  await prisma.user.update({ where: { id: req.user!.id }, data });
+  await prisma.user.update({ where: { id: sessionActor(req).userId }, data });
   res.json({ data: { ok: true } });
 });
 
-usersRouter.post('/change-password', async (req, res) => {
+usersRouter.post('/change-password', { auth: 'session', stepUp: {}, target: { kind: 'self' } }, async (req, res) => {
+  const actor = sessionActor(req);
   const { currentPassword, newPassword } = (req.body ?? {}) as { currentPassword?: string; newPassword?: string };
   if (!currentPassword || !newPassword || newPassword.length < 10) {
     res.status(400).json({ error: { code: 'VALIDATION', message: 'Current password and a new password (10+ characters) required.' } });
     return;
   }
-  const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+  const user = await prisma.user.findUnique({ where: { id: actor.userId } });
   if (!user || !(await verifyPassword(user.passwordHash, currentPassword))) {
     res.status(403).json({ error: { code: 'BAD_PASSWORD', message: 'Current password is incorrect.' } });
     return;
   }
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(newPassword) } });
-  await prisma.userSession.updateMany({ where: { userId: user.id, id: { not: req.user!.sessionId }, revokedAt: null }, data: { revokedAt: new Date() } });
+  await prisma.userSession.updateMany({ where: { userId: user.id, id: { not: actor.sessionId }, revokedAt: null }, data: { revokedAt: new Date() } });
   await audit({ actorId: user.id, action: 'user.change_password', entityType: 'user', entityId: user.id });
   res.json({ data: { ok: true } });
 });
 
 // ---- Data export ----
 
-usersRouter.get('/export', async (req, res) => {
-  const userId = req.user!.id;
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found.' } });
-    return;
-  }
-  const [vehicles, drives, charges, commands, notifications, automations, places, telemetryCount] = await Promise.all([
-    prisma.vehicle.findMany({ where: { ownerId: userId } }),
-    prisma.drive.findMany({ where: { vehicle: { ownerId: userId } } }),
-    prisma.chargingSession.findMany({ where: { vehicle: { ownerId: userId } } }),
+usersRouter.get('/export', { auth: 'session', target: { kind: 'self' } }, async (req, res) => {
+  const userId = sessionActor(req).userId;
+  const user = await prisma.user.findUnique({ where: { id: userId }, include: { memberships: true } });
+  if (!user) throw new AccessDenied('NOT_FOUND', 'User not found.', 404);
+  const orgIds = user.memberships.map((m) => m.organizationId);
+  const [vehicles, drives, charges, commands, notifications, automations, places] = await Promise.all([
+    prisma.vehicle.findMany({ where: { organizationId: { in: orgIds } } }),
+    prisma.drive.findMany({ where: { vehicle: { organizationId: { in: orgIds } } } }),
+    prisma.chargingSession.findMany({ where: { vehicle: { organizationId: { in: orgIds } } } }),
     prisma.vehicleCommand.findMany({ where: { userId } }),
     prisma.appNotification.findMany({ where: { userId }, take: 1000 }),
     prisma.automation.findMany({ where: { userId } }),
-    prisma.place.findMany({ where: { userId } }),
-    query<{ n: string }>(`SELECT count(*)::text AS n FROM telemetry.telemetry_reading WHERE vehicle_id IN (SELECT id FROM "Vehicle" WHERE "ownerId" = $1)`, [userId]),
+    prisma.place.findMany({ where: { organizationId: { in: orgIds } } }),
   ]);
+  const telemetryCount = await query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM telemetry.telemetry_reading WHERE vehicle_id IN (SELECT id FROM "Vehicle" WHERE "organizationId" = ANY($1::text[]))`,
+    [orgIds],
+  );
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Content-Disposition', 'attachment; filename="voltlink-export.json"');
   res.send(
@@ -90,7 +88,7 @@ usersRouter.get('/export', async (req, res) => {
         export: 'voltlink',
         version: 1,
         generatedAt: new Date().toISOString(),
-        account: { email: user.email, name: user.name, role: user.role, timezone: user.timezone, units: user.units, createdAt: user.createdAt.toISOString() },
+        account: { email: user.email, name: user.name, timezone: user.timezone, units: user.units, createdAt: user.createdAt.toISOString() },
         vehicles,
         drives,
         chargingSessions: charges,
@@ -106,40 +104,54 @@ usersRouter.get('/export', async (req, res) => {
   );
 });
 
-// ---- Account deletion (personal data removal) ----
+// ---- Activity (audit trail) ----
 
-usersRouter.post('/delete', async (req, res) => {
-  const { password } = (req.body ?? {}) as { password?: string };
-  const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
-  if (!user) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found.' } });
+usersRouter.get('/me/activity', { auth: 'session', target: { kind: 'self' } }, async (req, res) => {
+  const rows = await prisma.auditLog.findMany({
+    where: { actorId: sessionActor(req).userId },
+    orderBy: { createdAt: 'desc' },
+    take: 200,
+  });
+  res.json({ data: rows.map((r) => ({ id: r.id, action: r.action, entityType: r.entityType, entityId: r.entityId, createdAt: r.createdAt.toISOString() })) });
+});
+
+// ---- Account deletion (Z-DELETE: real deletion via a queued job) ----
+
+usersRouter.post('/me/delete', { auth: 'session', stepUp: {}, target: { kind: 'self' } }, async (req, res) => {
+  const actor = sessionActor(req);
+  const { confirm } = (req.body ?? {}) as { confirm?: string };
+  if (confirm !== 'DELETE') {
+    res.status(400).json({ error: { code: 'VALIDATION', message: "Send { confirm: 'DELETE' }." } });
     return;
   }
-  if (!password || !(await verifyPassword(user.passwordHash, password))) {
-    res.status(403).json({ error: { code: 'BAD_PASSWORD', message: 'Re-enter your password to delete the account.' } });
-    return;
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: actor.userId }, include: { memberships: true } });
+  for (const m of user.memberships) {
+    if (m.role === 'OWNER') {
+      const others = await prisma.membership.count({ where: { organizationId: m.organizationId, status: 'ACTIVE', userId: { not: user.id } } });
+      if (others > 0) {
+        res.status(409).json({ error: { code: 'OWNERSHIP_TRANSFER_REQUIRED', message: 'Transfer ownership of your organization before deleting the account.' } });
+        return;
+      }
+    }
   }
-  // Remove encrypted provider credentials and personal data.
-  const accounts = await prisma.providerAccount.findMany({ where: { userId: user.id } });
-  for (const account of accounts) {
-    await removeCredentials(account.id);
-  }
-  const vehicles = await prisma.vehicle.findMany({ where: { ownerId: user.id }, select: { id: true } });
-  await query(`DELETE FROM telemetry.telemetry_reading WHERE vehicle_id = ANY($1)`, [vehicles.map((v) => v.id)]);
-  await prisma.providerAccount.updateMany({ where: { userId: user.id }, data: { status: 'revoked', lastError: 'account deleted' } });
-  await prisma.vehicle.updateMany({ where: { ownerId: user.id }, data: { active: false } });
+  const accounts = await prisma.providerAccount.findMany({ where: { organization: { memberships: { some: { userId: user.id } } } } });
+  await prisma.user.update({ where: { id: user.id }, data: { deletionRequestedAt: new Date() } });
   await prisma.userSession.updateMany({ where: { userId: user.id }, data: { revokedAt: new Date() } });
+  await prisma.apiKey.updateMany({ where: { userId: user.id }, data: { revokedAt: new Date() } });
   await prisma.pushSubscription.deleteMany({ where: { userId: user.id } });
   await prisma.webhookEndpoint.deleteMany({ where: { userId: user.id } });
-  await prisma.user.update({ where: { id: user.id }, data: { deletedAt: new Date(), email: `deleted-${randomToken(8)}@deleted.invalid` } });
-  await audit({ actorId: user.id, action: 'user.delete_account', entityType: 'user', entityId: user.id });
+  for (const account of accounts) await removeCredentials(account.id);
+  await getQueue().enqueue('account-deletion', { userId: user.id });
+  await audit({ actorId: user.id, action: 'user.request_delete', entityType: 'user', entityId: user.id });
   res.clearCookie('vl_session');
-  res.json({ data: { ok: true } });
+  res.status(202).json({ data: { providerRevocation: accounts.map(() => ({ message: 'See docs/PRIVACY.md for provider revocation links.' })) } });
 });
 
 // ---- Demo mode toggle ----
 
-usersRouter.post('/demo-mode', async (req, res) => {
+usersRouter.post('/demo-mode', { auth: 'session', target: { kind: 'org', own: true, perm: 'vehicles.manage' } }, async (req, res) => {
+  const actor = sessionActor(req);
+  const organizationId = req.access!.organizationId!;
   const { enabled } = (req.body ?? {}) as { enabled?: boolean };
   if (typeof enabled !== 'boolean') {
     res.status(400).json({ error: { code: 'VALIDATION', message: 'enabled required.' } });
@@ -148,35 +160,24 @@ usersRouter.post('/demo-mode', async (req, res) => {
   if (enabled) {
     const { connectDemoAccount } = await import('../providers/registry');
     const { seedDemoWorld } = await import('../telemetry/seed');
-    const result = await connectDemoAccount(req.user!.id);
+    const result = await connectDemoAccount(organizationId, actor.userId);
     if (result.vehiclesImported === 0) {
       const vehicles = await prisma.vehicle.findMany({ where: { providerAccountId: result.accountId }, select: { id: true, providerVehicleId: true } });
-      await seedDemoWorld(req.user!.id, vehicles);
+      await seedDemoWorld(organizationId, actor.userId, vehicles);
     }
+    await prisma.user.update({ where: { id: actor.userId }, data: { demoEnabled: true } });
     res.json({ data: { ok: true, accountId: result.accountId } });
     return;
   }
-  await prisma.user.update({ where: { id: req.user!.id }, data: { demoEnabled: false } });
+  await prisma.user.update({ where: { id: actor.userId }, data: { demoEnabled: false } });
   res.json({ data: { ok: true } });
 });
 
-// ---- Retention settings (per-user defaults follow global) ----
-
-usersRouter.patch('/retention', async (req, res) => {
-  const body = (req.body ?? {}) as { telemetryRetentionDays?: number; locationRetentionDays?: number };
-  if (body.telemetryRetentionDays !== undefined) {
-    if (!Number.isInteger(body.telemetryRetentionDays) || body.telemetryRetentionDays < 7 || body.telemetryRetentionDays > 3650) {
-      res.status(400).json({ error: { code: 'VALIDATION', message: 'telemetryRetentionDays must be 7–3650.' } });
-      return;
-    }
-    await setSetting('telemetryRetentionDays', String(body.telemetryRetentionDays));
-  }
-  if (body.locationRetentionDays !== undefined) {
-    if (!Number.isInteger(body.locationRetentionDays) || body.locationRetentionDays < 7 || body.locationRetentionDays > 3650) {
-      res.status(400).json({ error: { code: 'VALIDATION', message: 'locationRetentionDays must be 7–3650.' } });
-      return;
-    }
-    await setSetting('locationRetentionDays', String(body.locationRetentionDays));
-  }
-  res.json({ data: { ok: true } });
+// The old global retention route is gone (Z-RETENTION): it must 404.
+usersRouter.patch('/retention', { auth: 'session', target: { kind: 'self' } }, async (_req, res) => {
+  res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Retention is configured per organization at PATCH /api/v1/orgs/:orgId/settings/retention.' } });
 });
+
+void self;
+void sha256hex;
+void randomToken;

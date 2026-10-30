@@ -68,13 +68,56 @@ class Api {
   }
 
   async fetchCsrf() {
-    const res = await this.get('/api/v1/auth/csrf');
-    const body = (await res.json()) as { data: { token: string } };
-    this.csrf = body.data.token;
+    // The API issues the CSRF cookie on the first mutating request; the header
+    // must echo it on the retry (middleware/core.ts csrf()).
+    const res = await fetch(`${base()}/api/v1/auth/step-up`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    this.absorb(res);
+    const pair = [...this.jar.setCookie].reverse().find((c) => c.split(';')[0]!.startsWith('vl_csrf='));
+    this.csrf = pair ? pair.split(';')[0]!.split('=')[1]! : '';
+    expect(this.csrf.length).toBeGreaterThan(0);
   }
 }
 
+// Register through the invite flow (default instance mode is invite after the
+// instance is bootstrapped). Seeds the host + invitation rows directly so the
+// helper is independent of the current AppSetting.
+async function inviteRegister(api: Api, email: string, password: string) {
+  const hostEmail = `host-${Date.now()}-${Math.random().toString(16).slice(2)}@example.test`;
+  emails.push(hostEmail);
+  const host = await prisma.user.create({
+    data: {
+      email: hostEmail,
+      name: 'Invite Host',
+      passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
+      webauthnUserId: crypto.randomBytes(16).toString('hex'),
+      emailVerifiedAt: new Date(),
+    },
+  });
+  const org = await prisma.organization.create({
+    data: { kind: 'PERSONAL', name: 'Host org', createdById: host.id, memberships: { create: { userId: host.id, role: 'OWNER' } } },
+  });
+  const token = `it-${crypto.randomBytes(24).toString('hex')}`;
+  await prisma.invitation.create({
+    data: {
+      organizationId: org.id,
+      kind: 'membership',
+      email,
+      role: 'OWNER',
+      tokenHash: (await import('../src/core/crypto')).sha256hex(token),
+      invitedById: host.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    },
+  });
+  orgs.push(org.id);
+  return { res: await api.post('/api/v1/auth/register', { name: 'IT Tester', email, password, inviteToken: token }), host, org };
+}
+
 const emails: string[] = [];
+const orgs: string[] = [];
 let api: Api;
 
 beforeAll(async () => {
@@ -86,6 +129,9 @@ beforeAll(async () => {
 }, 30000);
 
 afterAll(async () => {
+  for (const id of orgs) {
+    await prisma.organization.deleteMany({ where: { id } }).catch(() => undefined);
+  }
   for (const email of emails) {
     const u = await prisma.user.findUnique({ where: { email } });
     if (u) await prisma.user.delete({ where: { id: u.id } });
@@ -98,28 +144,37 @@ describe('auth', () => {
   it('registers, verifies session, and exposes /auth/me', async () => {
     const email = `vl-it-${Date.now()}@example.test`;
     emails.push(email);
-    const res = await api.post('/api/v1/auth/register', { name: 'IT Tester', email, password: 'integration-pass-123' });
+    const { res } = await inviteRegister(api, email, 'integration-pass-123');
     expect(res.status).toBe(201);
     const me = await api.get('/api/v1/auth/me');
     expect(me.status).toBe(200);
-    const body = (await me.json()) as { data: { email: string; role: string } };
-    expect(body.data.email).toBe(email);
-    expect(body.data.role).toBe('OWNER');
+    const body = (await me.json()) as { data: { user: { email: string }; memberships: { role: string }[] } };
+    expect(body.data.user.email).toBe(email);
+    expect(body.data.memberships[0]!.role).toBe('OWNER');
   });
 
   it('rejects duplicate registration', async () => {
     const email = `vl-it-${Date.now()}@example.test`;
     emails.push(email);
-    const first = await api.post('/api/v1/auth/register', { name: 'IT Tester', email, password: 'integration-pass-123' });
+    const { res: first } = await inviteRegister(api, email, 'integration-pass-123');
     expect(first.status).toBe(201);
-    const second = await api.post('/api/v1/auth/register', { name: 'IT Tester', email, password: 'integration-pass-123' });
-    expect(second.status).toBe(409);
+    // A second registration attempt (invite consumed) is denied without
+    // revealing whether the email exists.
+    const second = await api.post('/api/v1/auth/register', { name: 'IT Tester', email, password: 'integration-pass-123', inviteToken: 'wrong' });
+    expect([403, 409]).toContain(second.status);
   });
 
   it('rejects weak passwords', async () => {
     const email = `vl-it-${Date.now()}@example.test`;
     emails.push(email);
-    const res = await api.post('/api/v1/auth/register', { name: 'IT Tester', email, password: 'short' });
+    const hostEmail = `whost-${Date.now()}@example.test`;
+    emails.push(hostEmail);
+    const host = await prisma.user.create({ data: { email: hostEmail, name: 'Host', passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s', webauthnUserId: crypto.randomBytes(16).toString('hex'), emailVerifiedAt: new Date() } });
+    const org = await prisma.organization.create({ data: { kind: 'PERSONAL', name: 'Host org', createdById: host.id, memberships: { create: { userId: host.id, role: 'OWNER' } } } });
+    orgs.push(org.id);
+    const token = `it-${crypto.randomBytes(24).toString('hex')}`;
+    await prisma.invitation.create({ data: { organizationId: org.id, kind: 'membership', email, tokenHash: (await import('../src/core/crypto')).sha256hex(token), invitedById: host.id, expiresAt: new Date(Date.now() + 3600_000) } });
+    const res = await api.post('/api/v1/auth/register', { name: 'IT Tester', email, password: 'short', inviteToken: token });
     expect(res.status).toBe(400);
   });
 
@@ -138,7 +193,7 @@ describe('auth', () => {
   it('session listing marks current and revoking a session invalidates it', async () => {
     const email = `vl-it-${Date.now()}@example.test`;
     emails.push(email);
-    await api.post('/api/v1/auth/register', { name: 'IT Tester', email, password: 'integration-pass-123' });
+    await inviteRegister(api, email, 'integration-pass-123');
     const listRes = await api.get('/api/v1/auth/sessions');
     expect(listRes.status).toBe(200);
     const list = (await listRes.json()) as { data: { id: string; current: boolean }[] };
@@ -157,7 +212,7 @@ describe('demo + vehicles + commands', () => {
   it('connects demo fleet and lists vehicles with state', async () => {
     const email = `vl-it-${Date.now()}@example.test`;
     emails.push(email);
-    await api.post('/api/v1/auth/register', { name: 'IT Tester', email, password: 'integration-pass-123' });
+    await inviteRegister(api, email, 'integration-pass-123');
     const connect = await api.post('/api/v1/providers/demo/connect');
     expect(connect.status).toBeLessThan(300);
     const vehicles = await api.get('/api/v1/vehicles');
@@ -170,6 +225,9 @@ describe('demo + vehicles + commands', () => {
   it('issues honk_horn and observes the queued lifecycle', async () => {
     const vehicles = (await (await api.get('/api/v1/vehicles')).json()) as { data: { id: string }[] };
     const vid = vehicles.data[0]!.id;
+    // Possession step-up is required before issuing commands.
+    const su = await api.post('/api/v1/auth/step-up', { method: 'password', password: 'integration-pass-123' });
+    expect(su.status).toBeLessThan(300);
     const issue = await api.post('/api/v1/commands', { type: 'honk_horn', vehicleId: vid });
     expect(issue.status).toBeLessThan(300);
     const cmd = (await issue.json()) as { data: { status: string; id: string } };

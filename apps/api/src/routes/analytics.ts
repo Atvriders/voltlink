@@ -1,24 +1,19 @@
 // Analytics routes: battery history, efficiency, aggregates, and the
 // (clearly estimated) battery-health calculation.
 
-import { Router } from 'express';
+import { policyRouter } from '../authz/policy';
 import { prisma, query } from '../core/db';
-import { requireAuth } from '../auth/middleware';
-import { loadVehicleForUser } from '../access';
 import { round2 } from '../core/geo';
 
-export const analyticsRouter = Router();
+export const analyticsRouter = policyRouter('/api/v1/analytics');
 
-analyticsRouter.use(requireAuth);
-
-analyticsRouter.get('/:vehicleId/battery', async (req, res) => {
-  await loadVehicleForUser(req.params.vehicleId, req.user!.id, req.user!.role);
+analyticsRouter.get('/:vehicleId/battery', { auth: 'any', apiScope: 'vehicles:read', target: { kind: 'vehicle', from: 'param:vehicleId', perm: 'vehicles.read' } }, async (req, res) => {
   const days = Math.min(90, Math.max(1, Number(req.query.days) || 14));
   const from = new Date(Date.now() - days * 86400000);
   await query('SELECT voltlink_ensure_partition($1)', [from]);
   const rows = await query<{ ts: string; data: { b: number | null; r: number | null } }>(
     `SELECT ts, data FROM telemetry.telemetry_reading WHERE vehicle_id = $1 AND ts >= $2 AND (data->>'b') IS NOT NULL ORDER BY ts ASC`,
-    [req.params.vehicleId, from],
+    [String(req.params.vehicleId), from],
   );
   // Downsample to ~400 points.
   const step = Math.max(1, Math.floor(rows.rows.length / 400));
@@ -26,12 +21,11 @@ analyticsRouter.get('/:vehicleId/battery', async (req, res) => {
   res.json({ data: points });
 });
 
-analyticsRouter.get('/:vehicleId/efficiency', async (req, res) => {
-  await loadVehicleForUser(req.params.vehicleId, req.user!.id, req.user!.role);
+analyticsRouter.get('/:vehicleId/efficiency', { auth: 'any', apiScope: 'vehicles:read', target: { kind: 'vehicle', from: 'param:vehicleId', perm: 'vehicles.read' } }, async (req, res) => {
   const days = Math.min(365, Math.max(7, Number(req.query.days) || 30));
   const from = new Date(Date.now() - days * 86400000);
   const drives = await prisma.drive.findMany({
-    where: { vehicleId: req.params.vehicleId, startAt: { gte: from } },
+    where: { vehicleId: String(req.params.vehicleId), startAt: { gte: from } },
     orderBy: { startAt: 'asc' },
     select: { startAt: true, distanceKm: true, energyKwh: true, efficiencyWhPerKm: true, avgOutsideTempC: true },
   });
@@ -58,12 +52,11 @@ analyticsRouter.get('/:vehicleId/efficiency', async (req, res) => {
   res.json({ data: points });
 });
 
-analyticsRouter.get('/:vehicleId/aggregates', async (req, res) => {
-  await loadVehicleForUser(req.params.vehicleId, req.user!.id, req.user!.role);
+analyticsRouter.get('/:vehicleId/aggregates', { auth: 'any', apiScope: 'vehicles:read', target: { kind: 'vehicle', from: 'param:vehicleId', perm: 'vehicles.read' } }, async (req, res) => {
   const days = Math.min(90, Math.max(7, Number(req.query.days) || 30));
   const from = new Date(Date.now() - days * 86400000);
   const rows = await prisma.aggregateDaily.findMany({
-    where: { vehicleId: req.params.vehicleId, date: { gte: new Date(from.toISOString().slice(0, 10)) } },
+    where: { vehicleId: String(req.params.vehicleId), date: { gte: new Date(from.toISOString().slice(0, 10)) } },
     orderBy: { date: 'asc' },
   });
   res.json({
@@ -82,8 +75,8 @@ analyticsRouter.get('/:vehicleId/aggregates', async (req, res) => {
   });
 });
 
-analyticsRouter.get('/:vehicleId/battery-health', async (req, res) => {
-  const vehicle = await loadVehicleForUser(req.params.vehicleId, req.user!.id, req.user!.role);
+analyticsRouter.get('/:vehicleId/battery-health', { auth: 'any', apiScope: 'vehicles:read', target: { kind: 'vehicle', from: 'param:vehicleId', perm: 'vehicles.read' } }, async (req, res) => {
+  const vehicle = req.access!.vehicle as unknown as { id: string; snapshot: { state: { batteryCapacityKwh?: number } | null } | null };
   const capacity = (vehicle.snapshot?.state as { batteryCapacityKwh?: number } | null)?.batteryCapacityKwh;
   const rows = await prisma.chargingSession.findMany({
     where: { vehicleId: vehicle.id, batteryStartPct: { not: null }, batteryEndPct: { not: null }, energyAddedKwh: { gt: 5 } },
@@ -108,11 +101,10 @@ analyticsRouter.get('/:vehicleId/battery-health', async (req, res) => {
   });
 });
 
-analyticsRouter.get('/:vehicleId/charging-behavior', async (req, res) => {
-  await loadVehicleForUser(req.params.vehicleId, req.user!.id, req.user!.role);
+analyticsRouter.get('/:vehicleId/charging-behavior', { auth: 'any', apiScope: 'vehicles:read', target: { kind: 'vehicle', from: 'param:vehicleId', perm: 'vehicles.read' } }, async (req, res) => {
   const days = Math.min(365, Math.max(30, Number(req.query.days) || 90));
   const from = new Date(Date.now() - days * 86400000);
-  const sessions = await prisma.chargingSession.findMany({ where: { vehicleId: req.params.vehicleId, startAt: { gte: from } }, orderBy: { startAt: 'asc' } });
+  const sessions = await prisma.chargingSession.findMany({ where: { vehicleId: String(req.params.vehicleId), startAt: { gte: from } }, orderBy: { startAt: 'asc' } });
   res.json({
     data: sessions.map((s) => ({
       ts: s.startAt.toISOString(),

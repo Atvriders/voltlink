@@ -1,15 +1,12 @@
 // Automation routes: CRUD, dry run, manual trigger, execution history.
 
-import { Router } from 'express';
+import { policyRouter, sessionActor } from '../authz/policy';
 import { z } from 'zod';
 import { prisma } from '../core/db';
-import { requireAuth } from '../auth/middleware';
 import { dispatchTrigger, runAutomation } from '../automations/engine';
 import { ACTION_TYPES, CONDITION_TYPES, TRIGGER_TYPES } from '@voltlink/shared';
 
-export const automationsRouter = Router();
-
-automationsRouter.use(requireAuth);
+export const automationsRouter = policyRouter('/api/v1/automations');
 
 const specSchema = z.object({
   name: z.string().min(1).max(80),
@@ -23,8 +20,8 @@ const specSchema = z.object({
   maxRetries: z.number().int().min(0).max(5).optional().default(1),
 });
 
-automationsRouter.get('/', async (req, res) => {
-  const rows = await prisma.automation.findMany({ where: { userId: req.user!.id }, orderBy: { createdAt: 'desc' } });
+automationsRouter.get('/', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
+  const rows = await prisma.automation.findMany({ where: { userId: sessionActor(req).userId }, orderBy: { createdAt: 'desc' } });
   res.json({
     data: rows.map((a) => ({
       id: a.id,
@@ -46,23 +43,33 @@ automationsRouter.get('/', async (req, res) => {
   });
 });
 
-automationsRouter.post('/', async (req, res) => {
+automationsRouter.post('/', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
   const parsed = specSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: { code: 'VALIDATION', message: 'Invalid automation definition.', details: parsed.error.flatten() } });
     return;
   }
   const d = parsed.data;
+  const org = await prisma.membership.findFirst({
+    where: { userId: sessionActor(req).userId, status: 'ACTIVE' },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (!org) {
+    res.status(403).json({ error: { code: 'FORBIDDEN', message: 'No organization available.' } });
+    return;
+  }
   if (d.vehicleId) {
     const vehicle = await prisma.vehicle.findUnique({ where: { id: d.vehicleId } });
-    if (!vehicle || vehicle.ownerId !== req.user!.id) {
+    if (!vehicle || vehicle.organizationId !== org.organizationId) {
       res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Vehicle not found.' } });
       return;
     }
   }
   const a = await prisma.automation.create({
     data: {
-      userId: req.user!.id,
+      organizationId: org.organizationId,
+      createdById: sessionActor(req).userId,
+      userId: sessionActor(req).userId,
       name: d.name,
       description: d.description,
       enabled: d.enabled,
@@ -78,12 +85,8 @@ automationsRouter.post('/', async (req, res) => {
   res.status(201).json({ data: { id: a.id } });
 });
 
-automationsRouter.patch('/:id', async (req, res) => {
-  const row = await prisma.automation.findUnique({ where: { id: req.params.id } });
-  if (!row || row.userId !== req.user!.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Automation not found.' } });
-    return;
-  }
+automationsRouter.patch('/:id', { auth: 'session', target: { kind: 'resource', resource: 'automation', from: 'param:id', perm: 'automations.manage' } }, async (req, res) => {
+  const row = req.access!.resource!; // policy already enforced org access
   const body = (req.body ?? {}) as Record<string, unknown>;
   const data: Record<string, unknown> = {};
   if (typeof body.enabled === 'boolean') data.enabled = body.enabled;
@@ -94,44 +97,28 @@ automationsRouter.patch('/:id', async (req, res) => {
   res.json({ data: { ok: true } });
 });
 
-automationsRouter.delete('/:id', async (req, res) => {
-  const row = await prisma.automation.findUnique({ where: { id: req.params.id } });
-  if (!row || row.userId !== req.user!.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Automation not found.' } });
-    return;
-  }
+automationsRouter.delete('/:id', { auth: 'session', target: { kind: 'resource', resource: 'automation', from: 'param:id', perm: 'automations.manage' } }, async (req, res) => {
+  const row = req.access!.resource!; // policy already enforced org access
   await prisma.automation.delete({ where: { id: row.id } });
   res.json({ data: { ok: true } });
 });
 
 /** Dry run: evaluate conditions and simulate actions without executing. */
-automationsRouter.post('/:id/dry-run', async (req, res) => {
-  const row = await prisma.automation.findUnique({ where: { id: req.params.id } });
-  if (!row || row.userId !== req.user!.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Automation not found.' } });
-    return;
-  }
-  const result = await runAutomation(row.id, { type: row.triggerType as never, userId: req.user!.id, vehicleId: row.vehicleId ?? undefined, data: (req.body ?? {}) as Record<string, unknown> }, { dryRun: true });
+automationsRouter.post('/:id/dry-run', { auth: 'session', target: { kind: 'resource', resource: 'automation', from: 'param:id', perm: 'automations.manage' } }, async (req, res) => {
+  const row = req.access!.resource!; // policy already enforced org access
+  const result = await runAutomation(row.id, { type: row.triggerType as never, userId: sessionActor(req).userId, vehicleId: row.vehicleId ?? undefined, data: (req.body ?? {}) as Record<string, unknown> }, { dryRun: true });
   res.json({ data: result });
 });
 
 /** Manual trigger for testing. */
-automationsRouter.post('/:id/trigger', async (req, res) => {
-  const row = await prisma.automation.findUnique({ where: { id: req.params.id } });
-  if (!row || row.userId !== req.user!.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Automation not found.' } });
-    return;
-  }
-  const result = await runAutomation(row.id, { type: row.triggerType as never, userId: req.user!.id, vehicleId: row.vehicleId ?? undefined, data: (req.body ?? {}) as Record<string, unknown> });
+automationsRouter.post('/:id/trigger', { auth: 'session', target: { kind: 'resource', resource: 'automation', from: 'param:id', perm: 'automations.manage' } }, async (req, res) => {
+  const row = req.access!.resource!; // policy already enforced org access
+  const result = await runAutomation(row.id, { type: row.triggerType as never, userId: sessionActor(req).userId, vehicleId: row.vehicleId ?? undefined, data: (req.body ?? {}) as Record<string, unknown> });
   res.json({ data: result });
 });
 
-automationsRouter.get('/:id/executions', async (req, res) => {
-  const row = await prisma.automation.findUnique({ where: { id: req.params.id } });
-  if (!row || row.userId !== req.user!.id) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Automation not found.' } });
-    return;
-  }
+automationsRouter.get('/:id/executions', { auth: 'session', target: { kind: 'resource', resource: 'automation', from: 'param:id', perm: 'automations.read' } }, async (req, res) => {
+  const row = req.access!.resource!; // policy already enforced org access
   const rows = await prisma.automationExecution.findMany({ where: { automationId: row.id }, orderBy: { triggeredAt: 'desc' }, take: 50 });
   res.json({
     data: rows.map((e) => ({
@@ -148,8 +135,8 @@ automationsRouter.get('/:id/executions', async (req, res) => {
 });
 
 /** Incoming webhook trigger endpoint for user automations. */
-automationsRouter.post('/webhook/:token', async (req, res) => {
-  const token = req.params.token;
+automationsRouter.post('/webhook/:token', { auth: 'public', target: { kind: 'none' } }, async (req, res) => {
+  const token = String(req.params.token);
   const row = await prisma.automation.findFirst({ where: { triggerType: 'webhook', triggerParams: { path: ['token'], equals: token } } });
   if (!row) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Unknown webhook token.' } });

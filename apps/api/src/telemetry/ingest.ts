@@ -8,7 +8,7 @@ import { haversineKm, round2 } from '../core/geo';
 import { dispatchTrigger } from '../automations/engine';
 import { notify } from '../notifications/service';
 import type { VehicleState } from '@voltlink/shared';
-import type { VehicleWithState } from '../access';
+type IngestVehicle = { id: string; organizationId: string; displayName: string; demo: boolean; addedById: string | null };
 
 // In-flight lifecycle trackers keyed by vehicleId (per process).
 const driveTracker = new Map<string, { startedAt: Date; startedPct: number; maxSpeed: number; points: { ts: Date; lat: number; lon: number; speedKmh: number; batteryPct: number | null }[]; lastMoving: Date }>();
@@ -18,7 +18,7 @@ const geofenceState = new Map<string, boolean>(); // `${geofenceId}:${vehicleId}
 const MIN_DRIVE_SPEED = 8; // km/h
 const DRIVE_END_IDLE_SEC = 180;
 
-export async function ingestVehicleState(vehicle: VehicleWithState, state: VehicleState, opts: { live: boolean }): Promise<void> {
+export async function ingestVehicleState(vehicle: IngestVehicle, state: VehicleState, opts: { live: boolean }): Promise<void> {
   const fetchedAt = new Date(state.fetchedAt ?? Date.now());
   const ageSec = Math.max(0, (Date.now() - fetchedAt.getTime()) / 1000);
   const freshLimit = freshLimitFor(state);
@@ -69,7 +69,7 @@ export async function ingestVehicleState(vehicle: VehicleWithState, state: Vehic
     // Redact address when inside any privacy zone (iterate lazily).
     let address = state.address ?? null;
     if (address) {
-      const zones = await prisma.privacyZone.findMany({ where: { userId: vehicle.ownerId, enabled: true } });
+      const zones = await prisma.privacyZone.findMany({ where: { organizationId: vehicle.organizationId, enabled: true } });
       for (const z of zones) {
         if (haversineKm(state.lat, state.lon, z.lat, z.lon) <= z.radiusM / 1000) {
           address = 'Private area';
@@ -89,7 +89,7 @@ export async function ingestVehicleState(vehicle: VehicleWithState, state: Vehic
     await detectDrive(vehicle.id, state, fetchedAt);
   }
   // 5. Charging lifecycle (all providers; demo charging cycles are throttled).
-  await detectCharging(vehicle.id, vehicle.ownerId, vehicle.displayName, state, fetchedAt, vehicle.demo);
+  await detectCharging(vehicle.id, vehicle.addedById ?? '', vehicle.displayName, state, fetchedAt, vehicle.demo);
 
   // 6. Geofence evaluation.
   await evaluateGeofences(vehicle, state);
@@ -101,7 +101,7 @@ export async function ingestVehicleState(vehicle: VehicleWithState, state: Vehic
   ssePublish({
     type: 'vehicle_state',
     data: { vehicleId: vehicle.id, state: publicStateForSse(stored) },
-    userId: vehicle.ownerId,
+    userId: vehicle.addedById ?? '',
   });
 }
 
@@ -241,7 +241,7 @@ async function detectCharging(vehicleId: string, ownerId: string, vehicleName: s
         estLossKwh: round2(energyAddedKwh * 0.06),
       },
     });
-    await applyCostCalculation(session.id, ownerId);
+    await applyCostCalculation(session.id);
     await recomputeAggregate(vehicleId, current.startedAt);
     const event = state.chargingState === 'complete' ? 'charging_completed' : 'charging_stopped';
     await notify({
@@ -261,17 +261,19 @@ async function detectCharging(vehicleId: string, ownerId: string, vehicleName: s
 // Cost calculation
 // ---------------------------------------------------------------------------
 
-export async function applyCostCalculation(sessionId: string, userId: string): Promise<void> {
+export async function applyCostCalculation(sessionId: string): Promise<void> {
   const session = await prisma.chargingSession.findUnique({ where: { id: sessionId } });
   if (!session) return;
   if (session.manualCost !== null && session.manualCost !== undefined) {
     await prisma.chargingSession.update({ where: { id: sessionId }, data: { cost: session.manualCost } });
     return;
   }
-  const rules = await prisma.rateRule.findMany({ where: { userId, enabled: true } });
+  const vehicle = await prisma.vehicle.findUnique({ where: { id: session.vehicleId }, select: { organizationId: true } });
+  const organizationId = vehicle?.organizationId ?? '';
+  const rules = await prisma.rateRule.findMany({ where: { organizationId, enabled: true } });
   if (rules.length === 0) return;
   // Prefer location rules matching a nearby place, then TOU, then flat.
-  const places = await prisma.place.findMany({ where: { userId } });
+  const places = await prisma.place.findMany({ where: { organizationId } });
   let price = 0;
   let ruleName = '';
   let ruleId = '';
@@ -318,9 +320,9 @@ export async function applyCostCalculation(sessionId: string, userId: string): P
 // Geofences
 // ---------------------------------------------------------------------------
 
-async function evaluateGeofences(vehicle: VehicleWithState, state: VehicleState): Promise<void> {
+async function evaluateGeofences(vehicle: IngestVehicle, state: VehicleState): Promise<void> {
   if (typeof state.lat !== 'number' || typeof state.lon !== 'number') return;
-  const fences = await prisma.geofence.findMany({ where: { userId: vehicle.ownerId, enabled: true } });
+  const fences = await prisma.geofence.findMany({ where: { organizationId: vehicle.organizationId, enabled: true } });
   for (const f of fences) {
     const inside = haversineKm(state.lat, state.lon, f.lat, f.lon) <= f.radiusM / 1000;
     const key = `${f.id}:${vehicle.id}`;
@@ -330,7 +332,7 @@ async function evaluateGeofences(vehicle: VehicleWithState, state: VehicleState)
     const event = inside ? 'geofence_enter' : 'geofence_leave';
     await prisma.geofence.update({ where: { id: f.id }, data: { lastTriggeredAt: new Date() } });
     await notify({
-      userId: vehicle.ownerId,
+      userId: vehicle.addedById ?? '',
       event,
       severity: 'info',
       title: inside ? `${vehicle.displayName} entered ${f.name}` : `${vehicle.displayName} left ${f.name}`,
@@ -338,7 +340,7 @@ async function evaluateGeofences(vehicle: VehicleWithState, state: VehicleState)
       vehicleId: vehicle.id,
       vehicleName: vehicle.displayName,
     });
-    void dispatchTrigger({ type: inside ? 'enter_place' : 'leave_place', userId: vehicle.ownerId, vehicleId: vehicle.id, data: { fenceId: f.id } });
+    void dispatchTrigger({ type: inside ? 'enter_place' : 'leave_place', userId: vehicle.addedById ?? '', vehicleId: vehicle.id, data: { fenceId: f.id } });
   }
 }
 
@@ -348,7 +350,7 @@ async function evaluateGeofences(vehicle: VehicleWithState, state: VehicleState)
 
 const prevTriggerState = new Map<string, Record<string, unknown>>();
 
-async function evaluateTriggers(vehicle: VehicleWithState, state: VehicleState): Promise<void> {
+async function evaluateTriggers(vehicle: IngestVehicle, state: VehicleState): Promise<void> {
   const key = vehicle.id;
   const prev = prevTriggerState.get(key) ?? {};
   const next: Record<string, unknown> = {
@@ -364,24 +366,24 @@ async function evaluateTriggers(vehicle: VehicleWithState, state: VehicleState):
   if (prev.battery !== undefined && next.battery !== undefined) {
     const crossed = (Number(prev.battery) - Number(next.battery)) > 0.4; // discharging
     if (crossed && Number(next.battery) <= 20 && Number(prev.battery) > 20) {
-      void dispatchTrigger({ type: 'battery_threshold', userId: vehicle.ownerId, vehicleId: vehicle.id, data: { pct: next.battery } });
-      await notify({ userId: vehicle.ownerId, event: 'battery_low', severity: 'warning', title: 'Battery low', body: `${vehicle.displayName} is at ${Math.round(Number(next.battery))}%.`, vehicleId: vehicle.id, vehicleName: vehicle.displayName });
+      void dispatchTrigger({ type: 'battery_threshold', userId: vehicle.addedById ?? '', vehicleId: vehicle.id, data: { pct: next.battery } });
+      await notify({ userId: vehicle.addedById ?? '', event: 'battery_low', severity: 'warning', title: 'Battery low', body: `${vehicle.displayName} is at ${Math.round(Number(next.battery))}%.`, vehicleId: vehicle.id, vehicleName: vehicle.displayName });
     }
   }
   if (prev.status && prev.status !== next.status && next.status === 'online') {
-    void dispatchTrigger({ type: 'vehicle_online', userId: vehicle.ownerId, vehicleId: vehicle.id, data: {} });
+    void dispatchTrigger({ type: 'vehicle_online', userId: vehicle.addedById ?? '', vehicleId: vehicle.id, data: {} });
   }
   if (next.anyDoorOpen && prev.anyDoorOpen === false) {
-    void dispatchTrigger({ type: 'door_open', userId: vehicle.ownerId, vehicleId: vehicle.id, data: {} });
+    void dispatchTrigger({ type: 'door_open', userId: vehicle.addedById ?? '', vehicleId: vehicle.id, data: {} });
   }
   if (typeof next.tempC === 'number' && (next.tempC < 5 || next.tempC > 35)) {
-    void dispatchTrigger({ type: 'temperature_threshold', userId: vehicle.ownerId, vehicleId: vehicle.id, data: { tempC: next.tempC } });
+    void dispatchTrigger({ type: 'temperature_threshold', userId: vehicle.addedById ?? '', vehicleId: vehicle.id, data: { tempC: next.tempC } });
   }
   if (prev.status && prev.status !== 'parked' && next.status === 'parked') {
-    void dispatchTrigger({ type: 'vehicle_parked', userId: vehicle.ownerId, vehicleId: vehicle.id, data: {} });
+    void dispatchTrigger({ type: 'vehicle_parked', userId: vehicle.addedById ?? '', vehicleId: vehicle.id, data: {} });
   }
   if (next.status === 'unknown' || (state.status === 'offline' && prev.status !== 'offline')) {
-    void dispatchTrigger({ type: 'fault_detected', userId: vehicle.ownerId, vehicleId: vehicle.id, data: { status: next.status } });
+    void dispatchTrigger({ type: 'fault_detected', userId: vehicle.addedById ?? '', vehicleId: vehicle.id, data: { status: next.status } });
   }
 }
 

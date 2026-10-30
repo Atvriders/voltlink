@@ -1,8 +1,8 @@
 // Admin routes: users, roles, settings, retention, health, and demo controls.
 
-import { Router } from 'express';
+import { policyRouter, sessionActor } from '../authz/policy';
 import { prisma } from '../core/db';
-import { requireAuth, requireRole } from '../auth/middleware';
+import { audit } from '../core/settings';
 import { getSettingsBundle, setSetting, getSetting } from '../core/settings';
 import { runRetention } from '../telemetry/retention';
 import { getQueue } from '../core/queue';
@@ -10,18 +10,16 @@ import { sseCount } from '../core/sse';
 import { env } from '../core/env';
 import { APP_VERSION } from '@voltlink/shared';
 
-export const adminRouter = Router();
-
-adminRouter.use(requireAuth);
+export const adminRouter = policyRouter('/api/v1/admin');
 
 // ---- Settings (owner/admin write, others read) ----
 
-adminRouter.get('/settings', async (req, res) => {
+adminRouter.get('/settings', { auth: 'session', target: { kind: 'instanceAdmin' } }, async (req, res) => {
   const bundle = await getSettingsBundle();
   res.json({ data: { ...bundle, appVersion: APP_VERSION, demoDefaultEnabled: env.DEMO_DEFAULT_ENABLED } });
 });
 
-adminRouter.patch('/settings', requireRole('ADMIN'), async (req, res) => {
+adminRouter.patch('/settings', { auth: 'session', stepUp: {}, target: { kind: 'instanceAdmin' } }, async (req, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const allowed = ['orgName', 'telemetryRetentionDays', 'locationRetentionDays'];
   for (const key of allowed) {
@@ -39,28 +37,31 @@ adminRouter.patch('/settings', requireRole('ADMIN'), async (req, res) => {
 
 // ---- Users ----
 
-adminRouter.get('/users', requireRole('ADMIN'), async (req, res) => {
-  const users = await prisma.user.findMany({ where: { deletedAt: null }, orderBy: { createdAt: 'desc' }, include: { _count: { select: { vehicles: true } } } });
+adminRouter.get('/users', { auth: 'session', target: { kind: 'instanceAdmin' } }, async (req, res) => {
+  const users = await prisma.user.findMany({
+    where: { deletionRequestedAt: null },
+    orderBy: { createdAt: 'desc' },
+    include: { _count: { select: { memberships: true } } },
+  });
   res.json({
     data: users.map((u) => ({
       id: u.id,
       email: u.email,
       name: u.name,
-      role: u.role,
+      isInstanceAdmin: u.isInstanceAdmin,
+      suspendedAt: u.suspendedAt?.toISOString() ?? null,
       emailVerified: !!u.emailVerifiedAt,
       totpEnabled: u.totpEnabled,
-      demoEnabled: u.demoEnabled,
-      vehicleCount: u._count.vehicles,
+      membershipCount: u._count.memberships,
       createdAt: u.createdAt.toISOString(),
     })),
   });
 });
 
-adminRouter.patch('/users/:id/role', requireRole('ADMIN'), async (req, res) => {
-  const { role } = (req.body ?? {}) as { role?: string };
-  const valid = ['OWNER', 'ADMIN', 'FLEET_MANAGER', 'DRIVER', 'VIEWER', 'STATUS_MANAGER', 'SUPPORT'];
-  if (!valid.includes(role ?? '')) {
-    res.status(400).json({ error: { code: 'VALIDATION', message: 'Invalid role.' } });
+adminRouter.patch('/users/:id/suspend', { auth: 'session', stepUp: {}, target: { kind: 'instanceAdmin' } }, async (req, res) => {
+  const { suspended } = (req.body ?? {}) as { suspended?: boolean };
+  if (typeof suspended !== 'boolean') {
+    res.status(400).json({ error: { code: 'VALIDATION', message: 'suspended boolean required.' } });
     return;
   }
   const target = await prisma.user.findUnique({ where: { id: String(req.params.id) } });
@@ -68,17 +69,42 @@ adminRouter.patch('/users/:id/role', requireRole('ADMIN'), async (req, res) => {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found.' } });
     return;
   }
-  if (target.id === req.user!.id && target.role === 'OWNER' && role !== 'OWNER') {
-    res.status(400).json({ error: { code: 'VALIDATION', message: 'You cannot demote yourself from OWNER.' } });
+  if (target.isInstanceAdmin && suspended) {
+    res.status(400).json({ error: { code: 'VALIDATION', message: 'Instance administrators cannot be suspended.' } });
     return;
   }
-  await prisma.user.update({ where: { id: target.id }, data: { role } });
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: target.id },
+      data: { suspendedAt: suspended ? new Date() : null },
+    }),
+    ...(suspended
+      ? [prisma.userSession.updateMany({ where: { userId: target.id, revokedAt: null }, data: { revokedAt: new Date() } })]
+      : []),
+  ]);
+  res.json({ data: { ok: true } });
+});
+
+adminRouter.post('/users/:id/mfa-reset', { auth: 'session', stepUp: {}, target: { kind: 'instanceAdmin' } }, async (req, res) => {
+  const target = await prisma.user.findUnique({ where: { id: String(req.params.id) } });
+  if (!target) {
+    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found.' } });
+    return;
+  }
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: target.id }, data: { totpEnabled: false, totpSecretSealed: null, totpLastStep: null, totpEnabledAt: null } }),
+    prisma.recoveryCode.deleteMany({ where: { userId: target.id } }),
+    prisma.appNotification.create({
+      data: { userId: target.id, event: 'security', severity: 'warning', title: 'Two-factor authentication reset', body: 'An administrator reset your two-factor authentication. Set it up again in Settings.', channel: 'in_app' },
+    }),
+  ]);
+  await audit({ actorId: sessionActor(req).userId, action: 'admin.mfa_reset', entityType: 'user', entityId: target.id });
   res.json({ data: { ok: true } });
 });
 
 // ---- Health ----
 
-adminRouter.get('/health', requireRole('ADMIN'), async (req, res) => {
+adminRouter.get('/health', { auth: 'session', target: { kind: 'instanceAdmin' } }, async (req, res) => {
   let database = 'ok';
   let migrationsCurrent = true;
   try {
@@ -109,18 +135,18 @@ adminRouter.get('/health', requireRole('ADMIN'), async (req, res) => {
   });
 });
 
-adminRouter.post('/retention/run', requireRole('ADMIN'), async (_req, res) => {
+adminRouter.post('/retention/run', { auth: 'session', target: { kind: 'instanceAdmin' } }, async (_req, res) => {
   const result = await runRetention();
   res.json({ data: result });
 });
 
-adminRouter.post('/queue/:queueName/flush', requireRole('ADMIN'), async (req, res) => {
+adminRouter.post('/queue/:queueName/flush', { auth: 'session', target: { kind: 'instanceAdmin' } }, async (req, res) => {
   const queueName = String(req.params.queueName).slice(0, 40);
   const n = await prisma.backgroundJob.updateMany({ where: { queue: queueName, status: 'dead' }, data: { status: 'pending', attempts: 0, runAt: new Date() } });
   res.json({ data: { requeued: n.count } });
 });
 
-adminRouter.get('/queue/dead', requireRole('ADMIN'), async (req, res) => {
+adminRouter.get('/queue/dead', { auth: 'session', target: { kind: 'instanceAdmin' } }, async (req, res) => {
   const rows = await prisma.backgroundJob.findMany({ where: { status: 'dead' }, orderBy: { doneAt: 'desc' }, take: 50 });
   res.json({
     data: rows.map((r) => ({ id: r.id, queue: r.queue, error: r.error ?? '', attempts: r.attempts, doneAt: r.doneAt?.toISOString(), payload: (() => { try { return JSON.parse(r.payload); } catch { return null; } })() })),

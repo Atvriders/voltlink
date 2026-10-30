@@ -64,7 +64,7 @@ export async function buildContext(account: ProviderAccount): Promise<ProviderCo
   }
   return {
     accountId: account.id,
-    userId: account.userId,
+    userId: account.connectedById ?? '',
     credentials,
     meta: {
       provider: account.provider,
@@ -101,11 +101,11 @@ export function listProviders(): { id: string; label: string; enabled: boolean; 
   ];
 }
 
-export async function connectDemoAccount(userId: string): Promise<{ accountId: string; vehiclesImported: number }> {
-  const existing = await prisma.providerAccount.findFirst({ where: { userId, provider: 'demo' } });
+export async function connectDemoAccount(organizationId: string, connectedById: string): Promise<{ accountId: string; vehiclesImported: number }> {
+  const existing = await prisma.providerAccount.findFirst({ where: { organizationId, provider: 'demo' } });
   if (existing) return { accountId: existing.id, vehiclesImported: await prisma.vehicle.count({ where: { providerAccountId: existing.id } }) };
   const account = await prisma.providerAccount.create({
-    data: { userId, provider: 'demo', label: 'Demo Fleet', status: 'connected', demo: true, scopes: JSON.parse('["demo"]') },
+    data: { organizationId, connectedById, provider: 'demo', label: 'Demo Fleet', status: 'connected', demo: true, scopes: JSON.parse('["demo"]') },
   });
   const ctx = await buildContext(account);
   const demoProvider = providers.demo;
@@ -114,7 +114,8 @@ export async function connectDemoAccount(userId: string): Promise<{ accountId: s
   for (const d of descriptors) {
     await prisma.vehicle.create({
       data: {
-        ownerId: userId,
+        organizationId,
+        addedById: connectedById,
         providerAccountId: account.id,
         provider: 'demo',
         providerVehicleId: d.providerVehicleId,
@@ -131,7 +132,7 @@ export async function connectDemoAccount(userId: string): Promise<{ accountId: s
       },
     });
   }
-  await prisma.user.update({ where: { id: userId }, data: { demoEnabled: true } });
-  await audit({ actorId: userId, action: 'provider.connect_demo', entityType: 'provider', entityId: account.id });
+  await prisma.user.update({ where: { id: connectedById }, data: { demoEnabled: true } });
+  await audit({ actorId: connectedById, action: 'provider.connect_demo', entityType: 'provider', entityId: account.id });
   return { accountId: account.id, vehiclesImported: descriptors.length };
 }

@@ -62,6 +62,7 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     error: {
       code: (err as { code?: string })?.code ?? (status >= 500 ? 'INTERNAL' : 'BAD_REQUEST'),
       message: status >= 500 && env.NODE_ENV === 'production' ? 'An unexpected error occurred.' : message,
+      ...((err as { details?: unknown })?.details !== undefined ? { details: (err as { details: unknown }).details } : {}),
       requestId: _req.id,
     },
   });
