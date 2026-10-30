@@ -22,6 +22,7 @@ import { notificationsRouter } from './routes/notifications';
 import { fleetRouter } from './routes/fleet';
 import { statusRouter } from './routes/status';
 import { adminRouter } from './routes/admin';
+import { orgsRouter, invitationsRouter } from './routes/orgs';
 import { sseAddClient } from './core/sse';
 import { authenticate } from './authz/authenticate';
 import { AccessDenied } from './authz/errors';
@@ -110,6 +111,8 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
   app.use(fleetRouter.prefix, fleetRouter.router);
   app.use(statusRouter.prefix, statusRouter.router);
   app.use(adminRouter.prefix, adminRouter.router);
+  app.use(orgsRouter.prefix, orgsRouter.router);
+  app.use(invitationsRouter.prefix, invitationsRouter.router);
   app.use('/api/v1/exports', usersRouter.router);
 
   // Real-time events (SSE).

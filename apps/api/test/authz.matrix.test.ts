@@ -258,6 +258,7 @@ const SKIP_ROUTES: ReadonlySet<string> = new Set([
   'POST /api/v1/auth/mfa/recovery-codes/regenerate',
   'PATCH /api/v1/users/retention', // spec: always 404
   'GET /api/v1/status/subscriptions/confirm/:token',
+  'POST /api/v1/invitations/:token/accept',
 ]);
 
 function personaHas(policy: RoutePolicy, persona: Persona): boolean {
@@ -327,6 +328,7 @@ const DESTRUCTIVE: ReadonlySet<string> = new Set([
   'POST /api/v1/auth/passkeys/:id/delete',
   'POST /api/v1/users/demo-mode',
   'POST /api/v1/providers/demo/connect',
+  'DELETE /api/v1/orgs/:orgId',
 ]);
 
 // Hand-pinned golden cells (guide 05 §10 plus the security-review cases).
