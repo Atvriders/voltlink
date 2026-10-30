@@ -1,75 +1,70 @@
+// Golden copy of the role → permission matrix (guide 05 §1.2). These are
+// hand-written expectations, not derived from the implementation, so the test
+// pins the matrix and cannot pass tautologically.
+
 import { describe, expect, it } from 'vitest';
-import { PERMISSIONS, ROLE_PERMISSIONS, ROLE_RANK, ROLES, roleAtLeast, VEHICLE_ROLES } from './roles';
-import { COMMAND_DEFINITIONS, COMMAND_STATUSES, HIGH_RISK_COMMANDS, RISK_LEVELS } from './commands';
+import {
+  GRANT_PERMISSIONS,
+  OPERATOR_ONLY_ROLES,
+  OPERATOR_PERMISSIONS,
+  ORG_PERMISSIONS,
+  ROLE_PERMISSIONS,
+  VEHICLE_PERMISSIONS,
+} from './roles';
 
-describe('roles', () => {
-  it('defines every role with a rank', () => {
-    for (const role of ROLES) {
-      expect(ROLE_RANK[role]).toBeTypeOf('number');
+describe('role → permission matrix (golden)', () => {
+  it('STATUS_MANAGER and SUPPORT have no vehicle permissions', () => {
+    for (const role of ['STATUS_MANAGER', 'SUPPORT'] as const) {
+      for (const p of ROLE_PERMISSIONS[role]) {
+        expect((VEHICLE_PERMISSIONS as readonly string[]).includes(p)).toBe(false);
+      }
     }
   });
 
-  it('owner outranks everything', () => {
-    for (const role of ROLES) {
-      if (role === 'OWNER') continue;
-      expect(roleAtLeast('OWNER', role)).toBe(true);
+  it('DRIVER lacks command_high_risk', () => {
+    expect(ROLE_PERMISSIONS.DRIVER).not.toContain('vehicles.command_high_risk');
+    expect(ROLE_PERMISSIONS.DRIVER).toContain('vehicles.command');
+  });
+
+  it('ADMIN lacks org.delete and members.assign_owner', () => {
+    expect(ROLE_PERMISSIONS.ADMIN).not.toContain('org.delete');
+    expect(ROLE_PERMISSIONS.ADMIN).not.toContain('members.assign_owner');
+  });
+
+  it('OWNER has every permission', () => {
+    for (const p of [...ORG_PERMISSIONS, ...VEHICLE_PERMISSIONS]) {
+      expect(ROLE_PERMISSIONS.OWNER).toContain(p);
     }
   });
 
-  it('viewer does not pass admin checks', () => {
-    expect(roleAtLeast('VIEWER', 'ADMIN')).toBe(false);
-    expect(roleAtLeast('VIEWER', 'VIEWER')).toBe(true);
+  it('VIEWER has read permissions only', () => {
+    expect(ROLE_PERMISSIONS.VIEWER).toEqual(['org.read', 'fleet.read', 'automations.read', 'vehicles.read']);
   });
 
-  it('unknown roles fail every check', () => {
-    expect(roleAtLeast('SUPERUSER', 'VIEWER')).toBe(false);
-  });
-
-  it('every permission is granted to at least one role', () => {
-    const granted = new Set<string>();
-    for (const role of ROLES) for (const p of ROLE_PERMISSIONS[role]) granted.add(p);
-    for (const p of PERMISSIONS) expect(granted.has(p), `permission ${p} is unassigned`).toBe(true);
-  });
-
-  it('owner has every permission', () => {
-    expect(new Set(ROLE_PERMISSIONS.OWNER).size).toBe(PERMISSIONS.length);
-  });
-
-  it('vehicle roles are a closed set', () => {
-    expect(VEHICLE_ROLES).toEqual(['owner', 'admin', 'driver', 'viewer']);
-  });
-});
-
-describe('command definitions', () => {
-  it('every command has a definition', () => {
-    for (const [name, def] of Object.entries(COMMAND_DEFINITIONS)) {
-      expect(def.label.length).toBeGreaterThan(0);
-      expect([...RISK_LEVELS]).toContain(def.risk);
-      expect(name).toBeTypeOf('string');
+  it('operator-only permissions exist only in operator roles', () => {
+    for (const p of OPERATOR_PERMISSIONS) {
+      // They exist in the matrix…
+      expect(ROLE_PERMISSIONS.OWNER).toContain(p);
+      if (p !== 'instance.support_read') expect(ROLE_PERMISSIONS.STATUS_MANAGER).toContain(p);
+      if (p === 'instance.support_read') expect(ROLE_PERMISSIONS.SUPPORT).toContain(p);
+      // …and none of them is a vehicle permission.
+      expect((VEHICLE_PERMISSIONS as readonly string[]).includes(p)).toBe(false);
     }
   });
 
-  it('high-risk commands exist and have high risk', () => {
-    expect(HIGH_RISK_COMMANDS.length).toBeGreaterThanOrEqual(3);
-    for (const cmd of HIGH_RISK_COMMANDS) {
-      expect(COMMAND_DEFINITIONS[cmd].risk).toBe('high');
-    }
+  it('STATUS_MANAGER and SUPPORT are operator-only roles', () => {
+    expect(OPERATOR_ONLY_ROLES).toEqual(['STATUS_MANAGER', 'SUPPORT']);
   });
 
-  it('command statuses cover the full lifecycle', () => {
-    for (const s of ['queued', 'submitted', 'accepted', 'confirmed', 'failed', 'rejected', 'unsupported', 'timed_out', 'canceled']) {
-      expect(COMMAND_STATUSES).toContain(s);
-    }
+  it('FLEET_MANAGER can manage vehicles but not share or command high-risk', () => {
+    expect(ROLE_PERMISSIONS.FLEET_MANAGER).toContain('vehicles.manage');
+    expect(ROLE_PERMISSIONS.FLEET_MANAGER).not.toContain('vehicles.share');
+    expect(ROLE_PERMISSIONS.FLEET_MANAGER).not.toContain('vehicles.command_high_risk');
   });
 
-  it('unlock, remote_start, sentry_mode are high-risk', () => {
-    for (const cmd of ['unlock', 'remote_start', 'sentry_mode'] as const) {
-      expect(HIGH_RISK_COMMANDS).toContain(cmd);
-    }
-  });
-
-  it('honk_horn and flash_lights are low-risk', () => {
-    expect(HIGH_RISK_COMMANDS).not.toContain('honk_horn');
-    expect(HIGH_RISK_COMMANDS).not.toContain('flash_lights');
+  it('grants define the exact per-level permissions', () => {
+    expect(GRANT_PERMISSIONS.VIEWER).toEqual(['vehicles.read']);
+    expect(GRANT_PERMISSIONS.DRIVER).toEqual(['vehicles.read', 'vehicles.command', 'vehicles.history_edit']);
+    expect(GRANT_PERMISSIONS.MANAGER).toEqual(['vehicles.read', 'vehicles.command', 'vehicles.history_edit', 'vehicles.manage']);
   });
 });

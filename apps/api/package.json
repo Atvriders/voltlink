@@ -2,7 +2,7 @@
   "name": "@voltlink/api",
   "version": "1.0.0",
   "private": true,
-  "description": "VoltLink API \u2014 Express 5, PostgreSQL/Prisma, cookie auth, provider adapters, telemetry, commands, automations, fleet, status, SSE.",
+  "description": "VoltLink API — Express 5, PostgreSQL/Prisma, cookie auth, provider adapters, telemetry, commands, automations, fleet, status, SSE.",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -16,9 +16,9 @@
     "migrate:leader": "node dist/cli/migrateLeader.cjs"
   },
   "dependencies": {
-    "@voltlink/shared": "*",
     "@prisma/client": "^6.0.0",
-    "@simplewebauthn/server": "^13.0.0",
+    "@simplewebauthn/server": "^14.0.3",
+    "@voltlink/shared": "*",
     "argon2": "^0.45.0",
     "cookie-parser": "^1.4.6",
     "express": "^5.2.1",
@@ -27,7 +27,7 @@
     "ioredis": "^5.6.0",
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^10.1.4",
-    "otplib": "^12.0.1",
+    "otplib": "^13.5.0",
     "pg": "^8.16.0",
     "prisma": "^6.0.0",
     "web-push": "^3.6.7",

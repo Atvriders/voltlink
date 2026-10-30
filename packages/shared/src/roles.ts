@@ -1,6 +1,8 @@
-// VoltLink roles and permission model.
+// VoltLink role → permission model. Roles are per organization; the
+// authorization layer (apps/api/src/authz) enforces this matrix. There is no
+// global role rank: authorization always goes through permissions.
 
-export const ROLES = [
+export const ORG_ROLES = [
   'OWNER',
   'ADMIN',
   'FLEET_MANAGER',
@@ -9,77 +11,93 @@ export const ROLES = [
   'STATUS_MANAGER',
   'SUPPORT',
 ] as const;
-export type Role = (typeof ROLES)[number];
+export type OrgRole = (typeof ORG_ROLES)[number];
 
-/** Rank used for "at least this role" checks. Higher = more privilege. */
-export const ROLE_RANK: Record<Role, number> = {
-  OWNER: 100,
-  ADMIN: 90,
-  FLEET_MANAGER: 70,
-  DRIVER: 50,
-  VIEWER: 20,
-  STATUS_MANAGER: 60,
-  SUPPORT: 40,
-};
+export const OPERATOR_ONLY_ROLES: readonly OrgRole[] = ['STATUS_MANAGER', 'SUPPORT'];
 
-/** Scoped role on a vehicle. */
-export const VEHICLE_ROLES = ['owner', 'admin', 'driver', 'viewer'] as const;
-export type VehicleRole = (typeof VEHICLE_ROLES)[number];
+export const ORG_PERMISSIONS = [
+  'org.read',
+  'org.manage',
+  'org.delete',
+  'members.manage',
+  'members.assign_owner',
+  'providers.read',
+  'providers.manage',
+  'fleet.read',
+  'fleet.manage',
+  'automations.read',
+  'automations.manage',
+  'privacy.manage',
+  'exports.read',
+  'audit.read',
+  'status.manage',
+  'incidents.manage',
+  'instance.support_read',
+] as const;
+export type OrgPermission = (typeof ORG_PERMISSIONS)[number];
 
-export function roleAtLeast(role: string, minimum: Role): boolean {
-  const r = (ROLE_RANK as Record<string, number>)[role];
-  return typeof r === 'number' && r >= ROLE_RANK[minimum];
-}
-
-export const PERMISSIONS = [
+export const VEHICLE_PERMISSIONS = [
   'vehicles.read',
+  'vehicles.history_edit',
   'vehicles.command',
   'vehicles.command_high_risk',
   'vehicles.manage',
-  'providers.manage',
-  'users.manage',
-  'fleet.manage',
-  'automations.manage',
-  'notifications.manage',
+  'vehicles.share',
+] as const;
+export type VehiclePermission = (typeof VEHICLE_PERMISSIONS)[number];
+
+export type Permission = OrgPermission | VehiclePermission;
+
+/** Permissions that only exist in the OPERATOR organization. */
+export const OPERATOR_PERMISSIONS: readonly OrgPermission[] = [
   'status.manage',
   'incidents.manage',
-  'admin.read',
-  'admin.write',
-  'exports.read',
-  'settings.manage',
-] as const;
-export type Permission = (typeof PERMISSIONS)[number];
+  'instance.support_read',
+];
 
-/** Permissions implied by each global role. */
-export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
-  OWNER: [...PERMISSIONS],
+const BASE: Permission[] = ['org.read', 'fleet.read', 'automations.read', 'vehicles.read'];
+
+export const ROLE_PERMISSIONS: Record<OrgRole, readonly Permission[]> = {
+  OWNER: [...ORG_PERMISSIONS, ...VEHICLE_PERMISSIONS],
   ADMIN: [
-    'vehicles.read',
-    'vehicles.command',
-    'vehicles.command_high_risk',
-    'vehicles.manage',
-    'providers.manage',
-    'users.manage',
-    'fleet.manage',
-    'automations.manage',
-    'notifications.manage',
-    'status.manage',
-    'incidents.manage',
-    'admin.read',
-    'exports.read',
-    'settings.manage',
+    ...ORG_PERMISSIONS.filter((p) => p !== 'org.delete' && p !== 'members.assign_owner'),
+    ...VEHICLE_PERMISSIONS,
   ],
   FLEET_MANAGER: [
-    'vehicles.read',
-    'vehicles.command',
-    'vehicles.manage',
+    ...BASE,
+    'providers.read',
     'fleet.manage',
     'automations.manage',
-    'notifications.manage',
     'exports.read',
+    'vehicles.history_edit',
+    'vehicles.command',
+    'vehicles.manage',
   ],
-  DRIVER: ['vehicles.read', 'vehicles.command'],
-  VIEWER: ['vehicles.read'],
-  STATUS_MANAGER: ['status.manage', 'incidents.manage', 'admin.read'],
-  SUPPORT: ['vehicles.read', 'admin.read'],
+  DRIVER: [...BASE, 'automations.manage', 'vehicles.history_edit', 'vehicles.command'],
+  VIEWER: [...BASE],
+  STATUS_MANAGER: ['org.read', 'status.manage', 'incidents.manage'],
+  SUPPORT: ['org.read', 'instance.support_read'],
 };
+
+export const GRANT_PERMISSIONS = {
+  VIEWER: ['vehicles.read'],
+  DRIVER: ['vehicles.read', 'vehicles.command', 'vehicles.history_edit'],
+  MANAGER: ['vehicles.read', 'vehicles.command', 'vehicles.history_edit', 'vehicles.manage'],
+} as const satisfies Record<'VIEWER' | 'DRIVER' | 'MANAGER', readonly VehiclePermission[]>;
+
+/**
+ * Scopes for API keys (`vlk_` tokens). A key's permissions are always
+ * intersected with the owning user's live permissions in the key's
+ * organization, and never include high-risk command, sharing, provider or
+ * privacy management.
+ */
+export const API_SCOPES = [
+  'vehicles:read',
+  'history:write',
+  'commands:write',
+  'fleet:write',
+  'automations:write',
+  'exports:read',
+  'status:write',
+] as const;
+export type ApiScope = (typeof API_SCOPES)[number];

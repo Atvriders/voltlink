@@ -13,49 +13,59 @@ datasource db {
 // ---------------------------------------------------------------------------
 
 model User {
-  id               String    @id @default(cuid())
-  email            String    @unique
-  name             String
-  passwordHash     String
-  role             String    @default("OWNER")
-  emailVerifiedAt  DateTime? @db.Timestamptz(3)
-  totpSecret       String?
-  totpEnabled      Boolean   @default(false)
-  timezone         String    @default("UTC")
-  units            String    @default("metric")
-  locale           String    @default("en-US")
-  theme            String    @default("voltlink-dark")
-  demoEnabled      Boolean   @default(false)
-  presentationMode Boolean   @default(false)
-  deletedAt        DateTime? @db.Timestamptz(3)
-  createdAt        DateTime @db.Timestamptz(3)  @default(now())
-  sessions         UserSession[]
-  verifications    EmailVerification[]
-  passwordResets   PasswordReset[]
-  passkeys         PasskeyCredential[]
-  providerAccounts ProviderAccount[]
-  vehicles         Vehicle[]
-  notifications    AppNotification[]
-  preferences      NotificationPreference[]
-  automations      Automation[]
-  apiKeys          ApiKey[]
-  webhooks         WebhookEndpoint[]
-  pushSubs         PushSubscription[]
-  auditEvents      AuditLog[]
+  id                     String    @id @default(cuid())
+  email                  String    @unique
+  name                   String
+  passwordHash           String
+  emailVerifiedAt        DateTime? @db.Timestamptz(3)
+  totpEnabled            Boolean   @default(false)
+  totpSecretSealed       String?   // envelope v2, AAD totp:<id>
+  totpPendingSealed      String?
+  totpPendingExpiresAt   DateTime? @db.Timestamptz(3)
+  totpLastStep           BigInt?
+  totpEnabledAt          DateTime? @db.Timestamptz(3)
+  webauthnUserId         String?   @unique
+  isInstanceAdmin        Boolean   @default(false)
+  suspendedAt            DateTime? @db.Timestamptz(3)
+  lockedAt               DateTime? @db.Timestamptz(3)
+  deletionRequestedAt    DateTime? @db.Timestamptz(3)
+  timezone               String    @default("UTC")
+  units                  String    @default("metric")
+  locale                 String    @default("en-US")
+  theme                  String    @default("voltlink-dark")
+  demoEnabled            Boolean   @default(false)
+  presentationMode       Boolean   @default(false)
+  createdAt              DateTime  @db.Timestamptz(3) @default(now())
+  sessions               UserSession[]
+  verifications          EmailVerification[]
+  passwordResets         PasswordReset[]
+  passkeys               PasskeyCredential[]
+  memberships            Membership[]
+  vehicleGrants          VehicleGrant[]
+  recoveryCodes          RecoveryCode[]
+  notifications          AppNotification[]
+  preferences            NotificationPreference[]
+  automations            Automation[]
+  apiKeys                ApiKey[]
+  webhooks               WebhookEndpoint[]
+  pushSubs               PushSubscription[]
+  auditEvents            AuditLog[]
 }
 
 model UserSession {
-  id         String    @id @default(cuid())
-  userId     String
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash  String    @unique
-  ip         String?
-  userAgent  String?
-  label      String?
-  createdAt  DateTime @db.Timestamptz(3)  @default(now())
-  lastSeenAt DateTime? @db.Timestamptz(3)
-  expiresAt  DateTime @db.Timestamptz(3)
-  revokedAt  DateTime? @db.Timestamptz(3)
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash    String    @unique
+  ip           String?
+  userAgent    String?
+  label        String?
+  stepUpAt     DateTime? @db.Timestamptz(3)
+  stepUpMethod String?
+  createdAt    DateTime  @db.Timestamptz(3) @default(now())
+  lastSeenAt   DateTime? @db.Timestamptz(3)
+  expiresAt    DateTime  @db.Timestamptz(3)
+  revokedAt    DateTime? @db.Timestamptz(3)
   @@index([userId])
 }
 
@@ -88,32 +98,208 @@ model PasskeyCredential {
   counter      BigInt
   transports   Json     @default("[]")
   name         String
+  deviceType   String?
+  backedUp     Boolean  @default(false)
+  lastUsedAt   DateTime? @db.Timestamptz(3)
   createdAt    DateTime @db.Timestamptz(3) @default(now())
   @@index([userId])
 }
 
-model PasskeyChallenge {
+model AuthChallenge {
+  id         String    @id @default(cuid())
+  handleHash String    @unique
+  purpose    String
+  userId     String?
+  sessionId  String?
+  challenge  String?
+  attempts   Int       @default(0)
+  expiresAt  DateTime  @db.Timestamptz(3)
+  consumedAt DateTime? @db.Timestamptz(3)
+  @@index([expiresAt])
+}
+
+model AuthThrottle {
+  key         String    @id
+  failures    Int       @default(0)
+  lockedUntil DateTime? @db.Timestamptz(3)
+  updatedAt   DateTime  @db.Timestamptz(3) @updatedAt
+}
+
+model RecoveryCode {
   id        String   @id @default(cuid())
   userId    String
-  challenge String
-  type      String
-  expiresAt DateTime @db.Timestamptz(3)
-  @@index([userId])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  usedAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime @db.Timestamptz(3) @default(now())
+  @@unique([userId, codeHash])
 }
 
 model AuditLog {
-  id         String   @id @default(cuid())
-  actorId    String?
-  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
-  action     String
-  entityType String?
-  entityId   String?
-  details    Json?
-  ip         String?
-  requestId  String?
-  createdAt  DateTime @db.Timestamptz(3) @default(now())
+  id             String    @id @default(cuid())
+  actorId        String?
+  actor          User?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  organizationId String?
+  actorKind      String    @default("user")
+  apiKeyId       String?
+  action         String
+  entityType     String?
+  entityId       String?
+  details        Json?
+  ip             String?
+  requestId      String?
+  createdAt      DateTime  @db.Timestamptz(3) @default(now())
   @@index([actorId, createdAt])
   @@index([entityType, entityId])
+  @@index([organizationId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Organizations and tenancy
+// ---------------------------------------------------------------------------
+
+enum OrgKind {
+  PERSONAL
+  TEAM
+  OPERATOR
+}
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  FLEET_MANAGER
+  DRIVER
+  VIEWER
+  STATUS_MANAGER
+  SUPPORT
+}
+
+enum AccessScope {
+  ALL
+  GRANTED
+}
+
+enum GrantLevel {
+  VIEWER
+  DRIVER
+  MANAGER
+}
+
+model Organization {
+  id                       String         @id @default(cuid())
+  kind                     OrgKind        @default(PERSONAL)
+  name                     String
+  telemetryRetentionDays   Int?
+  locationRetentionDays    Int?
+  demoDegraded             Boolean        @default(false)
+  createdById              String?
+  createdAt                DateTime       @db.Timestamptz(3) @default(now())
+  memberships              Membership[]
+  invitations              Invitation[]
+  vehicles                 Vehicle[]
+  providerAccounts         ProviderAccount[]
+  apiKeys                  ApiKey[]
+  places                   Place[]
+  geofences                Geofence[]
+  privacyZones             PrivacyZone[]
+  rateRules                RateRule[]
+  automations              Automation[]
+  fleetGroups              FleetGroup[]
+  departments              Department[]
+  costCenters              CostCenter[]
+  drivers                  Driver[]
+  vehicleAssignments       VehicleAssignment[]
+}
+
+model Membership {
+  id             String                @id @default(cuid())
+  organizationId String
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           OrgRole
+  vehicleScope   AccessScope           @default(ALL)
+  providerScope  AccessScope           @default(ALL)
+  status         String                @default("ACTIVE")
+  invitedById    String?
+  createdAt      DateTime              @db.Timestamptz(3) @default(now())
+  providerGrants ProviderAccountGrant[]
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+model VehicleGrant {
+  id            String    @id @default(cuid())
+  vehicleId     String
+  vehicle       Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  level         GrantLevel @default(VIEWER)
+  allowHighRisk Boolean   @default(false)
+  grantedById   String?
+  expiresAt     DateTime? @db.Timestamptz(3)
+  createdAt     DateTime  @db.Timestamptz(3) @default(now())
+  @@unique([vehicleId, userId])
+  @@index([userId])
+}
+
+model Invitation {
+  id               String     @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  kind             String
+  email            String
+  role             OrgRole?
+  vehicleId        String?
+  grantLevel       GrantLevel?
+  allowHighRisk    Boolean    @default(false)
+  tokenHash        String    @unique
+  invitedById      String
+  deliveredByEmail Boolean    @default(false)
+  expiresAt        DateTime  @db.Timestamptz(3)
+  acceptedAt       DateTime? @db.Timestamptz(3)
+  revokedAt        DateTime? @db.Timestamptz(3)
+  createdAt        DateTime  @db.Timestamptz(3) @default(now())
+  @@index([organizationId])
+}
+
+model ProviderAccountGrant {
+  id                String          @id @default(cuid())
+  membershipId      String
+  membership        Membership      @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  providerAccountId String
+  providerAccount   ProviderAccount @relation(fields: [providerAccountId], references: [id], onDelete: Cascade)
+  canCommand        Boolean         @default(true)
+  canManage         Boolean         @default(false)
+  @@unique([membershipId, providerAccountId])
+}
+
+model OAuthState {
+  stateHash          String   @id
+  provider           String
+  userId             String
+  sessionId          String
+  organizationId     String
+  verifierSealed     String
+  reconnectAccountId String?
+  expiresAt          DateTime @db.Timestamptz(3)
+  createdAt          DateTime @default(now()) @db.Timestamptz(3)
+  @@index([expiresAt])
+}
+
+model CommandIdempotency {
+  scope       String
+  key         String
+  requestHash String
+  commandId   String
+  expiresAt   DateTime @db.Timestamptz(3)
+  @@id([scope, key])
+  @@index([expiresAt])
+}
+
+model DataTask {
+  name      String   @id
+  appliedAt DateTime @db.Timestamptz(3) @default(now())
 }
 
 // ---------------------------------------------------------------------------
@@ -121,20 +307,23 @@ model AuditLog {
 // ---------------------------------------------------------------------------
 
 model ProviderAccount {
-  id         String             @id @default(cuid())
-  userId     String
-  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  provider   String
-  label      String
-  status     String             @default("pending")
-  demo       Boolean            @default(false)
-  scopes     Json               @default("[]")
-  lastSyncAt DateTime? @db.Timestamptz(3)
-  lastError  String?
-  createdAt  DateTime @db.Timestamptz(3)           @default(now())
-  credential ProviderCredential?
-  vehicles   Vehicle[]
-  @@index([userId])
+  id              String                @id @default(cuid())
+  organizationId  String
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connectedById   String?
+  provider        String
+  label           String
+  status          String                @default("pending")
+  demo            Boolean               @default(false)
+  scopes          Json                  @default("[]")
+  commandsEnabled Boolean               @default(true)
+  lastSyncAt      DateTime? @db.Timestamptz(3)
+  lastError       String?
+  createdAt       DateTime  @db.Timestamptz(3) @default(now())
+  credential      ProviderCredential?
+  vehicles        Vehicle[]
+  grants          ProviderAccountGrant[]
+  @@index([organizationId])
 }
 
 model ProviderCredential {
@@ -153,8 +342,9 @@ model ProviderCredential {
 
 model Vehicle {
   id                String           @id @default(cuid())
-  ownerId           String
-  owner             User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  organizationId    String
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  addedById         String?
   providerAccountId String
   providerAccount   ProviderAccount  @relation(fields: [providerAccountId], references: [id], onDelete: Cascade)
   provider          String
@@ -178,13 +368,13 @@ model Vehicle {
   chargeSessions    ChargingSession[]
   commands          VehicleCommand[]
   assignments       VehicleAssignment[]
-  permissions       VehiclePermission[]
+  grants            VehicleGrant[]
   maintenance       MaintenanceRecord[]
   groupLinks        FleetGroupVehicle[]
   aggregatesDaily   AggregateDaily[]
   aggregatesMonthly AggregateMonthly[]
   @@unique([provider, providerVehicleId, providerAccountId])
-  @@index([ownerId])
+  @@index([organizationId])
 }
 
 model VehicleSnapshot {
@@ -197,15 +387,16 @@ model VehicleSnapshot {
 }
 
 model VehicleLocation {
-  vehicleId  String    @id
-  vehicle    Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  ts         DateTime @db.Timestamptz(3)
-  lat        Float
-  lon        Float
-  headingDeg Float?
-  speedKmh   Float?
-  accuracyM  Float?
-  address    String?
+  vehicleId     String    @id
+  vehicle       Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  ts            DateTime  @db.Timestamptz(3)
+  lat           Float?
+  lon           Float?
+  headingDeg    Float?
+  speedKmh      Float?
+  accuracyM     Float?
+  address       String?
+  privacyZoneId String?
 }
 
 // ---------------------------------------------------------------------------
@@ -213,19 +404,23 @@ model VehicleLocation {
 // ---------------------------------------------------------------------------
 
 model Place {
-  id      String  @id @default(cuid())
-  userId  String
-  name    String
-  type    String  @default("custom")
-  lat     Float
-  lon     Float
-  radiusM Float   @default(100)
-  @@index([userId])
+  id             String  @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdById    String?
+  name           String
+  type           String  @default("custom")
+  lat            Float
+  lon            Float
+  radiusM        Float   @default(100)
+  @@index([organizationId])
 }
 
 model Geofence {
   id              String    @id @default(cuid())
-  userId          String
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdById     String?
   name            String
   lat             Float
   lon             Float
@@ -233,18 +428,22 @@ model Geofence {
   alertOn         String    @default("both")
   enabled         Boolean   @default(true)
   lastTriggeredAt DateTime? @db.Timestamptz(3)
-  @@index([userId])
+  @@index([organizationId])
 }
 
 model PrivacyZone {
-  id      String  @id @default(cuid())
-  userId  String
-  name    String
-  lat     Float
-  lon     Float
-  radiusM Float   @default(300)
-  enabled Boolean @default(true)
-  @@index([userId])
+  id              String  @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdById     String?
+  name            String
+  lat             Float
+  lon             Float
+  radiusM         Float   @default(300)
+  enabled         Boolean @default(true)
+  createdAt       DateTime @db.Timestamptz(3) @default(now())
+  redactedThrough DateTime? @db.Timestamptz(3)
+  @@index([organizationId])
 }
 
 // ---------------------------------------------------------------------------
@@ -252,32 +451,34 @@ model PrivacyZone {
 // ---------------------------------------------------------------------------
 
 model Drive {
-  id                String           @id @default(cuid())
-  vehicleId         String
-  vehicle           Vehicle          @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  startAt           DateTime @db.Timestamptz(3)
-  endAt             DateTime @db.Timestamptz(3)
-  startLat          Float?
-  startLon          Float?
-  startAddress      String?
-  endLat            Float?
-  endLon            Float?
-  endAddress        String?
-  distanceKm        Float
-  durationSec       Int
-  avgSpeedKmh       Float
-  maxSpeedKmh       Float
-  energyKwh         Float
-  efficiencyWhPerKm Float
-  estCost           Float?
-  currency          String           @default("USD")
-  elevationGainM    Float?
-  avgOutsideTempC   Float?
-  driverName        String?
-  tags              Json             @default("[]")
-  classification    String           @default("unknown")
-  notes             String?
-  routePoints       DriveRoutePoint[]
+  id                 String           @id @default(cuid())
+  vehicleId          String
+  vehicle            Vehicle          @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  startAt            DateTime @db.Timestamptz(3)
+  endAt              DateTime @db.Timestamptz(3)
+  startLat           Float?
+  startLon           Float?
+  startAddress       String?
+  startPrivacyZoneId String?
+  endLat             Float?
+  endLon             Float?
+  endAddress         String?
+  endPrivacyZoneId   String?
+  distanceKm         Float
+  durationSec        Int
+  avgSpeedKmh        Float
+  maxSpeedKmh        Float
+  energyKwh          Float
+  efficiencyWhPerKm  Float
+  estCost            Float?
+  currency           String           @default("USD")
+  elevationGainM     Float?
+  avgOutsideTempC    Float?
+  driverName         String?
+  tags               Json             @default("[]")
+  classification     String           @default("unknown")
+  notes              String?
+  routePoints        DriveRoutePoint[]
   @@index([vehicleId, startAt])
 }
 
@@ -304,6 +505,7 @@ model ChargingSession {
   locationName    String?
   lat             Float?
   lon             Float?
+  privacyZoneId   String?
   energyAddedKwh  Float    @default(0)
   batteryStartPct Float?
   batteryEndPct   Float?
@@ -324,16 +526,18 @@ model ChargingSession {
 }
 
 model RateRule {
-  id          String  @id @default(cuid())
-  userId      String
-  name        String
-  type        String  @default("flat")
-  pricePerKwh Float
-  currency    String  @default("USD")
-  periods     Json    @default("[]")
-  placeId     String?
-  enabled     Boolean @default(true)
-  @@index([userId])
+  id             String  @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdById    String?
+  name           String
+  type           String  @default("flat")
+  pricePerKwh    Float
+  currency       String  @default("USD")
+  periods        Json    @default("[]")
+  placeId        String?
+  enabled        Boolean @default(true)
+  @@index([organizationId])
 }
 
 // ---------------------------------------------------------------------------
@@ -341,25 +545,31 @@ model RateRule {
 // ---------------------------------------------------------------------------
 
 model Automation {
-  id            String               @id @default(cuid())
-  userId        String
-  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name          String
-  description   String?
-  enabled       Boolean              @default(true)
-  vehicleId     String?
-  triggerType   String
-  triggerParams Json                 @default("{}")
-  conditions    Json                 @default("[]")
-  actions       Json                 @default("[]")
-  cooldownSec   Int                  @default(0)
-  maxRetries    Int                  @default(1)
-  lastRunAt     DateTime? @db.Timestamptz(3)
-  lastResult    String?
-  runCount      Int                  @default(0)
-  failureCount  Int                  @default(0)
-  createdAt     DateTime @db.Timestamptz(3)             @default(now())
-  executions    AutomationExecution[]
+  id                  String               @id @default(cuid())
+  organizationId      String
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdById         String?
+  userId              String
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                String
+  description         String?
+  enabled             Boolean              @default(true)
+  vehicleId           String?
+  triggerType         String
+  triggerParams       Json                 @default("{}")
+  conditions          Json                 @default("[]")
+  actions             Json                 @default("[]")
+  cooldownSec         Int                  @default(0)
+  maxRetries          Int                  @default(1)
+  highRiskApprovedAt  DateTime? @db.Timestamptz(3)
+  approvedActionsHash String?
+  lastRunAt           DateTime? @db.Timestamptz(3)
+  lastResult          String?
+  runCount            Int                  @default(0)
+  failureCount        Int                  @default(0)
+  createdAt           DateTime @db.Timestamptz(3)             @default(now())
+  executions          AutomationExecution[]
+  @@index([organizationId])
   @@index([userId])
 }
 
@@ -434,14 +644,20 @@ model VehicleCommand {
   id                String             @id @default(cuid())
   vehicleId         String
   vehicle           Vehicle            @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  organizationId    String
   vehicleName       String             @default("")
   providerAccountId String
   userId            String
+  actorKind         String             @default("user")
+  apiKeyId          String?
+  automationId      String?
+  sourceIp          String?
+  authzDecision     Json?
   type              String
   params            Json               @default("{}")
   status            String             @default("queued")
   risk              String             @default("low")
-  idempotencyKey    String             @unique
+  idempotencyKey    String?
   confirmed         Boolean            @default(false)
   createdAt         DateTime @db.Timestamptz(3)           @default(now())
   submittedAt       DateTime? @db.Timestamptz(3)
@@ -465,18 +681,22 @@ model CommandAuditEvent {
 }
 
 model ApiKey {
-  id         String    @id @default(cuid())
-  userId     String
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name       String
-  keyHash    String    @unique
-  prefix     String
-  scopes     Json      @default("[]")
-  lastUsedAt DateTime? @db.Timestamptz(3)
-  expiresAt  DateTime? @db.Timestamptz(3)
-  revokedAt  DateTime? @db.Timestamptz(3)
-  createdAt  DateTime @db.Timestamptz(3)  @default(now())
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  keyHash        String    @unique
+  prefix         String    @unique
+  scopes         Json      @default("[]")
+  lastUsedAt     DateTime? @db.Timestamptz(3)
+  lastUsedIp     String?
+  expiresAt      DateTime  @db.Timestamptz(3)
+  revokedAt      DateTime? @db.Timestamptz(3)
+  createdAt      DateTime  @db.Timestamptz(3) @default(now())
   @@index([userId])
+  @@index([organizationId])
 }
 
 // ---------------------------------------------------------------------------
@@ -507,15 +727,17 @@ model StatusCheck {
 }
 
 model Incident {
-  id         String           @id @default(cuid())
-  title      String
-  severity   String           @default("minor")
-  status     String           @default("investigating")
-  phases     Json             @default("{}")
-  components Json             @default("[]")
-  public     Boolean          @default(true)
-  createdAt  DateTime @db.Timestamptz(3)         @default(now())
-  updates    IncidentUpdate[]
+  id          String           @id @default(cuid())
+  title       String
+  severity    String           @default("minor")
+  status      String           @default("investigating")
+  phases      Json             @default("{}")
+  components  Json             @default("[]")
+  public      Boolean          @default(true)
+  createdById String?
+  source      String           @default("manual")
+  createdAt   DateTime @db.Timestamptz(3)         @default(now())
+  updates     IncidentUpdate[]
 }
 
 model IncidentUpdate {
@@ -552,12 +774,14 @@ model StatusSubscription {
 // ---------------------------------------------------------------------------
 
 model FleetGroup {
-  id          String              @id @default(cuid())
-  ownerId     String
-  name        String
-  description String?
-  vehicles    FleetGroupVehicle[]
-  @@index([ownerId])
+  id             String              @id @default(cuid())
+  organizationId String
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdById    String?
+  name           String
+  description    String?
+  vehicles       FleetGroupVehicle[]
+  @@index([organizationId])
 }
 
 model FleetGroupVehicle {
@@ -569,56 +793,50 @@ model FleetGroupVehicle {
 }
 
 model Department {
-  id      String @id @default(cuid())
-  ownerId String
-  name    String
-  @@index([ownerId])
+  id             String  @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdById    String?
+  name           String
+  @@index([organizationId])
 }
 
 model CostCenter {
-  id      String @id @default(cuid())
-  ownerId String
-  name    String
-  code    String
-  @@index([ownerId])
+  id             String  @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdById    String?
+  name           String
+  code           String
+  @@index([organizationId])
 }
 
 model Driver {
-  id      String  @id @default(cuid())
-  ownerId String
-  userId  String?
-  name    String
-  email   String?
-  phone   String?
-  active  Boolean @default(true)
-  @@index([ownerId])
+  id             String  @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdById    String?
+  userId         String?
+  name           String
+  email          String?
+  phone          String?
+  active         Boolean @default(true)
+  @@index([organizationId])
 }
 
 model VehicleAssignment {
-  id           String     @id @default(cuid())
-  ownerId      String
-  vehicleId    String
-  vehicle      Vehicle    @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  driverId     String
-  departmentId String?
-  costCenterId String?
-  fromAt       DateTime? @db.Timestamptz(3)
-  toAt         DateTime? @db.Timestamptz(3)
+  id             String     @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vehicleId      String
+  vehicle        Vehicle    @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  driverId       String
+  departmentId   String?
+  costCenterId   String?
+  fromAt         DateTime? @db.Timestamptz(3)
+  toAt           DateTime? @db.Timestamptz(3)
   @@index([vehicleId])
-  @@index([ownerId])
-}
-
-/// Per-vehicle access granted by the owner to another user.
-model VehiclePermission {
-  id        String  @id @default(cuid())
-  ownerId   String
-  vehicleId String
-  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  userId    String
-  level     String  @default("viewer") // driver | viewer
-  createdAt DateTime @db.Timestamptz(3) @default(now())
-  @@unique([vehicleId, userId])
-  @@index([userId])
+  @@index([organizationId])
 }
 
 model MaintenanceRecord {
@@ -700,10 +918,11 @@ model BackgroundJob {
 }
 
 model DataRetentionJob {
-  id          String   @id @default(cuid())
-  kind        String
-  ranAt       DateTime @db.Timestamptz(3) @default(now())
-  rowsDeleted Int      @default(0)
-  detail      String?
+  id             String   @id @default(cuid())
+  kind           String
+  organizationId String?
+  ranAt          DateTime @db.Timestamptz(3) @default(now())
+  rowsDeleted    Int      @default(0)
+  detail         String?
   @@index([kind, ranAt])
 }
