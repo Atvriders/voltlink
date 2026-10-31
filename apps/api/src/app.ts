@@ -89,13 +89,11 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
         res.status(503).json({ ready: false, reason: 'migrations_pending', version: APP_VERSION });
         return;
       }
-      res
-        .status(queueOk ? 200 : 503)
-        .json({
-          ready: queueOk,
-          reason: queueOk ? undefined : 'queue_unavailable',
-          version: APP_VERSION,
-        });
+      res.status(queueOk ? 200 : 503).json({
+        ready: queueOk,
+        reason: queueOk ? undefined : 'queue_unavailable',
+        version: APP_VERSION,
+      });
     } catch {
       res.status(503).json({ ready: false, reason: 'database_unavailable', version: APP_VERSION });
     }

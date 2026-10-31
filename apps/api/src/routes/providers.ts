@@ -69,12 +69,10 @@ providersRouter.get(
       const account = accounts.find((a) => a.provider === p.id);
       const ctx = account ? await buildContext(account) : null;
       const readiness = ctx
-        ? await provider
-            .readiness(ctx)
-            .catch(() => ({
-              ok: false,
-              checks: [{ name: 'error', ok: false, detail: 'Readiness check failed.' }],
-            }))
+        ? await provider.readiness(ctx).catch(() => ({
+            ok: false,
+            checks: [{ name: 'error', ok: false, detail: 'Readiness check failed.' }],
+          }))
         : await provider
             .readiness({
               accountId: '',
@@ -139,15 +137,13 @@ providersRouter.get(
   { auth: 'session', target: { kind: 'none' } },
   async (req, res) => {
     if (!env.TESLA_CLIENT_ID || !env.TESLA_CLIENT_SECRET) {
-      res
-        .status(503)
-        .json({
-          error: {
-            code: 'NOT_CONFIGURED',
-            message:
-              'Tesla OAuth is not configured. Set TESLA_CLIENT_ID, TESLA_CLIENT_SECRET, and TESLA_REDIRECT_URI (docs/TESLA_SETUP.md).',
-          },
-        });
+      res.status(503).json({
+        error: {
+          code: 'NOT_CONFIGURED',
+          message:
+            'Tesla OAuth is not configured. Set TESLA_CLIENT_ID, TESLA_CLIENT_SECRET, and TESLA_REDIRECT_URI (docs/TESLA_SETUP.md).',
+        },
+      });
       return;
     }
     const actor = sessionActor(req);

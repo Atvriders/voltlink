@@ -561,9 +561,7 @@ export async function listCommands(vehicleIds: string[], page: number, pageSize:
   return { items: items.map(serializeCommand), total };
 }
 
-export async function getCommand(
-  commandId: string,
-): Promise<{
+export async function getCommand(commandId: string): Promise<{
   command: VehicleCommand;
   events: {
     id: string;

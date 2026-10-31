@@ -554,11 +554,9 @@ authRouter.post(
         ]
       : [];
     if (!body.name || scopes.length === 0) {
-      res
-        .status(400)
-        .json({
-          error: { code: 'VALIDATION', message: 'name and at least one valid scope are required.' },
-        });
+      res.status(400).json({
+        error: { code: 'VALIDATION', message: 'name and at least one valid scope are required.' },
+      });
       return;
     }
     const membership = await prisma.membership.findFirst({

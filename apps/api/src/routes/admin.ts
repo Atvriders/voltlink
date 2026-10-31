@@ -35,14 +35,12 @@ adminRouter.patch(
       if (typeof body[key] === 'string' && body[key]) {
         const v = String(body[key]);
         if (key.endsWith('Days') && (!/^\d+$/.test(v) || Number(v) < 7 || Number(v) > 3650)) {
-          res
-            .status(400)
-            .json({
-              error: {
-                code: 'VALIDATION',
-                message: `${key} must be a number of days between 7 and 3650.`,
-              },
-            });
+          res.status(400).json({
+            error: {
+              code: 'VALIDATION',
+              message: `${key} must be a number of days between 7 and 3650.`,
+            },
+          });
           return;
         }
         await setSetting(key, v.slice(0, 100));
@@ -96,11 +94,9 @@ adminRouter.patch(
       return;
     }
     if (target.isInstanceAdmin && suspended) {
-      res
-        .status(400)
-        .json({
-          error: { code: 'VALIDATION', message: 'Instance administrators cannot be suspended.' },
-        });
+      res.status(400).json({
+        error: { code: 'VALIDATION', message: 'Instance administrators cannot be suspended.' },
+      });
       return;
     }
     await prisma.$transaction([

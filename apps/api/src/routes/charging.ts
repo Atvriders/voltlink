@@ -204,14 +204,12 @@ chargingRouter.post(
       !['flat', 'tou', 'location'].includes(body.type ?? '') ||
       typeof body.pricePerKwh !== 'number'
     ) {
-      res
-        .status(400)
-        .json({
-          error: {
-            code: 'VALIDATION',
-            message: 'Rate rule needs name, type (flat|tou|location), and pricePerKwh.',
-          },
-        });
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION',
+          message: 'Rate rule needs name, type (flat|tou|location), and pricePerKwh.',
+        },
+      });
       return;
     }
     const orgId = await rateOrg(req, 'fleet.manage');

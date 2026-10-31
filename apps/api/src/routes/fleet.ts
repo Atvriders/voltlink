@@ -131,11 +131,9 @@ fleetRouter.post('/groups', fleetManage, async (req, res) => {
       select: { id: true },
     });
     if (rows.length !== vehicleIds.length) {
-      res
-        .status(400)
-        .json({
-          error: { code: 'VALIDATION', message: 'Every vehicleId must be in this organization.' },
-        });
+      res.status(400).json({
+        error: { code: 'VALIDATION', message: 'Every vehicleId must be in this organization.' },
+      });
       return;
     }
   }
@@ -175,11 +173,9 @@ fleetRouter.put(
       select: { id: true },
     });
     if (rows.length !== vehicleIds.length) {
-      res
-        .status(400)
-        .json({
-          error: { code: 'VALIDATION', message: 'Every vehicleId must be in this organization.' },
-        });
+      res.status(400).json({
+        error: { code: 'VALIDATION', message: 'Every vehicleId must be in this organization.' },
+      });
       return;
     }
     await prisma.fleetGroupVehicle.deleteMany({ where: { fleetGroupId: group.id } });

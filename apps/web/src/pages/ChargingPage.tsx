@@ -303,13 +303,11 @@ function RateRuleModal({
           pricePerKwh: Number(price),
           periods:
             type === 'tou'
-              ? tou
-                  .split(',')
-                  .map((p, i) => ({
-                    startMin: i * 360,
-                    endMin: (i + 1) * 360,
-                    pricePerKwh: Number(p),
-                  }))
+              ? tou.split(',').map((p, i) => ({
+                  startMin: i * 360,
+                  endMin: (i + 1) * 360,
+                  pricePerKwh: Number(p),
+                }))
               : [],
         },
       }),

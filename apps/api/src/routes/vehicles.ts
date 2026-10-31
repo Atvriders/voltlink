@@ -340,14 +340,12 @@ vehiclesRouter.post(
       allowHighRisk?: boolean;
     };
     if (!email || !['viewer', 'driver', 'manager'].includes(level ?? '')) {
-      res
-        .status(400)
-        .json({
-          error: {
-            code: 'VALIDATION',
-            message: 'email and level (viewer|driver|manager) required.',
-          },
-        });
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION',
+          message: 'email and level (viewer|driver|manager) required.',
+        },
+      });
       return;
     }
     const target = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
@@ -539,14 +537,12 @@ vehiclesRouter.post(
     const orgId = req.access!.organizationId!;
     const parsed = fenceSchema.safeParse(req.body);
     if (!parsed.success) {
-      res
-        .status(400)
-        .json({
-          error: {
-            code: 'VALIDATION',
-            message: 'Geofence needs name, lat, lon, radiusM, alertOn.',
-          },
-        });
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION',
+          message: 'Geofence needs name, lat, lon, radiusM, alertOn.',
+        },
+      });
       return;
     }
     const g = await prisma.geofence.create({

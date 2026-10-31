@@ -10,6 +10,27 @@ optional standalone status site, all built from one Docker image.
 2. **From source** — for development or bare-metal servers with existing
    PostgreSQL/Redis. See [Development](DEVELOPMENT.md).
 
+## Bare metal (no Docker)
+
+With an existing PostgreSQL (role with CREATEDB) and Redis:
+
+```bash
+npm ci
+npm run build                                    # prisma generate + bundles + SPA staging
+DATABASE_URL=postgresql://user:pass@host:5432/voltlink \
+  node apps/api/dist/cli/migrate.cjs             # migrate role: apply migrations once
+DATABASE_URL=postgresql://user:pass@host:5432/voltlink REDIS_URL=redis://host:6379 \
+  JWT_SECRET=$(openssl rand -hex 32) VL_MASTER_KEY=$(openssl rand -base64 32) \
+  PUBLIC_URL=https://voltlink.example.com node apps/api/dist/index.cjs
+```
+
+Start the other roles the same way, from any working directory:
+`node apps/api/dist/worker.cjs`, `node apps/api/dist/scheduler.cjs` and
+`node apps/api/dist/statusServer.cjs` (port `STATUS_PORT`, default 3001).
+Every role waits for the migrations to be current and never applies them
+itself. The `migrate` role is the only one that deploys migrations, under a
+Postgres advisory lock.
+
 ## Docker Compose
 
 ```bash

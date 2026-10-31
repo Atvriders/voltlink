@@ -67,14 +67,12 @@ orgsRouter.post('/', { auth: 'session', target: { kind: 'none' } }, async (req, 
   const actor = sessionActor(req);
   const allow = await getSetting('instance.allowOrgCreation');
   if (allow === 'false') {
-    res
-      .status(403)
-      .json({
-        error: {
-          code: 'ORG_CREATION_DISABLED',
-          message: 'Creating organizations is disabled by the instance administrator.',
-        },
-      });
+    res.status(403).json({
+      error: {
+        code: 'ORG_CREATION_DISABLED',
+        message: 'Creating organizations is disabled by the instance administrator.',
+      },
+    });
     return;
   }
   const body = (req.body ?? {}) as { name?: string; kind?: string };
@@ -146,11 +144,9 @@ orgsRouter.delete(
     const orgId = req.access!.organizationId!;
     const org = await prisma.organization.findUnique({ where: { id: orgId } });
     if (org?.kind === 'OPERATOR') {
-      res
-        .status(400)
-        .json({
-          error: { code: 'OPERATOR_ORG', message: 'Operator organizations cannot be deleted.' },
-        });
+      res.status(400).json({
+        error: { code: 'OPERATOR_ORG', message: 'Operator organizations cannot be deleted.' },
+      });
       return;
     }
     await prisma.organization.delete({ where: { id: orgId } });
@@ -223,24 +219,20 @@ orgsRouter.patch(
           : null
         : null;
     if (role === null && !body.vehicleScope && !body.providerScope) {
-      res
-        .status(400)
-        .json({
-          error: { code: 'VALIDATION', message: 'role, vehicleScope or providerScope required.' },
-        });
+      res.status(400).json({
+        error: { code: 'VALIDATION', message: 'role, vehicleScope or providerScope required.' },
+      });
       return;
     }
     if (role !== null) {
       // Operator-only roles exist only inside an OPERATOR organization.
       if ((OPERATOR_ONLY_ROLES as readonly string[]).includes(role) && org.kind !== 'OPERATOR') {
-        res
-          .status(400)
-          .json({
-            error: {
-              code: 'ROLE_NOT_ASSIGNABLE',
-              message: 'This role only exists in operator organizations.',
-            },
-          });
+        res.status(400).json({
+          error: {
+            code: 'ROLE_NOT_ASSIGNABLE',
+            message: 'This role only exists in operator organizations.',
+          },
+        });
         return;
       }
       if (role === 'OWNER' || member.role === 'OWNER') {
@@ -248,14 +240,12 @@ orgsRouter.patch(
         const { orgPermissions } = await import('../authz/access');
         const perms = await orgPermissions(actor, orgId);
         if (!perms.has('members.assign_owner')) {
-          res
-            .status(403)
-            .json({
-              error: {
-                code: 'FORBIDDEN',
-                message: 'Missing members.assign_owner in this organization.',
-              },
-            });
+          res.status(403).json({
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Missing members.assign_owner in this organization.',
+            },
+          });
           return;
         }
         // The last OWNER can never be demoted.
@@ -264,11 +254,9 @@ orgsRouter.patch(
             where: { organizationId: orgId, role: 'OWNER', status: 'ACTIVE' },
           });
           if (owners <= 1) {
-            res
-              .status(409)
-              .json({
-                error: { code: 'LAST_OWNER', message: 'The last owner cannot be demoted.' },
-              });
+            res.status(409).json({
+              error: { code: 'LAST_OWNER', message: 'The last owner cannot be demoted.' },
+            });
             return;
           }
         }
@@ -312,14 +300,12 @@ orgsRouter.delete(
       const { orgPermissions } = await import('../authz/access');
       const perms = await orgPermissions(actor, orgId);
       if (!perms.has('members.assign_owner')) {
-        res
-          .status(403)
-          .json({
-            error: {
-              code: 'FORBIDDEN',
-              message: 'Missing members.assign_owner in this organization.',
-            },
-          });
+        res.status(403).json({
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Missing members.assign_owner in this organization.',
+          },
+        });
         return;
       }
       const owners = await prisma.membership.count({
@@ -382,11 +368,9 @@ orgsRouter.post(
         select: { organizationId: true },
       });
       if (!vehicle || vehicle.organizationId !== orgId) {
-        res
-          .status(404)
-          .json({
-            error: { code: 'NOT_FOUND', message: 'Vehicle not found in this organization.' },
-          });
+        res.status(404).json({
+          error: { code: 'NOT_FOUND', message: 'Vehicle not found in this organization.' },
+        });
         return;
       }
     }
@@ -514,14 +498,12 @@ orgsRouter.post(
       }),
     ]);
     if (!from || from.role !== 'OWNER' || !to || to.status !== 'ACTIVE') {
-      res
-        .status(400)
-        .json({
-          error: {
-            code: 'INVALID_TRANSFER',
-            message: 'Ownership can only transfer from the current owner to an active member.',
-          },
-        });
+      res.status(400).json({
+        error: {
+          code: 'INVALID_TRANSFER',
+          message: 'Ownership can only transfer from the current owner to an active member.',
+        },
+      });
       return;
     }
     await prisma.$transaction([
@@ -653,14 +635,12 @@ invitationsRouter.post(
     }
     const user = await prisma.user.findUnique({ where: { id: actor.userId } });
     if (!user || user.email.toLowerCase() !== invitation.email.toLowerCase()) {
-      res
-        .status(403)
-        .json({
-          error: {
-            code: 'EMAIL_MISMATCH',
-            message: 'This invitation belongs to another email address.',
-          },
-        });
+      res.status(403).json({
+        error: {
+          code: 'EMAIL_MISMATCH',
+          message: 'This invitation belongs to another email address.',
+        },
+      });
       return;
     }
     if (invitation.kind === 'vehicle_share' && invitation.vehicleId) {

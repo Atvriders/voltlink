@@ -88,9 +88,7 @@ function sourceValue(req: Request, src: Source): string | undefined {
 
 const RESOURCE_LOADERS: Record<
   ResourceKind,
-  (
-    id: string,
-  ) => Promise<{
+  (id: string) => Promise<{
     id: string;
     vehicleId?: string;
     organizationId?: string;

@@ -126,11 +126,9 @@ notificationsRouter.put(
       enabled?: boolean;
     };
     if (!channel || !event || !severity || typeof enabled !== 'boolean') {
-      res
-        .status(400)
-        .json({
-          error: { code: 'VALIDATION', message: 'channel, event, severity, enabled required.' },
-        });
+      res.status(400).json({
+        error: { code: 'VALIDATION', message: 'channel, event, severity, enabled required.' },
+      });
       return;
     }
     await prisma.notificationPreference.upsert({
@@ -159,11 +157,9 @@ notificationsRouter.put(
       if (key in body) {
         const v = body[key];
         if (v && !validateWebhookUrl(v)) {
-          res
-            .status(400)
-            .json({
-              error: { code: 'VALIDATION', message: `${key} must be a valid http(s) URL.` },
-            });
+          res.status(400).json({
+            error: { code: 'VALIDATION', message: `${key} must be a valid http(s) URL.` },
+          });
           return;
         }
         if (v) {
@@ -215,11 +211,9 @@ notificationsRouter.post(
   async (req, res) => {
     const { name, url } = (req.body ?? {}) as { name?: string; url?: string };
     if (!name || !url || !validateWebhookUrl(url)) {
-      res
-        .status(400)
-        .json({
-          error: { code: 'VALIDATION', message: 'Name and a valid http(s) URL are required.' },
-        });
+      res.status(400).json({
+        error: { code: 'VALIDATION', message: 'Name and a valid http(s) URL are required.' },
+      });
       return;
     }
     try {
@@ -244,11 +238,9 @@ notificationsRouter.post(
         secretSealed: sealJson({ current: secret }).ciphertext,
       },
     });
-    res
-      .status(201)
-      .json({
-        data: { id: w.id, name: w.name, displayHint: w.displayHint, enabled: w.enabled, secret },
-      });
+    res.status(201).json({
+      data: { id: w.id, name: w.name, displayHint: w.displayHint, enabled: w.enabled, secret },
+    });
   },
 );
 

@@ -62,14 +62,12 @@ usersRouter.post(
       newPassword?: string;
     };
     if (!currentPassword || !newPassword || newPassword.length < 10) {
-      res
-        .status(400)
-        .json({
-          error: {
-            code: 'VALIDATION',
-            message: 'Current password and a new password (10+ characters) required.',
-          },
-        });
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION',
+          message: 'Current password and a new password (10+ characters) required.',
+        },
+      });
       return;
     }
     const user = await prisma.user.findUnique({ where: { id: actor.userId } });
@@ -194,14 +192,12 @@ usersRouter.post(
           where: { organizationId: m.organizationId, status: 'ACTIVE', userId: { not: user.id } },
         });
         if (others > 0) {
-          res
-            .status(409)
-            .json({
-              error: {
-                code: 'OWNERSHIP_TRANSFER_REQUIRED',
-                message: 'Transfer ownership of your organization before deleting the account.',
-              },
-            });
+          res.status(409).json({
+            error: {
+              code: 'OWNERSHIP_TRANSFER_REQUIRED',
+              message: 'Transfer ownership of your organization before deleting the account.',
+            },
+          });
           return;
         }
       }
@@ -227,15 +223,13 @@ usersRouter.post(
       entityId: user.id,
     });
     res.clearCookie('vl_session');
-    res
-      .status(202)
-      .json({
-        data: {
-          providerRevocation: accounts.map(() => ({
-            message: 'See docs/PRIVACY.md for provider revocation links.',
-          })),
-        },
-      });
+    res.status(202).json({
+      data: {
+        providerRevocation: accounts.map(() => ({
+          message: 'See docs/PRIVACY.md for provider revocation links.',
+        })),
+      },
+    });
   },
 );
 
@@ -277,15 +271,13 @@ usersRouter.patch(
   '/retention',
   { auth: 'session', target: { kind: 'self' } },
   async (_req, res) => {
-    res
-      .status(404)
-      .json({
-        error: {
-          code: 'NOT_FOUND',
-          message:
-            'Retention is configured per organization at PATCH /api/v1/orgs/:orgId/settings/retention.',
-        },
-      });
+    res.status(404).json({
+      error: {
+        code: 'NOT_FOUND',
+        message:
+          'Retention is configured per organization at PATCH /api/v1/orgs/:orgId/settings/retention.',
+      },
+    });
   },
 );
 

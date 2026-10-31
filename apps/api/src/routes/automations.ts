@@ -72,15 +72,13 @@ automationsRouter.get('/', { auth: 'session', target: { kind: 'none' } }, async 
 automationsRouter.post('/', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
   const parsed = specSchema.safeParse(req.body);
   if (!parsed.success) {
-    res
-      .status(400)
-      .json({
-        error: {
-          code: 'VALIDATION',
-          message: 'Invalid automation definition.',
-          details: parsed.error.flatten(),
-        },
-      });
+    res.status(400).json({
+      error: {
+        code: 'VALIDATION',
+        message: 'Invalid automation definition.',
+        details: parsed.error.flatten(),
+      },
+    });
     return;
   }
   const d = parsed.data;
@@ -264,14 +262,12 @@ automationsRouter.post(
   async (req, res) => {
     const row = await prisma.automation.findUniqueOrThrow({ where: { id: String(req.params.id) } });
     if (row.triggerType !== 'webhook') {
-      res
-        .status(400)
-        .json({
-          error: {
-            code: 'NOT_WEBHOOK',
-            message: 'Only webhook-triggered automations can have an inbound hook.',
-          },
-        });
+      res.status(400).json({
+        error: {
+          code: 'NOT_WEBHOOK',
+          message: 'Only webhook-triggered automations can have an inbound hook.',
+        },
+      });
       return;
     }
     const { generateWebhookSecret } = await import('../webhooks/standardWebhooks');
@@ -295,11 +291,9 @@ automationsRouter.post(
       entityType: 'inboundWebhook',
       entityId: hook.id,
     });
-    res
-      .status(201)
-      .json({
-        data: { url: `${env.PUBLIC_URL}/api/v1/hooks/automations/${publicId}`, secret, publicId },
-      });
+    res.status(201).json({
+      data: { url: `${env.PUBLIC_URL}/api/v1/hooks/automations/${publicId}`, secret, publicId },
+    });
   },
 );
 
