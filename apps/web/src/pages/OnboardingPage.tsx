@@ -18,11 +18,13 @@ import {
 } from 'lucide-react';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
-import { Badge, Button, Card, Field, ProgressBar, Select } from '../components/ui';
+import { Badge, Button, Card, Field, ProgressBar, Select, Spinner } from '../components/ui';
 
 const STEPS = [
   { id: 'welcome', title: 'Welcome to VoltLink' },
   { id: 'privacy', title: 'Your data stays yours' },
+  { id: 'account', title: 'Your account' },
+  { id: 'email', title: 'Verify your email' },
   { id: 'security', title: 'Secure your account' },
   { id: 'provider', title: 'Vehicles' },
   { id: 'units', title: 'Units & time zone' },
@@ -39,15 +41,45 @@ export default function OnboardingPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [step, setStep] = useState(() => Number(localStorage.getItem('voltlink-onboarding') ?? 0));
+  const [step, setStep] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+  const [verified, setVerified] = useState(user?.emailVerified === true);
+  // F-ONBOARD: resume state lives on the server, never in localStorage.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const data = await api<{ step: string; completedAt: string | null }>(
+          '/api/v1/users/onboarding',
+        );
+        if (data.completedAt) {
+          navigate('/');
+          return;
+        }
+        const idx = STEPS.findIndex((s) => s.id === data.step);
+        setStep(idx >= 0 ? idx : 0);
+      } catch {
+        /* first run: start at welcome */
+      }
+      setLoaded(true);
+    })();
+  }, [navigate]);
+  const persist = (id: string) =>
+    api('/api/v1/users/onboarding', { method: 'PUT', body: { step: id } }).catch(() => undefined);
+  const resend = async () => {
+    await api('/api/v1/auth/resend-verification', { method: 'POST' });
+    for (let i = 0; i < 12; i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      const me = await api<{ emailVerified: boolean }>('/api/v1/auth/me');
+      if (me.emailVerified) {
+        setVerified(true);
+        return;
+      }
+    }
+  };
   const [units, setUnits] = useState(user?.units ?? 'metric');
   const [timezone, setTimezone] = useState(user?.timezone ?? 'UTC');
   const [retentionDays, setRetentionDays] = useState(365);
   const [notificationEnabled, setNotificationEnabled] = useState(true);
-
-  useEffect(() => {
-    localStorage.setItem('voltlink-onboarding', String(step));
-  }, [step]);
 
   const saveSettings = useMutation({
     mutationFn: () => api('/api/v1/users/settings', { method: 'PATCH', body: { units, timezone } }),
@@ -67,8 +99,25 @@ export default function OnboardingPage() {
     },
   });
 
+  useEffect(() => {
+    if (loaded) void persist(STEPS[step]!.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, loaded]);
+
+  if (!loaded) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Spinner size={22} />
+      </div>
+    );
+  }
+
   const next = async () => {
     if (step >= STEPS.length - 1) {
+      await api('/api/v1/users/onboarding', {
+        method: 'PUT',
+        body: { step: 'done', done: true },
+      }).catch(() => undefined);
       navigate('/');
       return;
     }
@@ -92,6 +141,28 @@ export default function OnboardingPage() {
       <ProgressBar value={(step + 1) * (100 / STEPS.length)} />
       <Card title={STEPS[step]!.title}>
         <div className="min-h-64 space-y-4">
+          {step === 2 && (
+            <div className="space-y-3">
+              <p className="text-sm text-subtle">
+                Signed in as <strong>{user?.email}</strong>.
+              </p>
+              <p className="text-sm text-subtle">
+                Your account is already created — nothing to fill in.
+              </p>
+            </div>
+          )}
+          {step === 3 && (
+            <div className="space-y-3">
+              <p className="text-sm text-subtle">
+                {verified
+                  ? 'Your email address is verified.'
+                  : 'Check your inbox for the verification link.'}
+              </p>
+              {!verified && (
+                <Button onClick={() => void resend()}>Resend verification email</Button>
+              )}
+            </div>
+          )}
           {step === 0 && (
             <Intro
               body={

@@ -12,6 +12,55 @@ import { removeCredentials } from '../providers/registry';
 import { sha256hex } from '../core/crypto';
 
 export const usersRouter = policyRouter('/api/v1/users');
+const ONBOARDING_STEPS = [
+  'welcome',
+  'privacy',
+  'account',
+  'email',
+  'security',
+  'provider',
+  'units',
+  'timezone',
+  'retention',
+  'privacy-zone',
+  'notifications',
+  'import',
+  'sharing',
+  'freshness',
+  'controls',
+  'done',
+] as const;
+
+usersRouter.get('/onboarding', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: sessionActor(req).userId } });
+  res.json({
+    data: {
+      step: user.onboardingStep,
+      completedAt: user.onboardingCompletedAt?.toISOString() ?? null,
+      skipped: user.onboardingSkipped,
+    },
+  });
+});
+
+usersRouter.put('/onboarding', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
+  const body = (req.body ?? {}) as { step?: string; skipped?: string[]; done?: boolean };
+  const data: Record<string, unknown> = {};
+  if (body.done === true) data.onboardingCompletedAt = new Date();
+  if (typeof body.step === 'string') {
+    if (!(ONBOARDING_STEPS as readonly string[]).includes(body.step)) {
+      res.status(400).json({ error: { code: 'VALIDATION', message: 'Unknown onboarding step.' } });
+      return;
+    }
+    data.onboardingStep = body.step;
+  }
+  if (Array.isArray(body.skipped)) {
+    data.onboardingSkipped = body.skipped.filter((s) =>
+      (ONBOARDING_STEPS as readonly string[]).includes(s),
+    );
+  }
+  await prisma.user.update({ where: { id: sessionActor(req).userId }, data });
+  res.json({ data: { ok: true } });
+});
 
 const self: { auth: 'session'; stepUp?: { possession?: boolean }; target: { kind: 'self' } } = {
   auth: 'session',
