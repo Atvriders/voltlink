@@ -4,6 +4,11 @@
 
 let csrfToken: string | null = null;
 
+/** Drop the in-memory CSRF token on sign-out (F-SIGNOUT): the next user gets a fresh one. */
+export function resetCsrf(): void {
+  csrfToken = null;
+}
+
 export class ApiError extends Error {
   code: string;
   status: number;

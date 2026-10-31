@@ -10,7 +10,10 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { api } from '../api/client';
+import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { api, resetCsrf } from '../api/client';
+import { realtimeStop } from '../lib/realtime';
 import type { UserPublic } from '@voltlink/shared';
 import { normalizeThemeId } from './themes';
 
@@ -29,6 +32,17 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserPublic | null>(null);
   const [loading, setLoading] = useState(true);
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+
+  // F-SIGNOUT: stop SSE first, then clear the entire query + mutation cache so
+  // the next user in this tab can never see the previous user's data.
+  const resetClientState = useCallback(() => {
+    realtimeStop();
+    void qc.cancelQueries();
+    qc.clear();
+    resetCsrf();
+  }, [qc]);
 
   const refresh = useCallback(async () => {
     try {
@@ -45,11 +59,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
     const onUnauthorized = () => {
+      resetClientState();
       setUser(null);
     };
     window.addEventListener('voltlink:unauthorized', onUnauthorized);
     return () => window.removeEventListener('voltlink:unauthorized', onUnauthorized);
-  }, [refresh]);
+  }, [refresh, resetClientState]);
 
   const login = useCallback(async (email: string, password: string, totp?: string) => {
     const res = await api<{ user?: UserPublic; totpRequired?: boolean }>('/api/v1/auth/login', {
@@ -58,11 +73,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     if (res.totpRequired) return { totpRequired: true };
     if (res.user) {
+      resetClientState();
       setUser(res.user);
       applyTheme(res.user);
     }
     return {};
-  }, []);
+  }, [resetClientState]);
 
   const logout = useCallback(async () => {
     try {
@@ -73,10 +89,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     try {
       await api('/api/v1/auth/logout', { method: 'POST' });
-    } finally {
-      setUser(null);
+    } catch {
+      /* the session may already be gone */
     }
-  }, []);
+    resetClientState();
+    setUser(null);
+    navigate('/login', { replace: true });
+  }, [resetClientState, navigate]);
 
   const value = useMemo(
     () => ({ user, loading, login, logout, refresh }),

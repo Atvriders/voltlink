@@ -442,6 +442,7 @@ function TotpModal({ open, onClose }: { open: boolean; onClose: () => void }) {
 
 function SessionsTab() {
   const qc = useQueryClient();
+  const { logout } = useAuth();
   const { data: sessions } = useQuery({
     queryKey: ['sessions'],
     queryFn: () => api<SessionInfo[]>('/api/v1/auth/sessions'),
@@ -479,7 +480,16 @@ function SessionsTab() {
               </p>
             </div>
             {s.current ? (
-              <Badge tone="ok">this device</Badge>
+              <>
+                <Badge tone="ok">this device</Badge>
+                <Button
+                  variant="ghost"
+                  className="px-2 py-1 text-xs text-danger"
+                  onClick={() => void logout()}
+                >
+                  Sign out
+                </Button>
+              </>
             ) : (
               <Button
                 variant="ghost"

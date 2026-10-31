@@ -5,6 +5,8 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { prepare } from '../lib/push';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { realtimeStart, realtimeStop } from '../lib/realtime';
+import { useAuth } from '../auth/AuthContext';
 import {
   Activity,
   Bell,
@@ -16,6 +18,7 @@ import {
   CircleUserRound,
   Gauge,
   LayoutDashboard,
+  LogOut,
   Map as MapIcon,
   Menu,
   Moon,
@@ -200,10 +203,65 @@ function ThemeMenu() {
   );
 }
 
+function AccountMenu({ align = 'left', email }: { align?: 'left' | 'right'; email: string }) {
+  const { logout } = useAuth();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-subtle hover:bg-panel2 hover:text-ink"
+        aria-label="Account menu"
+        aria-expanded={open}
+      >
+        <CircleUserRound size={15} />
+        <span className="min-w-0 flex-1 truncate">{email}</span>
+      </button>
+      {open && (
+        <div
+          className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} bottom-full z-40 mb-1 w-56 rounded-xl border border-line bg-panel p-1 shadow-2xl`}
+          role="menu"
+        >
+          <p role="none" className="px-2.5 py-1.5 text-xs text-faint">
+            Signed in as <span className="text-ink">{email}</span>
+          </p>
+          <Link
+            to="/settings"
+            role="menuitem"
+            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm hover:bg-panel2"
+            onClick={() => setOpen(false)}
+          >
+            <Settings size={15} /> Settings
+          </Link>
+          <button
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              void logout();
+            }}
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-danger hover:bg-panel2"
+          >
+            <LogOut size={15} /> Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Shell({ user, children }: { user: UserPublic | null; children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
   const qc = useQueryClient();
+  const { logout } = useAuth();
   const { data: unreadData } = useUnread();
   const unread = unreadData?.unread ?? 0;
 
@@ -213,34 +271,18 @@ export function Shell({ user, children }: { user: UserPublic | null; children: R
     prepare().catch(() => undefined);
   }, [user]);
 
-  // Real-time SSE: refresh vehicles + notifications on events.
+  // Real-time SSE via the singleton so sign-out can stop the stream before
+  // the cache is cleared (F-SIGNOUT).
   useEffect(() => {
-    let es: EventSource | null = null;
-    let closed = false;
-    const connect = () => {
-      if (closed) return;
-      es = new EventSource('/api/v1/realtime');
-      es.addEventListener('vehicle_state', () => {
-        void qc.invalidateQueries({ queryKey: ['vehicles'] });
-      });
-      es.addEventListener('notification', () => {
-        void qc.invalidateQueries({ queryKey: ['notifications'] });
-      });
-      es.addEventListener('command_finished', () => {
+    realtimeStart({
+      vehicle_state: () => void qc.invalidateQueries({ queryKey: ['vehicles'] }),
+      notification: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
+      command_finished: () => {
         void qc.invalidateQueries({ queryKey: ['commands'] });
         void qc.invalidateQueries({ queryKey: ['vehicles'] });
-      });
-      es.onerror = () => {
-        es?.close();
-        es = null;
-        setTimeout(connect, 5000);
-      };
-    };
-    connect();
-    return () => {
-      closed = true;
-      es?.close();
-    };
+      },
+    });
+    return () => realtimeStop();
   }, [qc]);
 
   useEffect(() => {
@@ -290,9 +332,8 @@ export function Shell({ user, children }: { user: UserPublic | null; children: R
           >
             <MonitorPlay size={16} /> Presentation mode
           </Link>
-          <div className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-faint">
-            <CircleUserRound size={15} />
-            <span className="truncate">{user?.email}</span>
+          <div className="mt-1">
+            <AccountMenu email={user?.email ?? ''} />
           </div>
         </div>
       </aside>
@@ -327,6 +368,17 @@ export function Shell({ user, children }: { user: UserPublic | null; children: R
                 </NavLink>
               ))}
             </nav>
+            <div className="border-t border-line p-2">
+              <button
+                onClick={() => {
+                  setMobileOpen(false);
+                  void logout();
+                }}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-danger hover:bg-panel2"
+              >
+                <LogOut size={15} /> Sign out
+              </button>
+            </div>
           </aside>
         </div>
       )}
@@ -361,6 +413,9 @@ export function Shell({ user, children }: { user: UserPublic | null; children: R
                 <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-danger" />
               )}
             </Link>
+            <div className="lg:hidden">
+              <AccountMenu align="right" email={user?.email ?? ''} />
+            </div>
             <ThemeMenu />
             <Link
               to="/settings"
