@@ -36,6 +36,7 @@ model User {
   onboardingStep         String    @default("welcome")
   onboardingCompletedAt  DateTime? @db.Timestamptz(3)
   onboardingSkipped      String[]  @default([])
+  favoriteVehicleIds     String[]  @default([])
   demoEnabled            Boolean   @default(false)
   presentationMode       Boolean   @default(false)
   createdAt              DateTime  @db.Timestamptz(3) @default(now())

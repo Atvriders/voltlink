@@ -36,6 +36,7 @@ describe('authentication enforcement', () => {
     '/api/v1/fleet/overview',
     '/api/v1/admin/health',
     '/api/v1/users/settings',
+    '/api/v1/users/favorites',
   ];
 
   for (const p of protectedPaths) {

@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { Battery, Gauge } from 'lucide-react';
 import { api } from '../api/client';
+import { useSelectedVehicle } from '../lib/vehicleSelection';
 import { Badge, Card, EmptyState, Select, Spinner, Stat } from '../components/ui';
 import type {
   BatteryHealth,
@@ -32,7 +33,8 @@ const CHART_COLORS: Record<string, string> = {
 };
 
 export default function BatteryPage() {
-  const [vehicleId, setVehicleId] = useState('');
+  const { selectedId, setVehicle } = useSelectedVehicle();
+  const [vehicleId, setVehicleId] = useState(selectedId ?? '');
   const [days, setDays] = useState(14);
   const [batteryDays, setBatteryDays] = useState(14);
   const { data: vehicles } = useQuery({
@@ -83,7 +85,10 @@ export default function BatteryPage() {
           <Select
             aria-label="Vehicle"
             value={active}
-            onChange={(e) => setVehicleId(e.target.value)}
+            onChange={(e) => {
+              setVehicleId(e.target.value);
+              setVehicle(e.target.value);
+            }}
             className="text-xs"
           >
             {(vehicles ?? []).map((v) => (

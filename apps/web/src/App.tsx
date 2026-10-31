@@ -12,6 +12,7 @@ import {
 } from 'react-router-dom';
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './auth/AuthContext';
+import { SelectedVehicleProvider } from './lib/vehicleSelection';
 import { Shell } from './components/Shell';
 import { StepUpDialogHost } from './components/StepUpDialog';
 import { ErrorBoundary, RouteErrorFallback } from './components/boundaries';
@@ -172,14 +173,22 @@ function AppRoutes() {
   );
 }
 
+function SelectionProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user) return <>{children}</>;
+  return <SelectedVehicleProvider userId={user.id}>{children}</SelectedVehicleProvider>;
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <AppRoutes />
-          <StepUpDialogHost />
-          <ToastRegion />
+          <SelectionProvider>
+            <AppRoutes />
+            <StepUpDialogHost />
+            <ToastRegion />
+          </SelectionProvider>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>

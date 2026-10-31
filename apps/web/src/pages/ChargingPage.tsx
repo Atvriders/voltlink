@@ -17,12 +17,14 @@ import {
   Spinner,
 } from '../components/ui';
 import { fmtClock, fmtEnergy, fmtMoney } from '../lib/format';
+import { useSelectedVehicle } from '../lib/vehicleSelection';
 import type { ChargeSession, RateRule } from '@voltlink/shared';
 
 export default function ChargingPage() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
-  const [vehicleId, setVehicleId] = useState('');
+  const { selectedId } = useSelectedVehicle();
+  const [vehicleId, setVehicleId] = useState(selectedId ?? '');
   const [source, setSource] = useState('');
   const [addRule, setAddRule] = useState(false);
   const [editSession, setEditSession] = useState<ChargeSession | null>(null);

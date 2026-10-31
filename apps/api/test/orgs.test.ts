@@ -367,4 +367,58 @@ describe('organizations', () => {
     await prisma.organization.deleteMany({ where: { id: { in: [org.id, org2.id] } } });
     await prisma.user.deleteMany({ where: { id: { in: [owner.id, other.id] } } });
   });
+
+  it('§2.8 favorites: stores only visible vehicles and returns them', async () => {
+    const u = await mkUser(`fav-${Date.now()}@example.test`);
+    const token = await sessionFor(u.id, false);
+    const org = await prisma.organization.create({
+      data: {
+        kind: 'PERSONAL',
+        name: 'Fav',
+        createdById: u.id,
+        memberships: { create: { userId: u.id, role: 'OWNER' } },
+      },
+    });
+    const account = await prisma.providerAccount.create({
+      data: { organizationId: org.id, provider: 'demo', label: 'Fav demo', demo: true },
+    });
+    const v1 = await prisma.vehicle.create({
+      data: {
+        organizationId: org.id,
+        providerAccountId: account.id,
+        provider: 'demo',
+        providerVehicleId: `fav-a-${Date.now()}`,
+        displayName: 'Fav A',
+        demo: true,
+      },
+    });
+    const v2 = await prisma.vehicle.create({
+      data: {
+        organizationId: org.id,
+        providerAccountId: account.id,
+        provider: 'demo',
+        providerVehicleId: `fav-b-${Date.now()}`,
+        displayName: 'Fav B',
+        demo: true,
+      },
+    });
+    const agent = sessionAgent(token);
+    // CSRF is required for non-GET routes; fetch the token first.
+    const csrfRes = await agent.get('/api/v1/auth/csrf');
+    const csrf = (csrfRes.body.data as { token: string }).token;
+    // bogus ids and duplicates are dropped; invisible ids are rejected
+    const put = await agent
+      .put('/api/v1/users/favorites')
+      .set('x-vl-csrf', csrf)
+      .send({ vehicleIds: [v1.id, v2.id, 'bogus-id', v1.id] });
+    expect(put.status).toBe(200);
+    const stored = (put.body.data as { favoriteVehicleIds: string[] }).favoriteVehicleIds;
+    expect(stored).toEqual([v1.id, v2.id]);
+    const got = await agent.get('/api/v1/users/favorites');
+    expect(got.body.data).toEqual([v1.id, v2.id]);
+    await prisma.vehicle.deleteMany({ where: { id: { in: [v1.id, v2.id] } } });
+    await prisma.providerAccount.delete({ where: { id: account.id } });
+    await prisma.organization.delete({ where: { id: org.id } });
+    await prisma.user.delete({ where: { id: u.id } });
+  });
 });

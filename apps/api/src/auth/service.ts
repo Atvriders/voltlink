@@ -68,6 +68,9 @@ export function publicUser(u: {
   theme: string;
   demoEnabled: boolean;
   presentationMode: boolean;
+  onboardingCompletedAt: Date | null;
+  onboardingStep: string;
+  favoriteVehicleIds: string[];
   createdAt: Date;
 }): UserPublic {
   return {
@@ -83,6 +86,9 @@ export function publicUser(u: {
     theme: u.theme,
     demoEnabled: u.demoEnabled,
     presentationMode: u.presentationMode,
+    onboardingCompletedAt: u.onboardingCompletedAt?.toISOString() ?? null,
+    onboardingStep: u.onboardingStep,
+    favoriteVehicleIds: u.favoriteVehicleIds,
     createdAt: u.createdAt.toISOString(),
   };
 }

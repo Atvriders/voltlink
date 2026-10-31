@@ -10,6 +10,7 @@ import { sseRevokeUser } from '../core/sse';
 import { getQueue } from '../core/queue';
 import { removeCredentials } from '../providers/registry';
 import { THEME_ID_SET } from '@voltlink/shared';
+import { accessibleVehicleIds } from '../authz/access';
 import { sha256hex } from '../core/crypto';
 
 export const usersRouter = policyRouter('/api/v1/users');
@@ -61,6 +62,31 @@ usersRouter.put('/onboarding', { auth: 'session', target: { kind: 'none' } }, as
   }
   await prisma.user.update({ where: { id: sessionActor(req).userId }, data });
   res.json({ data: { ok: true } });
+});
+
+// §2.8 vehicle selection: server-persisted favorites. Visibility is checked —
+// a user can only favorite vehicles they can read.
+usersRouter.get('/favorites', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
+  const user = await prisma.user.findUnique({
+    where: { id: sessionActor(req).userId },
+    select: { favoriteVehicleIds: true },
+  });
+  res.json({ data: user?.favoriteVehicleIds ?? [] });
+});
+
+usersRouter.put('/favorites', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
+  const actor = req.actor!;
+  const body = (req.body ?? {}) as { vehicleIds?: unknown };
+  const wanted = Array.isArray(body.vehicleIds)
+    ? [...new Set(body.vehicleIds.filter((v): v is string => typeof v === 'string').slice(0, 50))]
+    : [];
+  const visible = await accessibleVehicleIds(actor, 'vehicles.read');
+  const allowed = wanted.filter((id) => visible.includes(id));
+  await prisma.user.update({
+    where: { id: sessionActor(req).userId },
+    data: { favoriteVehicleIds: allowed },
+  });
+  res.json({ data: { favoriteVehicleIds: allowed } });
 });
 
 const self: { auth: 'session'; stepUp?: { possession?: boolean }; target: { kind: 'self' } } = {

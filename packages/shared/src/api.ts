@@ -15,6 +15,9 @@ export interface UserPublic {
   theme: string;
   demoEnabled: boolean;
   presentationMode: boolean;
+  onboardingCompletedAt?: string | null;
+  onboardingStep?: string;
+  favoriteVehicleIds?: string[];
   createdAt: string;
 }
 

@@ -7,6 +7,7 @@ import { prepare } from '../lib/push';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { realtimeStart, realtimeStop } from '../lib/realtime';
 import { useAuth } from '../auth/AuthContext';
+import { readRecent, useSelectedVehicle } from '../lib/vehicleSelection';
 import {
   Activity,
   Bell,
@@ -31,6 +32,7 @@ import {
   X,
   Zap,
   MonitorPlay,
+  Star,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { setTheme, THEMES } from '../auth/AuthContext';
@@ -89,9 +91,17 @@ function useUnread() {
 
 function VehicleSwitcher() {
   const { data: vehicles } = useVehicles();
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const { selectedId, setVehicle } = useSelectedVehicle();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const [favorites, setFavorites] = useState<string[]>(user?.favoriteVehicleIds ?? []);
+  const { data: groups } = useQuery({
+    queryKey: ['fleet-groups'],
+    queryFn: () => api<{ id: string; name: string }[]>('/api/v1/fleet/groups'),
+  });
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -101,47 +111,125 @@ function VehicleSwitcher() {
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
 
+  const toggleFavorite = (id: string) => {
+    const next = favorites.includes(id) ? favorites.filter((v) => v !== id) : [...favorites, id];
+    setFavorites(next);
+    void api('/api/v1/users/favorites', { method: 'PUT', body: { vehicleIds: next } })
+      .then(() => qc.invalidateQueries({ queryKey: ['me'] }))
+      .catch(() => undefined);
+  };
+
+  const list = vehicles ?? [];
+  const byId = new Map(list.map((v) => [v.id, v]));
+  const recents = user
+    ? readRecent(user.id)
+        .map((id) => byId.get(id))
+        .filter(Boolean)
+    : [];
+  const favs = favorites.map((id) => byId.get(id)).filter(Boolean) as VehicleWithState[];
+  const rest = list.filter(
+    (v) => !favorites.includes(v.id) && !recents.some((r) => r!.id === v.id),
+  );
+  const selected = selectedId ? byId.get(selectedId) : null;
+
   const pick = (id: string) => {
     setOpen(false);
+    setVehicle(id);
     navigate(`/vehicles/${id}`);
   };
 
-  if (!vehicles || vehicles.length === 0) return null;
+  if (list.length === 0) return null;
   return (
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-2 rounded-lg border border-line bg-panel2 px-2.5 py-1.5 text-sm hover:border-faint"
         aria-expanded={open}
-        aria-haspopup="listbox"
+        aria-haspopup="menu"
+        aria-label={
+          selected ? `Vehicle: ${selected.displayName}. Change vehicle` : 'Choose vehicle'
+        }
       >
         <Car size={15} className="text-accent" />
-        <span className="hidden sm:inline">Fleet</span>
-        <span className="text-faint">{vehicles.length}</span>
+        <span className="hidden sm:inline">{selected ? selected.displayName : 'Fleet'}</span>
+        <span className="text-faint">{list.length}</span>
         <ChevronDown size={13} />
       </button>
       {open && (
         <div
-          className="absolute right-0 top-full z-40 mt-1 w-56 rounded-xl border border-line bg-panel p-1 shadow-2xl"
-          role="listbox"
+          className="absolute right-0 top-full z-40 mt-1 max-h-[70vh] w-64 overflow-auto rounded-xl border border-line bg-panel p-1 shadow-2xl"
+          role="menu"
         >
-          {vehicles.map((v) => (
-            <button
-              key={v.id}
-              onClick={() => pick(v.id)}
-              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-panel2"
-            >
-              <span
-                className="h-2.5 w-2.5 rounded-full"
-                style={{ background: v.exteriorColor ?? '#8b9bb4' }}
-                aria-hidden
-              />
-              <span className="flex-1 truncate">{v.displayName}</span>
-              {v.state?.chargingState === 'charging' && (
-                <Zap size={13} className="text-charging" aria-label="charging" />
+          {favs.length > 0 && (
+            <>
+              <MenuLabel>Favorites</MenuLabel>
+              {favs.map((v) => (
+                <VehicleRow
+                  key={`fav:${v.id}`}
+                  v={v}
+                  fav
+                  onPick={pick}
+                  onToggle={() => toggleFavorite(v.id)}
+                />
+              ))}
+            </>
+          )}
+          {recents.length > 0 && (
+            <>
+              <MenuLabel>Recent</MenuLabel>
+              {recents.map(
+                (v) =>
+                  v && (
+                    <VehicleRow
+                      key={`recent:${v.id}`}
+                      v={v}
+                      fav={favorites.includes(v.id)}
+                      onPick={pick}
+                      onToggle={() => toggleFavorite(v.id)}
+                    />
+                  ),
               )}
-            </button>
-          ))}
+            </>
+          )}
+          {groups && groups.length > 0 && (
+            <>
+              <MenuLabel>Groups</MenuLabel>
+              {groups.map((g) => {
+                const members = list.filter((v) => v.groupIds.includes(g.id));
+                if (members.length === 0) return null;
+                return (
+                  <div key={`grp:${g.id}`}>
+                    <p className="px-2.5 py-1 text-xs uppercase tracking-wide text-faint">
+                      {g.name}
+                    </p>
+                    {members.map((v) => (
+                      <VehicleRow
+                        key={`grp:${g.id}:${v.id}`}
+                        v={v}
+                        fav={favorites.includes(v.id)}
+                        onPick={pick}
+                        onToggle={() => toggleFavorite(v.id)}
+                      />
+                    ))}
+                  </div>
+                );
+              })}
+            </>
+          )}
+          {rest.length > 0 && (
+            <>
+              <MenuLabel>All vehicles</MenuLabel>
+              {rest.map((v) => (
+                <VehicleRow
+                  key={v.id}
+                  v={v}
+                  fav={favorites.includes(v.id)}
+                  onPick={pick}
+                  onToggle={() => toggleFavorite(v.id)}
+                />
+              ))}
+            </>
+          )}
           <div className="my-1 border-t border-line" />
           <button
             onClick={() => {
@@ -150,10 +238,53 @@ function VehicleSwitcher() {
             }}
             className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-subtle hover:bg-panel2"
           >
-            <Boxes size={14} /> Open showroom
+            <Boxes size={14} /> Open 3D showroom
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function MenuLabel({ children }: { children: React.ReactNode }) {
+  return <p className="px-2.5 pb-1 pt-2 text-xs font-semibold text-faint">{children}</p>;
+}
+
+function VehicleRow({
+  v,
+  fav,
+  onPick,
+  onToggle,
+}: {
+  v: VehicleWithState;
+  fav: boolean;
+  onPick: (id: string) => void;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-1 rounded-lg px-1 py-0.5 hover:bg-panel2">
+      <button
+        onClick={() => onPick(v.id)}
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-sm"
+      >
+        <span
+          className="h-2.5 w-2.5 shrink-0 rounded-full"
+          style={{ background: v.exteriorColor ?? '#8b9bb4' }}
+          aria-hidden
+        />
+        <span className="truncate">{v.displayName}</span>
+        {v.state?.chargingState === 'charging' && (
+          <Zap size={13} className="shrink-0 text-charging" aria-label="charging" />
+        )}
+      </button>
+      <button
+        onClick={onToggle}
+        aria-pressed={fav}
+        aria-label={`${fav ? 'Remove' : 'Add'} ${v.displayName} ${fav ? 'from' : 'to'} favorites`}
+        className={`rounded p-1 ${fav ? 'text-warn' : 'text-faint hover:text-foreground'}`}
+      >
+        <Star size={14} fill={fav ? 'currentColor' : 'none'} />
+      </button>
     </div>
   );
 }

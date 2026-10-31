@@ -20,12 +20,16 @@ export interface GeocodeResult {
 geocodeRouter.get('/', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
   const mode = process.env.VL_GEOCODER ?? 'off';
   if (mode === 'off' || !process.env.VL_GEOCODER_URL) {
-    res.status(404).json({ error: { code: 'GEOCODER_DISABLED', message: 'Location search is disabled.' } });
+    res
+      .status(404)
+      .json({ error: { code: 'GEOCODER_DISABLED', message: 'Location search is disabled.' } });
     return;
   }
   const q = String(req.query.q ?? '').trim();
   if (q.length < 3) {
-    res.status(400).json({ error: { code: 'VALIDATION', message: 'At least 3 characters are required.' } });
+    res
+      .status(400)
+      .json({ error: { code: 'VALIDATION', message: 'At least 3 characters are required.' } });
     return;
   }
   const userId = sessionActor(req).userId;
@@ -57,9 +61,17 @@ geocodeRouter.get('/', { auth: 'session', target: { kind: 'none' } }, async (req
         u.searchParams.set('lat', String(nlat));
         u.searchParams.set('lon', String(nlon));
       }
-      const r = await fetch(u, { signal: AbortSignal.timeout(5000), headers: { 'User-Agent': ua } });
+      const r = await fetch(u, {
+        signal: AbortSignal.timeout(5000),
+        headers: { 'User-Agent': ua },
+      });
       if (!r.ok) throw new Error(`geocoder ${r.status}`);
-      const body = (await r.json()) as { display_name: string; lat: string; lon: string; type?: string }[];
+      const body = (await r.json()) as {
+        display_name: string;
+        lat: string;
+        lon: string;
+        type?: string;
+      }[];
       results = body.map((x) => ({
         label: x.display_name,
         lat: Number(x.lat),
@@ -75,10 +87,16 @@ geocodeRouter.get('/', { auth: 'session', target: { kind: 'none' } }, async (req
         u.searchParams.set('lat', String(nlat));
         u.searchParams.set('lon', String(nlon));
       }
-      const r = await fetch(u, { signal: AbortSignal.timeout(5000), headers: { 'User-Agent': ua } });
+      const r = await fetch(u, {
+        signal: AbortSignal.timeout(5000),
+        headers: { 'User-Agent': ua },
+      });
       if (!r.ok) throw new Error(`geocoder ${r.status}`);
       const body = (await r.json()) as {
-        features: { properties: { name?: string; street?: string; city?: string; country?: string }; geometry: { coordinates: number[] } }[];
+        features: {
+          properties: { name?: string; street?: string; city?: string; country?: string };
+          geometry: { coordinates: number[] };
+        }[];
       };
       results = body.features.map((f) => ({
         label: [f.properties.name, f.properties.street, f.properties.city, f.properties.country]
@@ -95,6 +113,8 @@ geocodeRouter.get('/', { auth: 'session', target: { kind: 'none' } }, async (req
   } catch (err) {
     // Never log the query — location queries are personal data.
     console.error('[voltlink] geocode failed:', (err as Error).message);
-    res.status(502).json({ error: { code: 'GEOCODER_ERROR', message: 'The location service is unavailable.' } });
+    res
+      .status(502)
+      .json({ error: { code: 'GEOCODER_ERROR', message: 'The location service is unavailable.' } });
   }
 });

@@ -12,6 +12,7 @@ import { ErrorState } from '../components/QueryState';
 import MapView, { circleGeoJson } from '../components/MapView';
 import GeocodeSearch from '../components/map/GeocodeSearch';
 import { useMapStyle } from '../components/map/useMapStyle';
+import { useSelectedVehicle } from '../lib/vehicleSelection';
 import { Button, Field, Input, Select } from '../components/ui';
 import type { Geofence, Place, PrivacyZone, VehicleWithState } from '@voltlink/shared';
 
@@ -24,7 +25,9 @@ type EditState =
 
 export default function MapPage() {
   const qc = useQueryClient();
-  const [selected, setSelected] = useState<string>('all');
+  const { selectedId, setVehicle } = useSelectedVehicle();
+  // §2.8: the URL (?vehicle=) or recent pick is the initial filter.
+  const [selected, setSelected] = useState<string>(selectedId ?? 'all');
   const [draft, setDraft] = useState<Draft | null>(null);
   const picking = !!draft && !draft.point;
   // Esc cancels pick mode (guide 07 §1.5).
@@ -283,7 +286,10 @@ export default function MapPage() {
           <Select
             aria-label="Vehicle filter"
             value={selected}
-            onChange={(e) => setSelected(e.target.value)}
+            onChange={(e) => {
+              setSelected(e.target.value);
+              if (e.target.value !== 'all') setVehicle(e.target.value);
+            }}
             className="text-xs"
           >
             <option value="all">All vehicles</option>
