@@ -336,53 +336,58 @@ export const COMMAND_PARAM_SCHEMAS: Record<CommandType, z.ZodTypeAny> = {
   unlock: z.object({ pin }).optional(),
   climate_start: z.object({}).optional(),
   climate_stop: z.object({}).optional(),
-  set_temperature: z
-    .object({
-      driverTempC: z.number().min(15).max(28).optional(),
-      passengerTempC: z.number().min(15).max(28).optional(),
-    })
-    .refine((p) => p.driverTempC !== undefined || p.passengerTempC !== undefined, {
-      message: 'set_temperature needs driverTempC and/or passengerTempC.',
-    })
-    .optional(),
-  defrost: z.object({}).optional(),
-  seat_heater: z
-    .object({
-      seat: z.number().int().min(0).max(6).optional(),
-      level: z.number().int().min(0).max(3),
-    })
-    .optional(),
-  steering_heater: z.object({ on: z.boolean() }).optional(),
+  // F-PARAMS: canonical parameter names and ranges shared with the UI's
+  // PARAM_CONTROLS table (guide 07 §2.6).
+  set_temperature: z.object({ temperatureC: z.number().min(15).max(28) }).optional(),
+  defrost: z.object({ defrostOn: z.boolean().optional() }).optional(),
+  seat_heater: z.object({ seatLevel: z.number().int().min(0).max(3) }).optional(),
+  steering_heater: z.object({ steeringOn: z.boolean() }).optional(),
   charge_start: z.object({}).optional(),
   charge_stop: z.object({}).optional(),
   set_charge_limit: z.object({ chargeLimitPct: z.number().int().min(50).max(100) }).optional(),
-  set_charging_amps: z.object({ chargingAmps: z.number().int().min(1).max(48) }).optional(),
+  set_charging_amps: z.object({ chargingAmps: z.number().int().min(5).max(48) }).optional(),
   charge_port_open: z.object({}).optional(),
   charge_port_close: z.object({}).optional(),
   open_trunk: z.object({}).optional(),
   open_frunk: z.object({}).optional(),
   window_vent: z.object({}).optional(),
   window_close: z.object({}).optional(),
-  sentry_mode: z.object({ on: z.boolean() }).optional(),
+  sentry_mode: z.object({ sentryOn: z.boolean() }).optional(),
   flash_lights: z.object({}).optional(),
   honk_horn: z.object({}).optional(),
   homelink: z
     .object({
       lat: z.number().min(-90).max(90),
       lon: z.number().min(-180).max(180),
-      token: z.string().min(1).max(64),
     })
     .optional(),
   remote_start: z.object({}).optional(),
   valet_mode: z
-    .object({ on: z.boolean(), pin })
-    .refine((p) => p.on === false || p.pin !== undefined, {
+    .object({ valetOn: z.boolean(), pin })
+    .refine((p) => p.valetOn === false || p.pin !== undefined, {
       message: 'valet_mode on requires a 4-digit pin.',
     })
     .optional(),
-  speed_limit: z.object({ limitMph: z.number().min(50).max(120), pin }).optional(),
-  send_navigation: z.object({ dest }).optional(),
-  schedule_update: z.object({}).optional(),
+  speed_limit: z
+    .object({
+      speedLimitKmh: z.number().min(80).max(145).optional(),
+      speedLimitOn: z.boolean().optional(),
+      pin,
+    })
+    .refine((p) => p.speedLimitKmh !== undefined || p.speedLimitOn !== undefined, {
+      message: 'speed_limit needs speedLimitKmh and/or speedLimitOn.',
+    })
+    .optional(),
+  send_navigation: z
+    .object({
+      destination: z.object({
+        name: z.string().min(1).max(200),
+        lat: z.number().min(-90).max(90),
+        lon: z.number().min(-180).max(180),
+      }),
+    })
+    .optional(),
+  schedule_update: z.object({ updateDelaySec: z.number().int().min(0).max(7200) }).optional(),
 };
 
 /** Commands with no observable state: they end at `accepted` with confirmation

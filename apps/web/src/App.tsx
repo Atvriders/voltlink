@@ -1,10 +1,19 @@
 // VoltLink application shell and router.
 
 import { lazy, Suspense, useEffect } from 'react';
-import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import {
+  BrowserRouter,
+  Link,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Shell } from './components/Shell';
+import { StepUpDialogHost } from './components/StepUpDialog';
 import { Spinner } from './components/ui';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -137,6 +146,7 @@ export default function App() {
       <BrowserRouter>
         <AuthProvider>
           <AppRoutes />
+          <StepUpDialogHost />
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>

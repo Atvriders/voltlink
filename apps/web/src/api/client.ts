@@ -4,6 +4,10 @@
 
 let csrfToken: string | null = null;
 
+// A-STEPUP: when the API answers 403 STEP_UP_REQUIRED, ask the dialog, then
+// resend the same request once with the same body (and idempotency key).
+import { requestStepUp } from '../lib/stepUpBus';
+
 /** Drop the in-memory CSRF token on sign-out (F-SIGNOUT): the next user gets a fresh one. */
 export function resetCsrf(): void {
   csrfToken = null;
@@ -42,12 +46,31 @@ export async function api<T>(
     if (!csrfToken) await fetchCsrf();
     headers['X-VL-CSRF'] = csrfToken ?? '';
   }
-  const res = await fetch(path, {
-    method,
-    headers,
-    credentials: 'same-origin',
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-  });
+  const send = () =>
+    fetch(path, {
+      method,
+      headers,
+      credentials: 'same-origin',
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    });
+  let res = await send();
+  if (res.status === 403) {
+    let code = '';
+    let methods: string[] = [];
+    try {
+      const parsed = (await res.clone().json()) as {
+        error?: { code?: string; details?: { methods?: string[] } };
+      };
+      code = parsed.error?.code ?? '';
+      methods = parsed.error?.details?.methods ?? [];
+    } catch {
+      /* non-JSON */
+    }
+    if (code === 'STEP_UP_REQUIRED') {
+      const ok = await requestStepUp(methods);
+      if (ok) res = await send(); // same body, same idempotency key
+    }
+  }
   if (res.status === 401 && !path.startsWith('/api/v1/auth/')) {
     window.dispatchEvent(new CustomEvent('voltlink:unauthorized'));
   }

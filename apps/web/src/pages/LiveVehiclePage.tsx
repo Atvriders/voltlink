@@ -64,6 +64,8 @@ import {
   type VehicleWithState,
   type VehicleState,
 } from '@voltlink/shared';
+import { controlsFor, type ParamControl } from '@voltlink/shared';
+import { outcomeFor } from '../lib/commandLifecycle';
 
 interface CommandWithEvents extends VehicleCommand {
   events?: { id: string; event: string; actor: string; detail: string; createdAt: string }[];
@@ -318,17 +320,22 @@ function ControlsPanel({
   vehicle: VehicleWithState;
   onCommandIssued: (cmd: VehicleCommand) => void;
 }) {
-  const [stepUpCommand, setStepUpCommand] = useState<{
-    type: CommandType;
-    params: CommandParams;
-  } | null>(null);
+  const [paramFor, setParamFor] = useState<CommandType | null>(null);
   const [error, setError] = useState('');
   const [issueType, setIssueType] = useState<CommandType | null>(null);
   const issue = useMutation({
-    mutationFn: (input: { type: CommandType; params: CommandParams }) =>
+    // F-PARAMS + A-STEPUP: parameters and a fresh idempotency key travel with
+    // the command; credentials never do. 403 STEP_UP_REQUIRED is handled by the
+    // global StepUpDialog inside api() and the same request is resent.
+    mutationFn: (input: { type: CommandType; params: CommandParams; idempotencyKey: string }) =>
       api<VehicleCommand>('/api/v1/commands', {
         method: 'POST',
-        body: { vehicleId: vehicle.id, type: input.type, params: input.params },
+        body: {
+          vehicleId: vehicle.id,
+          type: input.type,
+          params: input.params,
+          idempotencyKey: input.idempotencyKey,
+        },
       }),
     onSuccess: (cmd) => {
       onCommandIssued(cmd);
@@ -341,13 +348,13 @@ function ControlsPanel({
     },
   });
 
-  const click = (type: CommandType, params: CommandParams = {}) => {
-    if (HIGH_RISK_COMMANDS.includes(type)) {
-      setStepUpCommand({ type, params });
+  const click = (type: CommandType) => {
+    if (controlsFor(type).length > 0) {
+      setParamFor(type);
       return;
     }
     setIssueType(type);
-    issue.mutate({ type, params });
+    issue.mutate({ type, params: {}, idempotencyKey: crypto.randomUUID() });
   };
 
   const caps = new Set(vehicle.capabilities);
@@ -400,77 +407,127 @@ function ControlsPanel({
         );
       })}
 
-      <StepUpModal
-        open={!!stepUpCommand}
-        onClose={() => setStepUpCommand(null)}
-        onConfirm={(auth) => {
-          if (!stepUpCommand) return;
-          issue.mutate({
-            type: stepUpCommand.type,
-            params: stepUpCommand.params,
-          });
-          setStepUpCommand(null);
-          void auth;
+      <ParamModal
+        type={paramFor}
+        vehicle={vehicle}
+        onClose={() => setParamFor(null)}
+        onSubmit={(type, params) => {
+          setParamFor(null);
+          setIssueType(type);
+          issue.mutate({ type, params, idempotencyKey: crypto.randomUUID() });
         }}
       />
     </div>
   );
 }
 
-function StepUpModal({
-  open,
+function ParamModal({
+  type,
+  vehicle,
   onClose,
-  onConfirm,
+  onSubmit,
 }: {
-  open: boolean;
+  type: CommandType | null;
+  vehicle: VehicleWithState;
   onClose: () => void;
-  onConfirm: (auth: { password?: string; totp?: string }) => void;
+  onSubmit: (type: CommandType, params: CommandParams) => void;
 }) {
-  const [password, setPassword] = useState('');
-  const [totp, setTotp] = useState('');
+  const controls = type ? controlsFor(type) : [];
+  const [values, setValues] = useState<Record<string, string>>({});
+  if (!type || controls.length === 0) return null;
+  const state = (vehicle.state ?? {}) as Record<string, unknown>;
+  const defaults: Record<string, string> = {};
+  for (const c of controls) {
+    if (c.kind === 'range') {
+      const current = (state as Record<string, unknown>)[c.param];
+      defaults[c.param] =
+        typeof current === 'number' ? String(current) : String((c.min + c.max) / 2);
+    } else if (c.kind === 'toggle') {
+      const current = (state as Record<string, unknown>)[c.param];
+      defaults[c.param] = current === true ? 'on' : 'off';
+    }
+  }
+  const params: CommandParams = {};
+  for (const c of controls) {
+    const v = values[c.param] ?? defaults[c.param] ?? '';
+    if (c.kind === 'range') {
+      const n = Number(v);
+      if (Number.isFinite(n)) (params as Record<string, unknown>)[c.param] = n;
+    } else if (c.kind === 'toggle') {
+      (params as Record<string, unknown>)[c.param] = v === 'on';
+    } else if (c.kind === 'pin') {
+      if (/^\d{4}$/.test(v)) (params as Record<string, unknown>)[c.param] = v;
+    } else if (c.kind === 'destination') {
+      if (v.trim())
+        (params as Record<string, unknown>)[c.param] = { name: v.trim(), lat: 0, lon: 0 };
+    }
+  }
+  const setValue = (param: string, v: string) => setValues((prev) => ({ ...prev, [param]: v }));
   return (
     <Modal
-      open={open}
+      open
       onClose={onClose}
       title={
         <span className="flex items-center gap-2">
-          <ShieldCheck size={16} className="text-warn" /> High-risk action
+          <CommandIcon type={type} /> {COMMAND_DEFINITIONS[type]?.label ?? type}
         </span>
       }
     >
-      <p className="text-sm text-subtle">
-        This is a high-risk vehicle command. Re-authenticate with your password or TOTP code to
-        proceed. The action is audited and rate-limited.
-      </p>
-      <div className="mt-4 space-y-3">
-        <Field label="Password (or TOTP code)">
-          <div className="grid grid-cols-2 gap-2">
-            <Input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            <Input
-              inputMode="numeric"
-              placeholder="TOTP code"
-              value={totp}
-              onChange={(e) => setTotp(e.target.value)}
-            />
-          </div>
-        </Field>
+      <div className="mt-2 space-y-3">
+        {controls.map((c: ParamControl) => {
+          const v = values[c.param] ?? defaults[c.param] ?? '';
+          if (c.kind === 'range') {
+            return (
+              <Field key={c.param} label={`${c.param}${c.unit ? ` (${c.unit})` : ''}`}>
+                <Input
+                  type="number"
+                  min={c.min}
+                  max={c.max}
+                  step={c.step}
+                  value={v}
+                  onChange={(e) => setValue(c.param, e.target.value)}
+                />
+              </Field>
+            );
+          }
+          if (c.kind === 'toggle') {
+            return (
+              <Field key={c.param} label={c.param}>
+                <Select value={v} onChange={(e) => setValue(c.param, e.target.value)}>
+                  <option value="off">Off</option>
+                  <option value="on">On</option>
+                </Select>
+              </Field>
+            );
+          }
+          if (c.kind === 'pin') {
+            return (
+              <Field key={c.param} label="4-digit PIN">
+                <Input
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={v}
+                  onChange={(e) => setValue(c.param, e.target.value)}
+                />
+              </Field>
+            );
+          }
+          return (
+            <Field key={c.param} label="Destination (address or place name)">
+              <Input
+                value={v}
+                placeholder="e.g. 3500 Deer Creek Rd, Palo Alto"
+                onChange={(e) => setValue(c.param, e.target.value)}
+              />
+            </Field>
+          );
+        })}
       </div>
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button
-          variant="danger"
-          disabled={!password && !totp}
-          onClick={() => onConfirm({ password: password || undefined, totp: totp || undefined })}
-        >
-          Authorize & send
-        </Button>
+        <Button onClick={() => onSubmit(type, params)}>Set & send</Button>
       </div>
     </Modal>
   );
@@ -523,6 +580,9 @@ function CommandModal({
           <div className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
             {command.errorMessage}
           </div>
+        )}
+        {outcomeFor(command.status).explain && command.status !== 'confirmed' && (
+          <p className="text-sm text-subtle">{outcomeFor(command.status).explain}</p>
         )}
         {command.status === 'confirmed' && (
           <div className="rounded-lg border border-ok/40 bg-ok/10 px-3 py-2 text-sm text-ok">
