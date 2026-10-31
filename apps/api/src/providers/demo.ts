@@ -515,6 +515,10 @@ class DemoProviderImpl implements VehicleProvider {
     if (type === 'remote_start' && spec.id === 'demo-comet') {
       return { kind: 'rejected', errorMessage: 'This vehicle does not support remote start.' };
     }
+    // Deterministic provider timeouts for realistic demo behaviour.
+    if (type === 'window_vent' && spec.id === 'demo-bison') {
+      return { kind: 'timed_out', errorMessage: 'Vehicle did not respond within the provider timeout.' };
+    }
     const ov = overlays.get(spec.id) ?? {};
     switch (type) {
       case 'wake':

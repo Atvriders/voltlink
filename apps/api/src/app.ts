@@ -24,7 +24,7 @@ import { fleetRouter } from './routes/fleet';
 import { statusRouter } from './routes/status';
 import { adminRouter } from './routes/admin';
 import { orgsRouter, invitationsRouter } from './routes/orgs';
-import { sseAddClient } from './core/sse';
+import { sseHandler } from './realtime/hub';
 import { authenticate } from './authz/authenticate';
 import { AccessDenied } from './authz/errors';
 import { getQueue } from './core/queue';
@@ -137,7 +137,8 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
         'This endpoint requires an interactive session.',
         403,
       );
-    sseAddClient(actor.userId, res);
+    req.actor = actor;
+    await sseHandler(req, res);
   });
 
   // API root / 404.

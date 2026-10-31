@@ -48,3 +48,11 @@ main().catch((err) => {
   console.error('[voltlink] fatal startup error:', err);
   process.exit(1);
 });
+
+// NEW-05: log and keep serving; never crash a role on a stray rejection.
+process.on('unhandledRejection', (reason) => {
+  console.error('[voltlink] web unhandledRejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[voltlink] web uncaughtException:', err);
+});

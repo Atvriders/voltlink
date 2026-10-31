@@ -87,7 +87,7 @@ export async function transitionStatus(
   if (extra.confirmed) data.confirmed = true;
   if (to === 'canceled') data.errorMessage = 'Canceled before submission.';
   const res = await prisma.vehicleCommand.updateMany({
-    where: { id: commandId, status: { in: [...from] } },
+    where: { id: commandId, status: { in: [...from] }, NOT: { status: { in: [...TERMINAL] } } },
     data: data as never,
   });
   return res.count === 1;

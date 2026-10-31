@@ -51,6 +51,30 @@ async function main(): Promise<void> {
   startWorker('account-deletion', async (job) => {
     await runAccountDeletion((job.data as { userId: string }).userId);
   });
+  startWorker('automations', async (job) => {
+    const { dispatchTrigger } = await import('./automations/engine');
+    const p = job.data as { userId: string; vehicleId?: string; trigger: string; data: unknown };
+    await dispatchTrigger({ type: p.trigger as never, userId: p.userId, vehicleId: p.vehicleId, data: p.data as Record<string, unknown> });
+  });
+  startWorker('maintenance', async (job) => {
+    const { notify } = await import('./notifications/service');
+    const p = job.data as { userId: string; recordId: string; title: string; vehicleName?: string };
+    await notify({
+      userId: p.userId,
+      event: 'system',
+      severity: 'info',
+      title: 'Maintenance due',
+      body: `${p.vehicleName ?? 'Vehicle'}: ${p.title}`,
+    });
+  });
+  startWorker('tesla-token-refresh', async (job) => {
+    // Phase 6 wires the refresh call; the queue must exist and consume now so
+    // every enqueue has exactly one consumer (guide 04 §4 invariant).
+    const p = job.data as { accountId: string };
+    const account = await prisma.providerAccount.findUnique({ where: { id: p.accountId } });
+    if (!account || account.provider !== 'tesla') return;
+    console.warn('[voltlink] tesla-token-refresh: refresh wiring lands in Phase 6 (account %s)', p.accountId);
+  });
   startWorker('demo', async (job) => {
     const p = job.data as { userId: string };
     await prisma.appNotification.create({

@@ -28,6 +28,34 @@ const driveTracker = new Map<
     lastMoving: Date;
   }
 >();
+
+/** P-DETECT: detection state persists across restarts in DriveTracker rows. */
+async function loadDriveTracker(
+  vehicleId: string,
+): Promise<{ startedAt: Date; startedPct: number; maxSpeed: number; points: unknown[]; lastMoving: Date } | undefined> {
+  const row = await prisma.driveTracker.findUnique({ where: { vehicleId } });
+  if (!row) return undefined;
+  return {
+    startedAt: row.startedAt,
+    startedPct: row.startedPct ?? 0,
+    maxSpeed: row.maxSpeed,
+    points: (row.points ?? []) as unknown[],
+    lastMoving: row.lastMoving,
+  };
+}
+
+async function persistDriveTracker(
+  vehicleId: string,
+  t: { startedAt: Date; startedPct: number; maxSpeed: number; points: unknown[]; lastMoving: Date },
+): Promise<void> {
+  const pts = JSON.parse(JSON.stringify(t.points.slice(-4000)));
+  await prisma.driveTracker.upsert({
+    where: { vehicleId },
+    update: { startedAt: t.startedAt, startedPct: t.startedPct, maxSpeed: t.maxSpeed, points: pts, lastMoving: t.lastMoving },
+    create: { vehicleId, startedAt: t.startedAt, startedPct: t.startedPct, maxSpeed: t.maxSpeed, points: pts, lastMoving: t.lastMoving },
+  });
+}
+
 const chargeTracker = new Map<
   string,
   { startedAt: Date; startPct: number; peakKw: number; lastPct: number }
@@ -219,17 +247,26 @@ async function detectDrive(
 ): Promise<void> {
   const speed = state.speedKmh ?? 0;
   const moving = speed > MIN_DRIVE_SPEED;
-  const current = driveTracker.get(vehicleId);
+  let current = driveTracker.get(vehicleId);
+  if (!current) {
+    const loaded = await loadDriveTracker(vehicleId);
+    if (loaded) {
+      current = { ...loaded, points: loaded.points as { ts: Date; lat: number; lon: number; speedKmh: number; batteryPct: number | null }[] };
+      driveTracker.set(vehicleId, current);
+    }
+  }
 
   if (moving) {
     if (!current) {
-      driveTracker.set(vehicleId, {
+      current = {
         startedAt: now,
         startedPct: state.batteryPercent ?? 0,
         maxSpeed: speed,
         points: [],
         lastMoving: now,
-      });
+      };
+      driveTracker.set(vehicleId, current);
+      await persistDriveTracker(vehicleId, current);
     } else {
       current.maxSpeed = Math.max(current.maxSpeed, speed);
       current.lastMoving = now;
@@ -242,6 +279,7 @@ async function detectDrive(
           batteryPct: state.batteryPercent ?? null,
         });
         if (current.points.length > 4000) current.points.splice(0, 2000); // bound memory
+        if (current.points.length % 10 === 0) await persistDriveTracker(vehicleId, current);
       }
     }
     return;
@@ -249,6 +287,7 @@ async function detectDrive(
 
   if (current && now.getTime() - current.lastMoving.getTime() > DRIVE_END_IDLE_SEC * 1000) {
     driveTracker.delete(vehicleId);
+    await prisma.driveTracker.deleteMany({ where: { vehicleId } }).catch(() => undefined);
     const points = current.points;
     if (points.length < 3) return;
     const first = points[0]!;
@@ -438,9 +477,10 @@ export async function applyCostCalculation(sessionId: string): Promise<void> {
   }
   const vehicle = await prisma.vehicle.findUnique({
     where: { id: session.vehicleId },
-    select: { organizationId: true },
+    select: { organization: { select: { id: true, timezone: true } } },
   });
-  const organizationId = vehicle?.organizationId ?? '';
+  const organizationId = vehicle?.organization.id ?? '';
+  const timezone = vehicle?.organization.timezone ?? 'UTC';
   const rules = await prisma.rateRule.findMany({ where: { organizationId, enabled: true } });
   if (rules.length === 0) return;
   // Prefer location rules matching a nearby place, then TOU, then flat.
@@ -465,14 +505,26 @@ export async function applyCostCalculation(sessionId: string): Promise<void> {
   } else {
     const tou = rules.find((r) => r.type === 'tou');
     if (tou) {
-      const startMin = session.startAt.getUTCHours() * 60 + session.startAt.getUTCMinutes();
-      const periods = (tou.periods ?? []) as {
-        startMin: number;
-        endMin: number;
-        pricePerKwh: number;
-      }[];
+      // P-COST: evaluate in the user's time zone and support periods that
+      // cross midnight (e.g. 22:00-06:00).
+      let startMin = session.startAt.getUTCHours() * 60 + session.startAt.getUTCMinutes();
+      try {
+        const parts = new Intl.DateTimeFormat('en-GB', {
+          timeZone: timezone,
+          hour: '2-digit',
+          minute: '2-digit',
+          hourCycle: 'h23',
+        }).formatToParts(session.startAt);
+        const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
+        const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? 0);
+        if (Number.isFinite(hour) && Number.isFinite(minute)) startMin = hour * 60 + minute;
+      } catch {
+        /* fall back to UTC */
+      }
+      const periods = (tou.periods ?? []) as { startMin: number; endMin: number; pricePerKwh: number }[];
       const period =
-        periods.find((p) => startMin >= p.startMin && startMin < p.endMin) ?? periods[0];
+        periods.find((p) => (p.endMin > p.startMin ? startMin >= p.startMin && startMin < p.endMin : startMin >= p.startMin || startMin < p.endMin)) ??
+        periods[0];
       price = period?.pricePerKwh ?? tou.pricePerKwh;
       ruleId = tou.id;
       ruleName = tou.name;

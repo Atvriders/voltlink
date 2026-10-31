@@ -148,6 +148,7 @@ export async function connectDemoAccount(
   for (const d of descriptors) {
     await prisma.vehicle.create({
       data: {
+        pollState: { create: {} },
         organizationId,
         addedById: connectedById,
         providerAccountId: account.id,

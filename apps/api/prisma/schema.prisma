@@ -193,6 +193,7 @@ model Organization {
   name                     String
   telemetryRetentionDays   Int?
   locationRetentionDays    Int?
+  timezone                 String         @default("UTC")
   demoDegraded             Boolean        @default(false)
   createdById              String?
   createdAt                DateTime       @db.Timestamptz(3) @default(now())
@@ -690,6 +691,16 @@ model PushSubscription {
 // ---------------------------------------------------------------------------
 // Vehicle commands
 // ---------------------------------------------------------------------------
+
+model DriveTracker {
+  vehicleId  String    @id
+  startedAt  DateTime @db.Timestamptz(3)
+  startedPct Float?
+  maxSpeed   Float
+  points     Json      @default("[]")
+  lastMoving DateTime @db.Timestamptz(3)
+  updatedAt  DateTime @db.Timestamptz(3) @updatedAt
+}
 
 model VehiclePollState {
   vehicleId         String    @id

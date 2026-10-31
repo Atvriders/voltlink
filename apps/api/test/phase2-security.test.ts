@@ -44,6 +44,7 @@ function totpCode(secret: string, at = Date.now()): string {
 }
 import { buildApp } from '../src/app';
 import { initRedis } from '../src/core/redis';
+import { sseStart } from '../src/core/sse';
 import { prisma } from '../src/core/db';
 import { env, parseTrustProxy } from '../src/core/env';
 import { hashPassword, randomId } from '../src/core/crypto';
@@ -56,6 +57,7 @@ let base: string;
 
 beforeAll(async () => {
   await initRedis();
+  sseStart();
   server = buildApp({ serveSpa: false }).listen(0);
   await new Promise<void>((resolve) => server.once('listening', resolve));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

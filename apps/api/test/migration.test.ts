@@ -61,7 +61,10 @@ beforeAll(async () => {
     if (
       name.startsWith('20261030213636') ||
       name.startsWith('20261030213700') ||
-      name.startsWith('20261030214947')
+      name.startsWith('20261030214947') ||
+      name.startsWith('20261031143626_org') ||
+      name.startsWith('20261031144047_drive') ||
+      name.startsWith('20261031142359_queue_v4')
     ) {
       fs.rmSync(path.join(legacyDir, name), { recursive: true, force: true });
     }

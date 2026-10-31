@@ -112,3 +112,11 @@ function escapeXml(s: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
+
+// NEW-05: log and keep serving.
+process.on('unhandledRejection', (reason) => {
+  console.error('[voltlink] status unhandledRejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[voltlink] status uncaughtException:', err);
+});

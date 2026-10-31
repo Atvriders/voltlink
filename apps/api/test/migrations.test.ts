@@ -174,7 +174,10 @@ describe('Migration A: telemetry schema and voltlink rename', () => {
       if (
         name.startsWith('20261030213636') ||
         name.startsWith('20261030213700') ||
-        name.startsWith('20261030214947')
+        name.startsWith('20261030214947') ||
+        name.startsWith('20261031142359') ||
+        name.startsWith('20261031143626') ||
+        name.startsWith('20261031144047')
       ) {
         fs.rmSync(path.join(oldMigrations, name), { recursive: true, force: true });
       }

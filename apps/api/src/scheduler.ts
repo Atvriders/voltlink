@@ -10,6 +10,7 @@ import { runRetention } from './telemetry/retention';
 import { setSetting } from './core/settings';
 import { runStatusChecks, ensureComponents } from './status/service';
 import { initRedis } from './core/redis';
+import { pool } from './core/db';
 
 async function main(): Promise<void> {
   validateEnv();
@@ -52,6 +53,20 @@ async function main(): Promise<void> {
   }, 3600_000);
   statusTimer.unref();
 
+  // P-PARTITION: create partitions ahead of time (current + next two months)
+  // so month boundaries never race ingestion. Daily, plus once at boot.
+  const ensurePartitions = async () => {
+    for (let m = 0; m <= 2; m++) {
+      const ts = new Date();
+      ts.setUTCDate(1);
+      ts.setUTCMonth(ts.getUTCMonth() + m, 1);
+      await pool.query('SELECT voltlink_ensure_partition($1)', [ts]);
+    }
+  };
+  void ensurePartitions().catch((err) => console.error('partition pre-create failed:', (err as Error).message));
+  const partitions = setInterval(() => void ensurePartitions().catch(() => undefined), 24 * 3600_000);
+  partitions.unref();
+
   // Retention: daily.
   const retention = setInterval(async () => {
     try {
@@ -68,6 +83,7 @@ async function main(): Promise<void> {
 
   const shutdown = () => {
     poller.stop();
+    clearInterval(partitions);
     void prisma.$disconnect().then(() => process.exit(0));
     setTimeout(() => process.exit(0), 5000).unref();
   };
@@ -78,6 +94,14 @@ async function main(): Promise<void> {
 void main().catch((err) => {
   console.error('[voltlink] scheduler fatal error:', err);
   process.exit(1);
+});
+
+// NEW-05: log and keep serving; never crash a role on a stray rejection.
+process.on('unhandledRejection', (reason) => {
+  console.error('[voltlink] scheduler unhandledRejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[voltlink] scheduler uncaughtException:', err);
 });
 
 void env;
