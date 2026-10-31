@@ -1,7 +1,7 @@
 // Map page: live locations, saved places, geofences, privacy zones, and
 // location search on the fictional demo map.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Crosshair, MapPin, Plus, Shield } from 'lucide-react';
@@ -16,6 +16,18 @@ export default function MapPage() {
   const [selected, setSelected] = useState<string>('all');
   const [addPlace, setAddPlace] = useState(false);
   const [pick, setPick] = useState<{ lat: number; lon: number } | null>(null);
+  // Esc cancels place picking (guide 07 §1.5).
+  useEffect(() => {
+    if (!addPlace) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setAddPlace(false);
+        setPick(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [addPlace]);
   const [placeName, setPlaceName] = useState('');
   const [placeType, setPlaceType] = useState('custom');
   const [map, setMap] = useState<maplibregl.Map | null>(null);
@@ -137,6 +149,24 @@ export default function MapPage() {
         </div>
       </div>
 
+      {addPlace && !pick && (
+        <div
+          role="status"
+          className="mb-2 flex items-center justify-between rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-sm"
+        >
+          <span>Click the map to place it, or use the map centre. Esc cancels.</span>
+          <Button
+            variant="ghost"
+            className="px-2 py-1 text-xs"
+            onClick={() => {
+              const c = map?.getCenter();
+              if (c) setPick({ lat: c.lat, lon: c.lng });
+            }}
+          >
+            Use map centre
+          </Button>
+        </div>
+      )}
       <MapView
         layers={layers}
         onReady={setMap}
@@ -218,34 +248,42 @@ export default function MapPage() {
         </Card>
       </div>
 
-      <Modal open={addPlace} onClose={() => setAddPlace(false)} title="Save a place">
-        <div className="space-y-3">
+      {addPlace && (
+        <form
+          className="card mb-4 space-y-3 p-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (pick && placeName) savePlace();
+          }}
+        >
           <p className="text-sm text-subtle">
             {pick
               ? `Selected: ${pick.lat.toFixed(4)}, ${pick.lon.toFixed(4)}`
               : 'Click the map to choose a location, then name it.'}
           </p>
-          <Field label="Name">
-            <Input value={placeName} onChange={(e) => setPlaceName(e.target.value)} />
-          </Field>
-          <Field label="Type">
-            <Select value={placeType} onChange={(e) => setPlaceType(e.target.value)}>
-              <option value="custom">Custom</option>
-              <option value="home">Home</option>
-              <option value="work">Work</option>
-              <option value="charger">Charger</option>
-            </Select>
-          </Field>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setAddPlace(false)}>
-              Cancel
-            </Button>
-            <Button disabled={!pick || !placeName} onClick={savePlace}>
-              Save place
-            </Button>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label="Name">
+              <Input value={placeName} onChange={(e) => setPlaceName(e.target.value)} />
+            </Field>
+            <Field label="Type">
+              <Select value={placeType} onChange={(e) => setPlaceType(e.target.value)}>
+                <option value="custom">Custom</option>
+                <option value="home">Home</option>
+                <option value="work">Work</option>
+                <option value="charger">Charger</option>
+              </Select>
+            </Field>
+            <div className="flex items-end gap-2">
+              <Button variant="ghost" onClick={() => setAddPlace(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!pick || !placeName}>
+                Save place
+              </Button>
+            </div>
           </div>
-        </div>
-      </Modal>
+        </form>
+      )}
     </div>
   );
 }
