@@ -1,4 +1,11 @@
+import { resolve } from 'node:path';
+import { config } from 'dotenv';
 import { defineConfig } from 'vitest/config';
+
+// `npm test` must work from a fresh shell: load apps/api/.env here (the
+// integration tests need DATABASE_URL/REDIS_URL; TEST_DATABASE_ADMIN_URL
+// defaults from DATABASE_URL via test/lib/admin-url.ts).
+config({ path: resolve(__dirname, '.env') });
 
 // API tests are integration-style: each makeTestApp() runs `prisma migrate
 // deploy` against a fresh SQLite file and argon2-hashes passwords. On slower
