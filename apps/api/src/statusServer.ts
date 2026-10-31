@@ -3,24 +3,25 @@
 // uptime visibility is possible on a separate host/port.
 
 import express from 'express';
-import helmet from 'helmet';
+import { cspExtraOrigins, securityHeaders } from './core/securityHeaders';
 import path from 'node:path';
 import fs from 'node:fs';
 import { env, validateEnv } from './core/env';
 import { prisma } from './core/db';
-import { runMigrationLeader } from './cli/migrateLeader';
+import { waitForMigrations } from './cli/migrate';
 import { ensureComponents, publicStatusBundle, runStatusChecks } from './status/service';
 import { APP_VERSION } from '@voltlink/shared';
+import { PATHS } from './core/paths';
 
 async function main(): Promise<void> {
   validateEnv();
-  await runMigrationLeader();
+  await waitForMigrations();
   await prisma.$connect();
   await ensureComponents();
 
   const app = express();
   app.disable('x-powered-by');
-  app.use(helmet({ contentSecurityPolicy: false }));
+  app.use(securityHeaders(env.PUBLIC_URL, cspExtraOrigins(env.CSP_CONNECT_ORIGINS)));
 
   app.get('/healthz', (_req, res) => res.json({ ok: true, role: 'status', version: APP_VERSION }));
   app.get('/api/v1/status', async (_req, res) => {
@@ -53,7 +54,7 @@ async function main(): Promise<void> {
   });
 
   // Serve the SPA too (status page route inside the app).
-  const spaDir = path.resolve(process.cwd(), 'web-dist');
+  const spaDir = PATHS.webDist;
   if (fs.existsSync(spaDir)) {
     app.use(express.static(spaDir, { index: false, maxAge: '7d' }));
     app.use((req, res, next) => {

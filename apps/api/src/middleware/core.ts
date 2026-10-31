@@ -33,7 +33,7 @@ export function csrf(req: Request, res: Response, next: NextFunction): void {
   if (typeof cookie !== 'string' || !cookie) {
     // Issue on first mutating request then require retry.
     cookie = crypto.randomBytes(16).toString('hex');
-    res.cookie(env.CSRF_COOKIE_NAME, cookie, { httpOnly: false, sameSite: 'lax', secure: env.NODE_ENV === 'production', path: '/' });
+    res.cookie(env.CSRF_COOKIE_NAME, cookie, { httpOnly: false, sameSite: 'lax', secure: new URL(env.PUBLIC_URL).protocol === 'https:', path: '/' });
     res.status(403).json({ error: { code: 'CSRF', message: 'CSRF token issued; retry the request.' } });
     return;
   }

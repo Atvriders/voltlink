@@ -3,7 +3,7 @@
 
 import { env, validateEnv } from './core/env';
 import { getQueue } from './core/queue';
-import { runMigrationLeader } from './cli/migrateLeader';
+import { waitForMigrations } from './cli/migrate';
 import { prisma } from './core/db';
 import { processCommandJob } from './commands/service';
 import { processTelemetryJob } from './telemetry/poller';
@@ -13,7 +13,7 @@ import { runAccountDeletion } from './jobs/account-deletion';
 
 async function main(): Promise<void> {
   validateEnv();
-  await runMigrationLeader();
+  await waitForMigrations();
   await import('./net/policy').then((m) => m.buildOutboundPolicy());
   await prisma.$connect();
 

@@ -3,7 +3,7 @@
 
 import { env, validateEnv } from './core/env';
 import { prisma } from './core/db';
-import { runMigrationLeader } from './cli/migrateLeader';
+import { waitForMigrations } from './cli/migrate';
 import { poller } from './telemetry/poller';
 import { dispatchTrigger } from './automations/engine';
 import { runRetention } from './telemetry/retention';
@@ -12,7 +12,7 @@ import { runStatusChecks, ensureComponents } from './status/service';
 
 async function main(): Promise<void> {
   validateEnv();
-  await runMigrationLeader();
+  await waitForMigrations();
   await prisma.$connect();
   await ensureComponents();
 

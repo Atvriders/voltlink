@@ -3,14 +3,14 @@
 import { env, validateEnv } from './core/env';
 import { buildApp } from './app';
 import { sseStart, sseStop } from './core/sse';
-import { runMigrationLeader } from './cli/migrateLeader';
+import { waitForMigrations } from './cli/migrate';
 import { prisma } from './core/db';
 import { ensureComponents, runStatusChecks } from './status/service';
 
 async function main(): Promise<void> {
   validateEnv();
   await import('./net/policy').then((m) => m.buildOutboundPolicy());
-  await runMigrationLeader();
+  await waitForMigrations();
   await prisma.$connect();
   await ensureComponents();
 

@@ -2,7 +2,7 @@
 // metrics, and the built SPA (in production).
 
 import express from 'express';
-import helmet from 'helmet';
+import { cspExtraOrigins, securityHeaders } from './core/securityHeaders';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import path from 'node:path';
@@ -28,12 +28,12 @@ import { sseAddClient } from './core/sse';
 import { authenticate } from './authz/authenticate';
 import { AccessDenied } from './authz/errors';
 import { getQueue } from './core/queue';
+import { PATHS } from './core/paths';
 import { APP_VERSION } from '@voltlink/shared';
 
 const OPENAPI_SPEC: string = (() => {
   try {
-    const p = path.resolve(process.cwd(), 'openapi.json');
-    if (fs.existsSync(p)) return fs.readFileSync(p, 'utf8');
+    if (fs.existsSync(PATHS.openapi)) return fs.readFileSync(PATHS.openapi, 'utf8');
   } catch {
     // fall through to the minimal stub
   }
@@ -46,22 +46,7 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
   const trust = parseTrustProxy(env.TRUST_PROXY);
   if (trust !== false) app.set('trust proxy', trust);
 
-  app.use(
-    helmet({
-      contentSecurityPolicy: {
-        directives: {
-          defaultSrc: ["'self'"],
-          scriptSrc: ["'self'"],
-          styleSrc: ["'self'", "'unsafe-inline'"],
-          imgSrc: ["'self'", 'data:', 'blob:'],
-          connectSrc: ["'self'"],
-          fontSrc: ["'self'", 'data:'],
-          workerSrc: ["'self'", 'blob:'],
-        },
-      },
-      crossOriginEmbedderPolicy: false,
-    }),
-  );
+  app.use(securityHeaders(env.PUBLIC_URL, cspExtraOrigins(env.CSP_CONNECT_ORIGINS)));
   app.use(requestId);
   // Inbound hooks need the raw body: mount before express.json() and CSRF.
   app.use('/api/v1/hooks', hooksRouter);
@@ -130,7 +115,7 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
 
   // Built SPA (production) or dev notice.
   if (opts.serveSpa) {
-    const spaDir = path.resolve(process.cwd(), 'web-dist');
+    const spaDir = PATHS.webDist;
     if (fs.existsSync(spaDir)) {
       app.use(express.static(spaDir, { index: false, maxAge: '7d' }));
       app.use((req, res, next) => {

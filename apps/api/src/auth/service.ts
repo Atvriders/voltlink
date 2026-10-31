@@ -317,7 +317,7 @@ export async function createSession(userId: string, ip?: string, userAgent?: str
 export async function setSessionCookie(res: { cookie: (name: string, value: string, opts: unknown) => void }, token: string): Promise<void> {
   res.cookie(env.SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: env.NODE_ENV === 'production',
+    secure: new URL(env.PUBLIC_URL).protocol === 'https:',
     sameSite: 'lax',
     path: '/',
     maxAge: env.JWT_EXPIRES_SEC * 1000,

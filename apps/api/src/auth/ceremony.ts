@@ -29,7 +29,7 @@ export async function createCeremony(
   });
   res.cookie(CEREMONY_COOKIE, handle, {
     httpOnly: true,
-    secure: env.NODE_ENV === 'production',
+    secure: new URL(env.PUBLIC_URL).protocol === 'https:',
     sameSite: 'strict',
     path: '/api/v1/auth',
     maxAge: 300_000,

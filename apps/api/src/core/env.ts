@@ -1,6 +1,11 @@
 // VoltLink environment configuration with boot-time validation.
+// The contract itself lives in env-spec.ts (zod, no side effects) so that
+// scripts/check-compose can prove every compose file passes every variable.
 // Rejects placeholder-looking secrets so a misconfigured deployment fails
 // loudly instead of running with a published default key.
+
+import { z } from 'zod';
+import { ENV_SPEC } from './env-spec';
 
 const PLACEHOLDER = /(secret|change.?me|changeme|placeholder|example|your-|xxxx|default)/i;
 
@@ -87,6 +92,11 @@ export const env = {
 
   DEMO_DEFAULT_ENABLED: process.env.VL_DEMO_DEFAULT_ENABLED === 'true',
   LOG_LEVEL: optional('LOG_LEVEL', 'info'),
+
+  // NEW-15 / I-COMPOSEENV additions.
+  ALLOW_INSECURE_HTTP: process.env.VL_ALLOW_INSECURE_HTTP === 'true',
+  CSP_CONNECT_ORIGINS: optional('VL_CSP_CONNECT_ORIGINS', ''),
+  STATUS_PORT: numberOpt('STATUS_PORT', 3001),
 };
 
 /**
@@ -113,6 +123,12 @@ export function parseTrustProxy(value: string): number | string[] | false {
 }
 
 export function validateEnv() {
+  const parsed = ENV_SPEC.safeParse(process.env);
+  if (!parsed.success) {
+    // Fail closed with a readable report (guide 04 §1).
+    console.error('[voltlink] invalid environment:\n' + z.prettifyError(parsed.error));
+    process.exit(1);
+  }
   // JWT secret required for any real run; tests inject their own.
   if (env.NODE_ENV !== 'test' || process.env.JWT_SECRET) {
     env.JWT_SECRET();
