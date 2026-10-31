@@ -556,6 +556,7 @@ const SKIP_ROUTES: ReadonlySet<string> = new Set([
   'POST /api/v1/auth/mfa/recovery-codes/regenerate',
   'PATCH /api/v1/users/retention', // spec: always 404
   'GET /api/v1/status/subscriptions/confirm/:token',
+  'GET /api/v1/status/subscriptions/unsubscribe/:token',
   'POST /api/v1/invitations/:token/accept',
   'POST /api/v1/automations/webhook/:token', // removed: replaced by inbound hooks
 ]);

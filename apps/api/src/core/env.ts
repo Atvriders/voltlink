@@ -95,6 +95,7 @@ export const env = {
   VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY || '',
   VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY || '',
   VAPID_SUBJECT: optional('VAPID_SUBJECT', `mailto:admin@${publicHost}`),
+  VL_PUSH_SERVICE_HOSTS: optional('VL_PUSH_SERVICE_HOSTS', ''),
 
   DEMO_DEFAULT_ENABLED: process.env.VL_DEMO_DEFAULT_ENABLED === 'true',
   LOG_LEVEL: optional('LOG_LEVEL', 'info'),

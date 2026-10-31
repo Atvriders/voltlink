@@ -50,16 +50,26 @@ function jitter(sec: number): number {
   return sec + Math.round(sec * 0.1 * (Math.random() * 2 - 1));
 }
 
-export function planNextPoll(input: PlannerInput, tuning: PollTuning = DEFAULT_TUNING): PlannerOutput {
+export function planNextPoll(
+  input: PlannerInput,
+  tuning: PollTuning = DEFAULT_TUNING,
+): PlannerOutput {
   const { now } = input;
-  const out = (action: PlannerOutput['action'], nextAt: number, mode: string, jitterSec = 0): PlannerOutput => ({
+  const out = (
+    action: PlannerOutput['action'],
+    nextAt: number,
+    mode: string,
+    jitterSec = 0,
+  ): PlannerOutput => ({
     action,
     nextAt,
     mode,
     jitterSec,
   });
-  if (input.backoffUntil && now < input.backoffUntil) return out('none', input.backoffUntil, 'backoff');
-  if (input.connectivity === 'asleep') return out('state', now + jitter(tuning.asleepSec), 'asleep');
+  if (input.backoffUntil && now < input.backoffUntil)
+    return out('none', input.backoffUntil, 'backoff');
+  if (input.connectivity === 'asleep')
+    return out('state', now + jitter(tuning.asleepSec), 'asleep');
   if (input.connectivity === 'offline' || input.connectivity === 'unknown') {
     return out('state', now + jitter(tuning.offlineSec), input.connectivity);
   }
@@ -75,13 +85,19 @@ export function planNextPoll(input: PlannerInput, tuning: PollTuning = DEFAULT_T
     // One vehicle_data re-check after a suspension, then clear it.
     return out('vehicle_data', now, 'suspend_recheck');
   }
-  if (activity.shift_state === 'D' || activity.shift_state === 'R' || activity.shift_state === 'N' || Number(activity.speedKmh ?? 0) > 0) {
+  if (
+    activity.shift_state === 'D' ||
+    activity.shift_state === 'R' ||
+    activity.shift_state === 'N' ||
+    Number(activity.speedKmh ?? 0) > 0
+  ) {
     return out('vehicle_data', now + jitter(tuning.drivingSec), 'driving');
   }
   if (activity.chargingState === 'Charging' || activity.chargingState === 'Starting') {
     return out('vehicle_data', now + jitter(tuning.chargingSec), 'charging');
   }
-  if (activity.sentryMode === true) return out('vehicle_data', now + jitter(tuning.sentrySec), 'sentry');
+  if (activity.sentryMode === true)
+    return out('vehicle_data', now + jitter(tuning.sentrySec), 'sentry');
   const idleFor = (now - input.lastActivityAt) / 60_000;
   if (idleFor >= tuning.idleSleepWindowMin) {
     return out('state', now + jitter(60), 'sleeping_window'); // keep state checks; suspend after re-check

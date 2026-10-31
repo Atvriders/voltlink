@@ -11,6 +11,7 @@ import {
   ensureComponents,
 } from '../status/service';
 import { randomToken } from '../core/crypto';
+import { sendMail } from '../auth/service';
 
 const statusPublicUrl = `${env.PUBLIC_URL}/status`;
 
@@ -80,6 +81,7 @@ statusRouter.post('/subscribe', { auth: 'public', target: { kind: 'none' } }, as
     data: {
       ok: true,
       note: 'Subscription recorded. (Confirmation email requires SMTP configuration.)',
+      unsubscribeUrl: `${statusPublicUrl}/subscriptions/unsubscribe/${token}`,
     },
   });
 });
@@ -97,6 +99,23 @@ statusRouter.get(
     }
     await prisma.statusSubscription.update({ where: { id: sub.id }, data: { confirmed: true } });
     res.send('Subscription confirmed.');
+  },
+);
+
+// N-SUBS: one-click unsubscribe (deletes the row entirely).
+statusRouter.get(
+  '/subscriptions/unsubscribe/:token',
+  { auth: 'public', target: { kind: 'none' } },
+  async (req, res) => {
+    const sub = await prisma.statusSubscription.findUnique({
+      where: { token: String(req.params.token) },
+    });
+    if (!sub) {
+      res.status(404).send('Invalid unsubscribe token.');
+      return;
+    }
+    await prisma.statusSubscription.delete({ where: { id: sub.id } });
+    res.send('You have been unsubscribed from VoltLink status updates.');
   },
 );
 
@@ -236,6 +255,10 @@ statusRouter.post(
         },
       });
     }
+    void notifyStatusSubscribers(
+      `New incident: ${incident.title}`,
+      `${incident.title} — ${message ?? 'Investigating'}`,
+    );
     // reflect incident on components
     for (const key of (components ?? []).slice(0, 20)) {
       const c = await prisma.statusComponent.findUnique({ where: { key } });
@@ -290,6 +313,10 @@ statusRouter.post(
       where: { id: incident.id },
       data: { phases: current as never, status: ph },
     });
+    void notifyStatusSubscribers(
+      `Incident update: ${incident.title} (${ph})`,
+      `${incident.title}: ${message.slice(0, 500)}`,
+    );
     if (ph === 'resolved') {
       // restore components that were degraded by this incident
       for (const key of (incident.components ?? []) as string[]) {
@@ -361,12 +388,28 @@ statusRouter.post(
         .json({ error: { code: 'VALIDATION', message: 'title, startsAt, endsAt required.' } });
       return;
     }
+    const start = new Date(String(startsAt));
+    const end = new Date(String(endsAt));
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+      res.status(400).json({
+        error: {
+          code: 'INVALID_DATE',
+          message: 'startsAt/endsAt must be valid dates with endsAt after startsAt.',
+        },
+      });
+      return;
+    }
+    // N-MAINT: the window state is time-driven.
+    const now = Date.now();
+    const windowStatus =
+      start.getTime() > now ? 'scheduled' : end.getTime() > now ? 'in_progress' : 'completed';
     const m = await prisma.maintenanceWindow.create({
       data: {
         title: String(title).slice(0, 160),
         description: typeof description === 'string' ? description.slice(0, 1000) : null,
-        startsAt: new Date(String(startsAt)),
-        endsAt: new Date(String(endsAt)),
+        startsAt: start,
+        endsAt: end,
+        status: windowStatus,
         components: JSON.parse(
           JSON.stringify(Array.isArray(components) ? components.slice(0, 20) : []),
         ),
@@ -426,4 +469,20 @@ function escapeXml(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/** N-SUBS: deliver incident notifications to confirmed subscribers. SMTP
+ * failures must never break incident management, so this swallows errors. */
+export async function notifyStatusSubscribers(subject: string, text: string): Promise<void> {
+  const subs = await prisma.statusSubscription.findMany({ where: { confirmed: true } });
+  await Promise.allSettled(
+    subs.map((sub) =>
+      sendMail({
+        to: sub.email,
+        subject: `VoltLink Status: ${subject}`,
+        text: `${text}\n\nUnsubscribe: ${statusPublicUrl}/subscriptions/unsubscribe/${sub.token}`,
+        html: `<p>${escapeXml(text)}</p><p><a href="${statusPublicUrl}/subscriptions/unsubscribe/${sub.token}">Unsubscribe</a></p>`,
+      }),
+    ),
+  );
 }

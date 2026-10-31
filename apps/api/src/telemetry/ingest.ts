@@ -32,7 +32,10 @@ const driveTracker = new Map<
 /** P-DETECT: detection state persists across restarts in DriveTracker rows. */
 async function loadDriveTracker(
   vehicleId: string,
-): Promise<{ startedAt: Date; startedPct: number; maxSpeed: number; points: unknown[]; lastMoving: Date } | undefined> {
+): Promise<
+  | { startedAt: Date; startedPct: number; maxSpeed: number; points: unknown[]; lastMoving: Date }
+  | undefined
+> {
   const row = await prisma.driveTracker.findUnique({ where: { vehicleId } });
   if (!row) return undefined;
   return {
@@ -51,8 +54,21 @@ async function persistDriveTracker(
   const pts = JSON.parse(JSON.stringify(t.points.slice(-4000)));
   await prisma.driveTracker.upsert({
     where: { vehicleId },
-    update: { startedAt: t.startedAt, startedPct: t.startedPct, maxSpeed: t.maxSpeed, points: pts, lastMoving: t.lastMoving },
-    create: { vehicleId, startedAt: t.startedAt, startedPct: t.startedPct, maxSpeed: t.maxSpeed, points: pts, lastMoving: t.lastMoving },
+    update: {
+      startedAt: t.startedAt,
+      startedPct: t.startedPct,
+      maxSpeed: t.maxSpeed,
+      points: pts,
+      lastMoving: t.lastMoving,
+    },
+    create: {
+      vehicleId,
+      startedAt: t.startedAt,
+      startedPct: t.startedPct,
+      maxSpeed: t.maxSpeed,
+      points: pts,
+      lastMoving: t.lastMoving,
+    },
   });
 }
 
@@ -251,7 +267,16 @@ async function detectDrive(
   if (!current) {
     const loaded = await loadDriveTracker(vehicleId);
     if (loaded) {
-      current = { ...loaded, points: loaded.points as { ts: Date; lat: number; lon: number; speedKmh: number; batteryPct: number | null }[] };
+      current = {
+        ...loaded,
+        points: loaded.points as {
+          ts: Date;
+          lat: number;
+          lon: number;
+          speedKmh: number;
+          batteryPct: number | null;
+        }[],
+      };
       driveTracker.set(vehicleId, current);
     }
   }
@@ -521,10 +546,17 @@ export async function applyCostCalculation(sessionId: string): Promise<void> {
       } catch {
         /* fall back to UTC */
       }
-      const periods = (tou.periods ?? []) as { startMin: number; endMin: number; pricePerKwh: number }[];
+      const periods = (tou.periods ?? []) as {
+        startMin: number;
+        endMin: number;
+        pricePerKwh: number;
+      }[];
       const period =
-        periods.find((p) => (p.endMin > p.startMin ? startMin >= p.startMin && startMin < p.endMin : startMin >= p.startMin || startMin < p.endMin)) ??
-        periods[0];
+        periods.find((p) =>
+          p.endMin > p.startMin
+            ? startMin >= p.startMin && startMin < p.endMin
+            : startMin >= p.startMin || startMin < p.endMin,
+        ) ?? periods[0];
       price = period?.pricePerKwh ?? tou.pricePerKwh;
       ruleId = tou.id;
       ruleName = tou.name;
@@ -647,6 +679,17 @@ async function evaluateTriggers(vehicle: IngestVehicle, state: VehicleState): Pr
       data: {},
     });
   }
+  const trunkOpen = Boolean(state.trunkOpen || state.frunkOpen);
+  const prevTrunk = Boolean(prev.trunkOpen || prev.frunkOpen);
+  if (trunkOpen && !prevTrunk) {
+    void dispatchTrigger({
+      type: 'trunk_open',
+      userId: vehicle.addedById ?? '',
+      vehicleId: vehicle.id,
+      data: {},
+    });
+  }
+  next.trunkOpen = trunkOpen;
   if (typeof next.tempC === 'number' && (next.tempC < 5 || next.tempC > 35)) {
     void dispatchTrigger({
       type: 'temperature_threshold',

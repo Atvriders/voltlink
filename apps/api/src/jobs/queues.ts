@@ -10,13 +10,17 @@ export const PREFIX = 'voltlink';
 export const QUEUE_DEFAULTS = {
   'vehicle-commands': { attempts: 1 }, // provider commands are not idempotent: the DB state machine decides
   telemetry: { attempts: 3, backoff: { type: 'exponential', delay: 5_000, jitter: 0.2 } },
-  'tesla-token-refresh': { attempts: 5, backoff: { type: 'exponential', delay: 30_000, jitter: 0.2 } },
+  'tesla-token-refresh': {
+    attempts: 5,
+    backoff: { type: 'exponential', delay: 30_000, jitter: 0.2 },
+  },
   automations: { attempts: 3, backoff: { type: 'exponential', delay: 10_000 } },
   reports: { attempts: 2, backoff: { type: 'fixed', delay: 30_000 } },
   'privacy-redaction': { attempts: 5, backoff: { type: 'exponential', delay: 60_000 } },
   'account-deletion': { attempts: 10, backoff: { type: 'exponential', delay: 60_000 } },
   maintenance: { attempts: 3, backoff: { type: 'exponential', delay: 60_000 } },
   demo: { attempts: 3, backoff: { type: 'exponential', delay: 5_000 } },
+  notifications: { attempts: 4, backoff: { type: 'exponential', delay: 15_000, jitter: 0.2 } },
 } satisfies Record<string, JobsOptions>;
 
 export type QueueName = keyof typeof QUEUE_DEFAULTS;

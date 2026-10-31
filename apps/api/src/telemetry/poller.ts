@@ -49,7 +49,10 @@ export class PollingScheduler {
     // two scheduler leaders can never double-plan a vehicle.
     const now = new Date();
     const due = await prisma.vehiclePollState.findMany({
-      where: { nextPollAt: { lte: now }, vehicle: { active: true, providerAccount: { status: 'connected' } } },
+      where: {
+        nextPollAt: { lte: now },
+        vehicle: { active: true, providerAccount: { status: 'connected' } },
+      },
       select: {
         vehicleId: true,
         nextPollAt: true,
@@ -61,7 +64,9 @@ export class PollingScheduler {
         userActiveUntil: true,
         suspendedUntil: true,
         backoffUntil: true,
-        vehicle: { select: { id: true, providerAccountId: true, providerVehicleId: true, demo: true } },
+        vehicle: {
+          select: { id: true, providerAccountId: true, providerVehicleId: true, demo: true },
+        },
       },
       orderBy: { nextPollAt: 'asc' },
       take: 200,
@@ -130,8 +135,33 @@ export class PollingScheduler {
       .catch(() => undefined);
   }
 
-  recordSuccess(accountId: string): void {
+  async recordSuccess(accountId: string): Promise<void> {
     this.failures.delete(accountId);
+    // N-TRIGGERS: provider_reconnected when a reauth_required account works
+    // again.
+    const account = await prisma.providerAccount.findUnique({
+      where: { id: accountId },
+      select: {
+        status: true,
+        organizationId: true,
+        vehicles: { select: { id: true, addedById: true } },
+      },
+    });
+    if (account?.status === 'reauth_required') {
+      await prisma.providerAccount.update({
+        where: { id: accountId },
+        data: { status: 'connected', lastError: null },
+      });
+      const { dispatchTrigger } = await import('../automations/engine');
+      for (const v of account.vehicles) {
+        void dispatchTrigger({
+          type: 'provider_reconnected',
+          userId: v.addedById ?? '',
+          vehicleId: v.id,
+          data: { accountId },
+        });
+      }
+    }
   }
 }
 
@@ -186,7 +216,14 @@ export async function processTelemetryJob(payload: {
       data: { lastSyncAt: new Date(), lastError: null },
     });
     const st = (result.state as { status?: string }) ?? {};
-    const connectivity = st.status === 'asleep' ? 'asleep' : st.status === 'offline' ? 'offline' : st.status === 'unknown' || !st.status ? 'unknown' : 'online';
+    const connectivity =
+      st.status === 'asleep'
+        ? 'asleep'
+        : st.status === 'offline'
+          ? 'offline'
+          : st.status === 'unknown' || !st.status
+            ? 'unknown'
+            : 'online';
     const plan = planNextPoll(
       {
         connectivity,
@@ -203,8 +240,19 @@ export async function processTelemetryJob(payload: {
     );
     await prisma.vehiclePollState.upsert({
       where: { vehicleId: vehicle.id },
-      update: { connectivity, nextPollAt: new Date(plan.nextAt), nextAction: plan.action, mode: plan.mode },
-      create: { vehicleId: vehicle.id, connectivity, nextPollAt: new Date(plan.nextAt), nextAction: plan.action, mode: plan.mode },
+      update: {
+        connectivity,
+        nextPollAt: new Date(plan.nextAt),
+        nextAction: plan.action,
+        mode: plan.mode,
+      },
+      create: {
+        vehicleId: vehicle.id,
+        connectivity,
+        nextPollAt: new Date(plan.nextAt),
+        nextAction: plan.action,
+        mode: plan.mode,
+      },
     });
   } catch (err) {
     const msg = (err as Error).message;

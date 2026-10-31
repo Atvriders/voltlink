@@ -318,7 +318,10 @@ export interface CommandAuditEvent {
 // destination length, rejected with 422 before a row is created.
 // ---------------------------------------------------------------------------
 
-const pin = z.string().regex(/^\d{4}$/, 'PIN must be exactly 4 digits').optional();
+const pin = z
+  .string()
+  .regex(/^\d{4}$/, 'PIN must be exactly 4 digits')
+  .optional();
 const dest = z.string().min(1).max(200, 'Destination must be at most 200 characters').optional();
 
 export const COMMAND_PARAM_SCHEMAS: Record<CommandType, z.ZodTypeAny> = {
@@ -358,12 +361,18 @@ export const COMMAND_PARAM_SCHEMAS: Record<CommandType, z.ZodTypeAny> = {
   flash_lights: z.object({}).optional(),
   honk_horn: z.object({}).optional(),
   homelink: z
-    .object({ lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180), token: z.string().min(1).max(64) })
+    .object({
+      lat: z.number().min(-90).max(90),
+      lon: z.number().min(-180).max(180),
+      token: z.string().min(1).max(64),
+    })
     .optional(),
   remote_start: z.object({}).optional(),
   valet_mode: z
     .object({ on: z.boolean(), pin })
-    .refine((p) => p.on === false || p.pin !== undefined, { message: 'valet_mode on requires a 4-digit pin.' })
+    .refine((p) => p.on === false || p.pin !== undefined, {
+      message: 'valet_mode on requires a 4-digit pin.',
+    })
     .optional(),
   speed_limit: z.object({ limitMph: z.number().min(50).max(120), pin }).optional(),
   send_navigation: z.object({ dest }).optional(),
@@ -400,7 +409,8 @@ export function commandStatePredicate(
       return state.climateOn === false;
     case 'set_temperature': {
       const want = params.driverTempC ?? params.passengerTempC;
-      const got = params.driverTempC !== undefined ? state.driverTempSettingC : state.passengerTempSettingC;
+      const got =
+        params.driverTempC !== undefined ? state.driverTempSettingC : state.passengerTempSettingC;
       return typeof want === 'number' && typeof got === 'number' && Math.abs(got - want) <= 0.5;
     }
     case 'charge_start':
@@ -408,7 +418,9 @@ export function commandStatePredicate(
     case 'charge_stop':
       return state.chargingState !== 'Charging' && state.chargingState !== 'Starting';
     case 'set_charge_limit':
-      return typeof params.chargeLimitPct === 'number' && state.chargeLimitPct === params.chargeLimitPct;
+      return (
+        typeof params.chargeLimitPct === 'number' && state.chargeLimitPct === params.chargeLimitPct
+      );
     case 'charge_port_open':
       return state.chargePortDoorOpen === true;
     case 'charge_port_close':
@@ -430,7 +442,10 @@ export function commandStatePredicate(
     case 'steering_heater':
       return true;
     case 'set_charging_amps':
-      return typeof params.chargingAmps === 'number' && state.chargeCurrentRequestAmps === params.chargingAmps;
+      return (
+        typeof params.chargingAmps === 'number' &&
+        state.chargeCurrentRequestAmps === params.chargingAmps
+      );
     case 'remote_start':
       return state.remoteStartActive === true;
     case 'valet_mode':

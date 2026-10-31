@@ -57,7 +57,7 @@ interface CheckResult {
   detail?: string;
 }
 
-async function checkComponent(key: string): Promise<CheckResult> {
+export async function checkComponent(key: string): Promise<CheckResult> {
   const t0 = Date.now();
   const latency = () => Date.now() - t0;
   switch (key) {
@@ -90,14 +90,19 @@ async function checkComponent(key: string): Promise<CheckResult> {
     case 'workers': {
       const q = getQueue();
       const { queue } = await import('../jobs/queues');
-      const failed = await queue('vehicle-commands').getFailed(0, 10_000).then((j) => j.length).catch(() => 0);
+      const failed = await queue('vehicle-commands')
+        .getFailed(0, 10_000)
+        .then((j) => j.length)
+        .catch(() => 0);
       const depth = env.REDIS_URL ? await q.depth('vehicle-commands') : 0;
       const beat = await getSetting('workerBeat');
       const active = !!beat && Date.now() - new Date(beat).getTime() < 90_000;
       return {
         ok: failed < 50,
         latencyMs: latency(),
-        detail: active ? `${failed} failed jobs, queue depth ${depth}.` : 'No worker beat recently; workers may be down.',
+        detail: active
+          ? `${failed} failed jobs, queue depth ${depth}.`
+          : 'No worker beat recently; workers may be down.',
       };
     }
     case 'scheduler':
@@ -147,20 +152,30 @@ async function checkComponent(key: string): Promise<CheckResult> {
     }
     case 'realtime':
       return { ok: true, latencyMs: latency(), detail: `${sseCount()} connected clients.` };
-    case 'maps':
+    case 'maps': {
+      // N-STATUSHEALTH: optional integration; not configured ≠ outage.
+      const source = await getSetting('mapTileSource');
+      if (!source) return { ok: true, detail: 'Not configured — map tiles are optional.' };
       return {
         ok: true,
         latencyMs: latency(),
-        detail: 'Map rendering is client-side (offline demo or configured tile source).',
+        detail: 'Map tile source configured (client-side rendering).',
       };
+    }
     case 'tesla': {
+      // N-STATUSHEALTH: missing credentials is "not configured" (operational),
+      // not an outage; configured + failing is a real outage.
+      const configured = Boolean(env.TESLA_CLIENT_ID && env.TESLA_CLIENT_SECRET);
       const accounts = await prisma.providerAccount.findMany({
         where: { provider: 'tesla', status: { not: 'revoked' } },
       });
       const withErrors = accounts.filter(
         (a) => a.lastError && a.lastSyncAt && a.lastSyncAt > new Date(Date.now() - 3600_000),
       );
-      if (accounts.length === 0) return { ok: true, detail: 'No Tesla accounts connected.' };
+      if (accounts.length === 0 && !configured)
+        return { ok: true, detail: 'Not configured — no Tesla credentials or accounts.' };
+      if (accounts.length === 0)
+        return { ok: true, detail: 'Configured; no accounts connected yet.' };
       return {
         ok: withErrors.length === 0,
         latencyMs: latency(),
@@ -168,13 +183,23 @@ async function checkComponent(key: string): Promise<CheckResult> {
       };
     }
     case 'tessie': {
-      const accounts = await prisma.providerAccount.count({
+      const configured = Boolean(
+        env.TESSIE_BASE_URL && env.TESSIE_BASE_URL !== 'https://api.tessie.com',
+      );
+      const accounts = await prisma.providerAccount.findMany({
         where: { provider: 'tessie', status: { not: 'revoked' } },
       });
+      const withErrors = accounts.filter(
+        (a) => a.lastError && a.lastSyncAt && a.lastSyncAt > new Date(Date.now() - 3600_000),
+      );
+      if (accounts.length === 0 && !configured)
+        return { ok: true, detail: 'Not configured — Tessie is optional.' };
+      if (accounts.length === 0)
+        return { ok: true, detail: 'Configured; no accounts connected yet.' };
       return {
-        ok: true,
-        detail:
-          accounts === 0 ? 'No Tessie accounts connected.' : `${accounts} accounts connected.`,
+        ok: withErrors.length === 0,
+        latencyMs: latency(),
+        detail: `${accounts.length} accounts, ${withErrors.length} with recent errors.`,
       };
     }
     case 'demo': {
@@ -199,8 +224,49 @@ async function checkComponent(key: string): Promise<CheckResult> {
 export async function runStatusChecks(): Promise<void> {
   await ensureComponents();
   const components = await prisma.statusComponent.findMany();
+  // N-MAINT: windows are time-driven. A component inside an active window is
+  // 'maintenance'; once the window ends it returns to 'operational'.
+  const now = new Date();
+  const windows = await prisma.maintenanceWindow.findMany({
+    where: { startsAt: { lte: now }, endsAt: { gt: now }, status: { not: 'completed' } },
+  });
+  const covered = new Set<string>();
+  for (const w of windows) for (const k of (w.components ?? []) as string[]) covered.add(k);
+  for (const w of windows) {
+    if (w.status !== 'in_progress') {
+      await prisma.maintenanceWindow.update({
+        where: { id: w.id },
+        data: { status: 'in_progress' },
+      });
+    }
+  }
+  await prisma.maintenanceWindow.updateMany({
+    where: { endsAt: { lte: now }, status: { not: 'completed' } },
+    data: { status: 'completed' },
+  });
   for (const c of components) {
     if (c.manualOverride) continue;
+    if (covered.has(c.key)) {
+      if (c.status !== 'maintenance') {
+        await prisma.statusComponent.update({
+          where: { key: c.key },
+          data: { status: 'maintenance', updatedAt: new Date() },
+        });
+        c.status = 'maintenance';
+      }
+      continue;
+    }
+    if (c.status === 'maintenance') {
+      await prisma.statusComponent.update({
+        where: { key: c.key },
+        data: { status: 'operational', updatedAt: new Date() },
+      });
+      c.status = 'operational';
+    }
+  }
+  for (const c of components) {
+    if (c.manualOverride) continue;
+    if (covered.has(c.key)) continue;
     const result = await checkComponent(c.key).catch(() => ({
       ok: false,
       latencyMs: undefined as number | undefined,

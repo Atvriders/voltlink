@@ -26,19 +26,25 @@ const conn = (): Bus => {
 };
 
 /** There is no broadcast: callers resolve the audience first. */
-export async function publishToUsers(userIds: string[], ev: { type: string; data: unknown }): Promise<void> {
+export async function publishToUsers(
+  userIds: string[],
+  ev: { type: string; data: unknown },
+): Promise<void> {
   const json = JSON.stringify({ ...ev, at: new Date().toISOString() });
   const audience = [...new Set(userIds.filter(Boolean))];
   await Promise.all(
-    audience.map((u) =>
-      conn()
-        .voltlinkRtPublish(userKey(u), 200, json, REPLAY_MS)
-        .catch(() => undefined), // Redis down must never take a request down
+    audience.map(
+      (u) =>
+        conn()
+          .voltlinkRtPublish(userKey(u), 200, json, REPLAY_MS)
+          .catch(() => undefined), // Redis down must never take a request down
     ),
   );
 }
 
-export type RevokeMsg = { userId: string } & ({ sessionIds: string[] } | { allExcept: string | null });
+export type RevokeMsg = { userId: string } & (
+  { sessionIds: string[] } | { allExcept: string | null }
+);
 
 export const publishSessionRevocation = async (m: RevokeMsg): Promise<void> => {
   await producerConnection()

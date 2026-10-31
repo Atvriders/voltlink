@@ -50,6 +50,7 @@ model User {
   webhooks               WebhookEndpoint[]
   pushSubs               PushSubscription[]
   notificationChannels   NotificationChannel[]
+  notificationOutbox   NotificationOutbox[]
   inboundWebhooks        InboundWebhook[]
   auditEvents            AuditLog[]
 }
@@ -633,6 +634,27 @@ model WebhookEndpoint {
   lastStatus            Int?
   lastDeliveryAt        DateTime? @db.Timestamptz(3)
   @@index([userId])
+}
+
+model NotificationOutbox {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel   String
+  event     String
+  severity  String   @default("info")
+  title     String
+  body      String
+  vehicleId String?
+  status    String   @default("pending")
+  attempts  Int      @default(0)
+  nextRunAt DateTime @db.Timestamptz(3) @default(now())
+  lastError String?
+  sentAt    DateTime? @db.Timestamptz(3)
+  deadAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime @db.Timestamptz(3) @default(now())
+  @@index([status, nextRunAt])
+  @@index([userId, createdAt])
 }
 
 model NotificationChannel {

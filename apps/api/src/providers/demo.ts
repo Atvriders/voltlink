@@ -517,7 +517,10 @@ class DemoProviderImpl implements VehicleProvider {
     }
     // Deterministic provider timeouts for realistic demo behaviour.
     if (type === 'window_vent' && spec.id === 'demo-bison') {
-      return { kind: 'timed_out', errorMessage: 'Vehicle did not respond within the provider timeout.' };
+      return {
+        kind: 'timed_out',
+        errorMessage: 'Vehicle did not respond within the provider timeout.',
+      };
     }
     const ov = overlays.get(spec.id) ?? {};
     switch (type) {

@@ -233,9 +233,18 @@ adminRouter.get(
   async (_req, res) => {
     const { queue, QUEUE_DEFAULTS } = await import('../jobs/queues');
     const names = Object.keys(QUEUE_DEFAULTS);
-    const rows: { id: string; queue: string; error: string; attempts: number; doneAt?: string; payload: unknown }[] = [];
+    const rows: {
+      id: string;
+      queue: string;
+      error: string;
+      attempts: number;
+      doneAt?: string;
+      payload: unknown;
+    }[] = [];
     for (const name of names) {
-      const jobs = await queue(name as never).getFailed(0, 50).catch(() => []);
+      const jobs = await queue(name as never)
+        .getFailed(0, 50)
+        .catch(() => []);
       for (const job of jobs) {
         rows.push({
           id: String(job.id),

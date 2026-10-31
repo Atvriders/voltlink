@@ -487,6 +487,24 @@ fleetRouter.post(
       res.status(400).json({ error: { code: 'VALIDATION', message: 'title required.' } });
       return;
     }
+    // NEW-09: a maintenance record needs a due date or a due odometer, and
+    // an unparseable due date is a 400 — never a 500 from `new Date('x')`.
+    const parsedDueAt = typeof dueAt === 'string' && dueAt ? new Date(dueAt) : null;
+    if (
+      (parsedDueAt && Number.isNaN(parsedDueAt.getTime())) ||
+      (typeof dueAt === 'string' && dueAt && Number.isNaN(new Date(dueAt).getTime()))
+    ) {
+      res.status(400).json({
+        error: { code: 'INVALID_DATE', message: 'dueAt must be a valid date.' },
+      });
+      return;
+    }
+    if (!parsedDueAt && !(typeof dueOdometerKm === 'number' && Number.isFinite(dueOdometerKm))) {
+      res.status(400).json({
+        error: { code: 'VALIDATION', message: 'dueAt or dueOdometerKm required.' },
+      });
+      return;
+    }
     const m = await prisma.maintenanceRecord.create({
       data: {
         vehicleId: vehicle.id,
@@ -496,7 +514,7 @@ fleetRouter.post(
         )
           ? String(kind)
           : 'service',
-        dueAt: typeof dueAt === 'string' && dueAt ? new Date(dueAt) : null,
+        dueAt: parsedDueAt,
         dueOdometerKm: typeof dueOdometerKm === 'number' ? dueOdometerKm : null,
         cost: typeof cost === 'number' ? cost : null,
         notes: typeof notes === 'string' ? notes.slice(0, 500) : null,
@@ -521,6 +539,23 @@ fleetRouter.patch(
     const rec = req.access!.resource!;
     const { title, kind, dueAt, dueOdometerKm, completedAt, cost, notes } = (req.body ??
       {}) as Record<string, unknown>;
+    // NEW-09: same date validation on PATCH.
+    if (typeof dueAt === 'string' && dueAt && Number.isNaN(new Date(dueAt).getTime())) {
+      res
+        .status(400)
+        .json({ error: { code: 'INVALID_DATE', message: 'dueAt must be a valid date.' } });
+      return;
+    }
+    if (
+      typeof completedAt === 'string' &&
+      completedAt &&
+      Number.isNaN(new Date(completedAt).getTime())
+    ) {
+      res
+        .status(400)
+        .json({ error: { code: 'INVALID_DATE', message: 'completedAt must be a valid date.' } });
+      return;
+    }
     await prisma.maintenanceRecord.update({
       where: { id: rec.id },
       data: {

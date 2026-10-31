@@ -2,6 +2,8 @@
 // ntfy, Gotify, Discord webhooks, Microsoft Teams webhooks.
 // Endpoint URLs are validated as http(s) and rate-limited; delivery failures
 // are recorded but never crash the caller.
+// N-TEAMS: Teams payload is an Adaptive Card envelope.
+// N-SMTP/Gotify: the Gotify token is sent as X-Gotify-Key, never in the URL.
 
 import { prisma } from '../core/db';
 import { safeFetch } from '../net/safeFetch';
@@ -17,9 +19,32 @@ const PROVIDER_SETTING: Record<string, string> = {
   teams: 'teamsWebhook',
 };
 
-const RATE_LIMIT = 30_000; // one delivery per provider per user per 30s
-
 const lastSent = new Map<string, number>();
+
+/** Minimum interval between deliveries per user+provider, in ms (N-DROPPED). */
+export function channelMinInterval(_userId: string, channel: string, url?: string | null): number {
+  if (channel === 'ntfy' && url) {
+    try {
+      return new URL(url).hostname === 'ntfy.sh' ? 5_000 : 1_000;
+    } catch {
+      /* fall through */
+    }
+  }
+  return (
+    { discord: 1_000, teams: 1_000, ntfy: 1_000, gotify: 0, email: 0, push: 250 }[channel] ?? 1_000
+  );
+}
+
+export function throttled(userId: string, channel: string, url?: string | null): boolean {
+  const key = `${userId}:${channel}`;
+  const interval = channelMinInterval(userId, channel, url);
+  if (interval <= 0) return false;
+  const now = Date.now();
+  const last = lastSent.get(key);
+  if (last && now - last < interval) return true;
+  lastSent.set(key, now);
+  return false;
+}
 
 export async function pushSimpleWebhook(
   userId: string,
@@ -31,12 +56,6 @@ export async function pushSimpleWebhook(
   const url = await userChannelUrl(userId, key);
   if (!url) return;
 
-  const now = Date.now();
-  const last = lastSent.get(`${userId}:${channel}`);
-  if (last && now - last < RATE_LIMIT) return;
-  lastSent.set(`${userId}:${channel}`, now);
-
-  let payload: string;
   if (channel === 'ntfy') {
     await safeFetch(getOutboundPolicy(), url, {
       method: 'POST',
@@ -50,48 +69,70 @@ export async function pushSimpleWebhook(
     return;
   }
   if (channel === 'gotify') {
-    payload = JSON.stringify({
-      title: msg.title,
-      message: msg.body,
-      priority: msg.severity === 'critical' ? 8 : 5,
-    });
-    await safeFetch(getOutboundPolicy(), url, {
+    // N-GOTIFY: the token travels in X-Gotify-Key; strip it from the URL.
+    const { url: cleanUrl, token } = splitGotify(url);
+    await safeFetch(getOutboundPolicy(), cleanUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: payload,
+      headers: { 'Content-Type': 'application/json', 'X-Gotify-Key': token },
+      body: JSON.stringify({
+        title: msg.title,
+        message: msg.body,
+        priority: msg.severity === 'critical' ? 8 : 5,
+      }),
     });
     return;
   }
   if (channel === 'discord') {
     const color =
       msg.severity === 'critical' ? 15548997 : msg.severity === 'warning' ? 16705372 : 3447003;
-    payload = JSON.stringify({
-      username: 'VoltLink',
-      embeds: [
-        { title: msg.title, description: msg.body, color, timestamp: new Date().toISOString() },
-      ],
-    });
     await safeFetch(getOutboundPolicy(), url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: payload,
+      body: JSON.stringify({
+        username: 'VoltLink',
+        embeds: [
+          { title: msg.title, description: msg.body, color, timestamp: new Date().toISOString() },
+        ],
+      }),
     });
     return;
   }
   if (channel === 'teams') {
-    payload = JSON.stringify({
-      '@type': 'MessageCard',
-      '@context': 'http://schema.org/extensions',
-      summary: msg.title,
-      themeColor: '0078D7',
-      title: msg.title,
-      text: msg.body,
-    });
+    // N-TEAMS: Adaptive Card envelope.
     await safeFetch(getOutboundPolicy(), url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: payload,
+      body: JSON.stringify({
+        type: 'message',
+        attachments: [
+          {
+            contentType: 'application/vnd.microsoft.card.adaptive',
+            content: {
+              $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+              type: 'AdaptiveCard',
+              version: '1.4',
+              body: [
+                { type: 'TextBlock', size: 'Large', weight: 'Bolder', text: msg.title, wrap: true },
+                { type: 'TextBlock', text: msg.body, wrap: true },
+                { type: 'TextBlock', text: `Event: ${msg.event}`, size: 'Small', isSubtle: true },
+              ],
+            },
+          },
+        ],
+      }),
     });
+  }
+}
+
+/** Gotify URLs are commonly https://host/message?token=…; move the token to a header. */
+export function splitGotify(raw: string): { url: string; token: string } {
+  try {
+    const u = new URL(raw);
+    const token = u.searchParams.get('token') ?? '';
+    u.searchParams.delete('token');
+    return { url: u.toString(), token };
+  } catch {
+    return { url: raw, token: '' };
   }
 }
 

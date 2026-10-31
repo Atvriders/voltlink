@@ -48,6 +48,7 @@ export const TRIGGER_TYPES = [
   'temperature_threshold',
   'vehicle_online',
   'provider_reconnected',
+  'trunk_open',
   'fault_detected',
   'webhook',
 ] as const;

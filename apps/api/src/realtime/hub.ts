@@ -106,15 +106,26 @@ export async function sseHandler(req: Request, res: Response): Promise<void> {
   const key = userKey(actor.userId);
   const set = byUser.get(actor.userId) ?? new Set<Client>();
   if (set.size >= 10) {
-    res.status(429).json({ error: { code: 'TOO_MANY_STREAMS', message: 'Too many open streams.' } });
+    res
+      .status(429)
+      .json({ error: { code: 'TOO_MANY_STREAMS', message: 'Too many open streams.' } });
     return;
   }
-  res
-    .status(200)
-    .set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', 'X-Accel-Buffering': 'no' });
+  res.status(200).set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'X-Accel-Buffering': 'no',
+  });
   res.flushHeaders();
   res.write('retry: 3000\n\n');
-  const c: Client = { res, sessionId: actor.sessionId, lastId: '0-0', pending: [], timers: [], closed: false };
+  const c: Client = {
+    res,
+    sessionId: actor.sessionId,
+    lastId: '0-0',
+    pending: [],
+    timers: [],
+    closed: false,
+  };
   set.add(c);
   byUser.set(actor.userId, set);
   res.on('close', () => {
@@ -125,7 +136,8 @@ export async function sseHandler(req: Request, res: Response): Promise<void> {
       byUser.delete(actor.userId);
       subscribed.delete(actor.userId);
       const unsub = sub ? sub.unsubscribe(key) : undefined;
-      if (unsub && typeof unsub === 'object') void (unsub as Promise<unknown>).catch(() => undefined);
+      if (unsub && typeof unsub === 'object')
+        void (unsub as Promise<unknown>).catch(() => undefined);
     }
   });
   if (!subscribed.has(actor.userId)) subscribed.set(actor.userId, sub.subscribe(key));
@@ -134,12 +146,21 @@ export async function sseHandler(req: Request, res: Response): Promise<void> {
   const last = /^\d+-\d+$/.test(raw) ? raw : null;
   if (last) {
     const [oldest] = await reader.xrange(key, '-', '+', 'COUNT', 1);
-    if ((oldest && cmp(oldest[0], last) > 0) || Date.now() - Number(last.split('-')[0]) > REPLAY_MS) {
+    if (
+      (oldest && cmp(oldest[0], last) > 0) ||
+      Date.now() - Number(last.split('-')[0]) > REPLAY_MS
+    ) {
       send(c, 'event: resync\ndata: {}\n\n');
     }
   }
   c.lastId = last ?? '0-0';
-  for (const [id, f] of await reader.xrange(key, last ? `(${last}` : `${Date.now() - 2000}-0`, '+', 'COUNT', 200)) {
+  for (const [id, f] of await reader.xrange(
+    key,
+    last ? `(${last}` : `${Date.now() - 2000}-0`,
+    '+',
+    'COUNT',
+    200,
+  )) {
     if (cmp(id, c.lastId) > 0) {
       c.lastId = id;
       send(c, frame(id, f[1]!));

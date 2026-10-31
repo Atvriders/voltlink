@@ -52,13 +52,24 @@ function checkRate(userId: string, vehicleId: string, highRisk: boolean): void {
   const bucket = (rateBuckets.get(key) ?? []).filter((t) => now - t < 3600_000);
   const limit = highRisk ? HIGH_RISK_PER_HOUR : MAX_COMMANDS_PER_HOUR;
   if (bucket.length >= limit) {
-    throw new CommandError('RATE_LIMITED', `Command rate limit reached (${limit}/hour for this vehicle).`, 429);
+    throw new CommandError(
+      'RATE_LIMITED',
+      `Command rate limit reached (${limit}/hour for this vehicle).`,
+      429,
+    );
   }
   bucket.push(now);
   rateBuckets.set(key, bucket);
 }
 
-const TERMINAL: readonly CommandStatus[] = ['confirmed', 'failed', 'rejected', 'unsupported', 'timed_out', 'canceled'];
+const TERMINAL: readonly CommandStatus[] = [
+  'confirmed',
+  'failed',
+  'rejected',
+  'unsupported',
+  'timed_out',
+  'canceled',
+];
 
 // ---------------------------------------------------------------------------
 // Guarded transitions (P-TERMINAL): each step is one conditional update so a
@@ -93,7 +104,12 @@ export async function transitionStatus(
   return res.count === 1;
 }
 
-async function auditEvent(commandId: string, event: string, actor: string, detail: string): Promise<void> {
+async function auditEvent(
+  commandId: string,
+  event: string,
+  actor: string,
+  detail: string,
+): Promise<void> {
   await prisma.commandAuditEvent.create({ data: { commandId, event, actor, detail } });
 }
 
@@ -128,7 +144,11 @@ export async function issueCommand(
   const parsed = schema.safeParse(Object.keys(raw).length === 0 ? undefined : raw);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
-    throw new CommandError('INVALID_PARAMS', `Invalid ${def.label} parameters: ${first?.message ?? 'invalid'}.`, 422);
+    throw new CommandError(
+      'INVALID_PARAMS',
+      `Invalid ${def.label} parameters: ${first?.message ?? 'invalid'}.`,
+      422,
+    );
   }
   const cleanParams = (parsed.data ?? {}) as CommandParams;
 
@@ -141,10 +161,13 @@ export async function issueCommand(
 
   if (highRisk) {
     if (actor.kind === 'session') requireRecentStepUp(actor);
-    else if (actor.kind === 'apiKey') throw new AccessDenied('FORBIDDEN', 'API keys cannot run high-risk commands.', 403);
+    else if (actor.kind === 'apiKey')
+      throw new AccessDenied('FORBIDDEN', 'API keys cannot run high-risk commands.', 403);
     else if (actor.kind === 'automation') {
       const a = await prisma.automation.findUnique({ where: { id: actor.automationId } });
-      const hash = sha256hex(JSON.stringify({ trigger: a?.triggerType ?? '', vehicleId, actions: [type] }));
+      const hash = sha256hex(
+        JSON.stringify({ trigger: a?.triggerType ?? '', vehicleId, actions: [type] }),
+      );
       if (!a?.highRiskApprovedAt || a.approvedActionsHash !== hash) {
         throw new CommandError(
           'AUTOMATION_HIGH_RISK_NOT_APPROVED',
@@ -177,11 +200,19 @@ export async function issueCommand(
           ? 'system:system'
           : `user:${actor.userId}`;
   const idempotencyKey = opts.idempotencyKey ?? `cmd:${scope}:${vehicleId}:${type}:${randomId()}`;
-  const requestHash = sha256hex(JSON.stringify({ vehicleId, type, params: sanitizeParams(type, cleanParams) }));
-  const prior = await prisma.commandIdempotency.findUnique({ where: { scope_key: { scope, key: idempotencyKey } } });
+  const requestHash = sha256hex(
+    JSON.stringify({ vehicleId, type, params: sanitizeParams(type, cleanParams) }),
+  );
+  const prior = await prisma.commandIdempotency.findUnique({
+    where: { scope_key: { scope, key: idempotencyKey } },
+  });
   if (prior && prior.expiresAt > new Date()) {
     if (prior.requestHash !== requestHash) {
-      throw new CommandError('IDEMPOTENCY_KEY_REUSED', 'This idempotency key was already used with a different request.', 409);
+      throw new CommandError(
+        'IDEMPOTENCY_KEY_REUSED',
+        'This idempotency key was already used with a different request.',
+        409,
+      );
     }
     const original = await prisma.vehicleCommand.findUnique({ where: { id: prior.commandId } });
     if (original) return { command: serializeCommand(original), replayed: true };
@@ -213,7 +244,13 @@ export async function issueCommand(
   });
   try {
     await prisma.commandIdempotency.create({
-      data: { scope, key: idempotencyKey, requestHash, commandId: command.id, expiresAt: new Date(Date.now() + 86_400_000) },
+      data: {
+        scope,
+        key: idempotencyKey,
+        requestHash,
+        commandId: command.id,
+        expiresAt: new Date(Date.now() + 86_400_000),
+      },
     });
   } catch (e) {
     if ((e as { code?: string }).code === 'P2002') {
@@ -221,15 +258,23 @@ export async function issueCommand(
         where: { scope_key: { scope, key: idempotencyKey } },
       });
       if (existing.requestHash !== requestHash) {
-        throw new CommandError('IDEMPOTENCY_KEY_REUSED', 'This idempotency key was already used with a different request.', 409);
+        throw new CommandError(
+          'IDEMPOTENCY_KEY_REUSED',
+          'This idempotency key was already used with a different request.',
+          409,
+        );
       }
-      const original = await prisma.vehicleCommand.findUnique({ where: { id: existing.commandId } });
+      const original = await prisma.vehicleCommand.findUnique({
+        where: { id: existing.commandId },
+      });
       if (original) return { command: serializeCommand(original), replayed: true };
     }
     throw e;
   }
   const actorUserId =
-    actor.kind === 'session' || actor.kind === 'automation' || actor.kind === 'apiKey' ? actor.userId : '';
+    actor.kind === 'session' || actor.kind === 'automation' || actor.kind === 'apiKey'
+      ? actor.userId
+      : '';
   await prisma.commandAuditEvent.create({
     data: {
       commandId: command.id,
@@ -247,8 +292,16 @@ export async function issueCommand(
     ip: meta.ip,
     requestId: meta.requestId,
   });
-  await getQueue().enqueue('vehicle-commands', { commandId: command.id, stage: 'dispatch' }, { dedupeKey: `cmd:${command.id}` });
-  ssePublish({ type: 'command', data: { command: serializeCommand(command) }, userId: actorUserId });
+  await getQueue().enqueue(
+    'vehicle-commands',
+    { commandId: command.id, stage: 'dispatch' },
+    { dedupeKey: `cmd:${command.id}` },
+  );
+  ssePublish({
+    type: 'command',
+    data: { command: serializeCommand(command) },
+    userId: actorUserId,
+  });
   return { command: serializeCommand(command), replayed: false };
 }
 
@@ -261,16 +314,28 @@ async function assertKillSwitches(providerAccountId: string, vehicleId: string):
     getSetting(`vehicleCmd:${vehicleId}`),
   ]);
   if (maintenance === 'true') {
-    throw new CommandError('MAINTENANCE_MODE', 'The instance is in read-only maintenance mode.', 403);
+    throw new CommandError(
+      'MAINTENANCE_MODE',
+      'The instance is in read-only maintenance mode.',
+      403,
+    );
   }
   if (emergency === 'true') {
-    throw new CommandError('COMMANDS_DISABLED', 'Vehicle commands are disabled by the emergency switch.', 403);
+    throw new CommandError(
+      'COMMANDS_DISABLED',
+      'Vehicle commands are disabled by the emergency switch.',
+      403,
+    );
   }
   if (globalOn !== 'true') {
     throw new CommandError('COMMANDS_DISABLED', 'Vehicle commands are disabled globally.', 403);
   }
   if (providerOn === 'false') {
-    throw new CommandError('COMMANDS_DISABLED', 'Commands are disabled for this provider account.', 403);
+    throw new CommandError(
+      'COMMANDS_DISABLED',
+      'Commands are disabled for this provider account.',
+      403,
+    );
   }
   if (vehicleOn === 'false') {
     throw new CommandError('COMMANDS_DISABLED', 'Commands are disabled for this vehicle.', 403);
@@ -285,7 +350,8 @@ function sanitizeParams(type: CommandType, params: CommandParams): CommandParams
     if (typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string') {
       out[k as keyof CommandParams] = v as never;
     }
-    if (typeof v === 'object') out[k as keyof CommandParams] = JSON.parse(JSON.stringify(v)) as never;
+    if (typeof v === 'object')
+      out[k as keyof CommandParams] = JSON.parse(JSON.stringify(v)) as never;
   }
   return out;
 }
@@ -369,7 +435,9 @@ export async function processCommandJob(payload: {
         include: { providerAccount: true },
       });
       if (!vehicle) {
-        await transitionStatus(command.id, ['submitted'], 'failed', { errorMessage: 'Vehicle no longer exists.' });
+        await transitionStatus(command.id, ['submitted'], 'failed', {
+          errorMessage: 'Vehicle no longer exists.',
+        });
         return;
       }
       // P-KILLSW: re-check every kill switch in the worker.
@@ -414,18 +482,32 @@ export async function processCommandJob(payload: {
         if (sent.kind === 'accepted') {
           result = { kind: 'accepted', response: sent.response };
         } else if (sent.kind === 'rejected') {
-          result = { kind: 'rejected', response: sent.response, category: sent.category, errorMessage: sent.errorMessage };
+          result = {
+            kind: 'rejected',
+            response: sent.response,
+            category: sent.category,
+            errorMessage: sent.errorMessage,
+          };
         } else if (sent.kind === 'unsupported') {
           result = { kind: 'unsupported', errorMessage: sent.errorMessage };
         } else if (sent.kind === 'timed_out') {
           result = { kind: 'timed_out', errorMessage: sent.errorMessage };
         } else if (sent.kind === 'failed') {
-          result = { kind: 'failed', errorMessage: sent.errorMessage ?? 'Provider reported an error.' };
+          result = {
+            kind: 'failed',
+            errorMessage: sent.errorMessage ?? 'Provider reported an error.',
+          };
         } else {
-          result = { kind: 'failed', errorMessage: sent.errorMessage ?? 'Unknown provider result.' };
+          result = {
+            kind: 'failed',
+            errorMessage: sent.errorMessage ?? 'Unknown provider result.',
+          };
         }
       } catch (err) {
-        result = { kind: 'failed', errorMessage: `Provider error: ${(err as Error).message.slice(0, 200)}` };
+        result = {
+          kind: 'failed',
+          errorMessage: `Provider error: ${(err as Error).message.slice(0, 200)}`,
+        };
       }
 
       switch (result.kind) {
@@ -444,7 +526,12 @@ export async function processCommandJob(payload: {
             responseCategory: result.category ?? 'vehicle_refused',
             errorMessage: result.errorMessage,
           });
-          await auditEvent(command.id, 'rejected', 'provider', result.errorMessage ?? 'Provider rejected the command.');
+          await auditEvent(
+            command.id,
+            'rejected',
+            'provider',
+            result.errorMessage ?? 'Provider rejected the command.',
+          );
           await notifyCommandFinished(command, 'failed');
           return;
         }
@@ -454,7 +541,12 @@ export async function processCommandJob(payload: {
             responseCategory: result.category ?? 'invalid_request',
             errorMessage: result.errorMessage,
           });
-          await auditEvent(command.id, 'failed', 'provider', result.errorMessage ?? 'Provider error.');
+          await auditEvent(
+            command.id,
+            'failed',
+            'provider',
+            result.errorMessage ?? 'Provider error.',
+          );
           await notifyCommandFinished(command, 'failed');
           return;
         }
@@ -463,7 +555,12 @@ export async function processCommandJob(payload: {
             responseCategory: 'outcome_unknown',
             errorMessage: result.errorMessage,
           });
-          await auditEvent(command.id, 'timed_out', 'provider', result.errorMessage ?? 'Provider timed out.');
+          await auditEvent(
+            command.id,
+            'timed_out',
+            'provider',
+            result.errorMessage ?? 'Provider timed out.',
+          );
           await notifyCommandFinished(command, 'failed');
           return;
         }
@@ -473,7 +570,12 @@ export async function processCommandJob(payload: {
             responseCategory: result.category ?? 'ok',
           });
           if (!accepted) return;
-          await auditEvent(command.id, 'accepted', 'provider', result.response ?? 'Provider accepted.');
+          await auditEvent(
+            command.id,
+            'accepted',
+            'provider',
+            result.response ?? 'Provider accepted.',
+          );
           if (!observable) {
             // P-CONFIRM: not_observable commands end at accepted, never confirmed.
             await prisma.vehicleCommand.update({
@@ -518,7 +620,9 @@ export async function processCommandJob(payload: {
       await notifyCommandFinished(command, 'failed');
       return;
     }
-    const snapshot = await prisma.vehicleSnapshot.findUnique({ where: { vehicleId: command.vehicleId } });
+    const snapshot = await prisma.vehicleSnapshot.findUnique({
+      where: { vehicleId: command.vehicleId },
+    });
     const state = ((snapshot?.state ?? {}) as Record<string, unknown>) ?? {};
     const params = (command.params ?? {}) as Record<string, unknown>;
     if (
@@ -531,7 +635,12 @@ export async function processCommandJob(payload: {
         confirmation: 'state_match',
       });
       if (confirmed) {
-        await auditEvent(command.id, 'confirmed', 'worker', 'Ingested vehicle state satisfies the expected-state predicate.');
+        await auditEvent(
+          command.id,
+          'confirmed',
+          'worker',
+          'Ingested vehicle state satisfies the expected-state predicate.',
+        );
         await notifyCommandFinished(command, 'success');
       }
       return;
@@ -551,7 +660,14 @@ export async function processCommandJob(payload: {
 
 export async function sweepStuckCommands(): Promise<number> {
   const rows = await prisma.$queryRaw<
-    { id: string; userId: string; vehicleId: string; vehicleName: string; status: string; type: string }[]
+    {
+      id: string;
+      userId: string;
+      vehicleId: string;
+      vehicleName: string;
+      status: string;
+      type: string;
+    }[]
   >`
     UPDATE "VehicleCommand" SET status = 'timed_out', "completedAt" = now(), "errorMessage" = 'No provider result in time',
       "confirmation" = 'sweep'
@@ -572,7 +688,11 @@ export async function recoverStuckCommands(): Promise<number> {
     select: { id: true },
   });
   for (const row of rows) {
-    await enqueue('vehicle-commands', { commandId: row.id, stage: 'confirm', n: 1 }, { jobId: `confirm-${row.id}-1` });
+    await enqueue(
+      'vehicle-commands',
+      { commandId: row.id, stage: 'confirm', n: 1 },
+      { jobId: `confirm-${row.id}-1` },
+    );
   }
   return rows.length;
 }
@@ -610,8 +730,17 @@ export async function cancelCommand(commandId: string): Promise<VehicleCommand> 
   // recorded cancel request, honestly labelled.
   const canceled = await transitionStatus(command.id, ['queued'], 'canceled');
   if (!canceled) {
-    await auditEvent(command.id, 'cancel_requested', command.actorKind, 'Cancel requested after submission.');
-    ssePublish({ type: 'command_finished', data: { commandId: command.id, outcome: 'cancel_requested' }, userId: command.userId });
+    await auditEvent(
+      command.id,
+      'cancel_requested',
+      command.actorKind,
+      'Cancel requested after submission.',
+    );
+    ssePublish({
+      type: 'command_finished',
+      data: { commandId: command.id, outcome: 'cancel_requested' },
+      userId: command.userId,
+    });
   } else {
     await auditEvent(command.id, 'canceled', command.actorKind, 'Canceled by user.');
   }
@@ -635,11 +764,21 @@ export async function listCommands(vehicleIds: string[], page: number, pageSize:
 
 export async function getCommand(commandId: string): Promise<{
   command: VehicleCommand;
-  events: { id: string; commandId: string; event: string; actor: string; detail: string; createdAt: string }[];
+  events: {
+    id: string;
+    commandId: string;
+    event: string;
+    actor: string;
+    detail: string;
+    createdAt: string;
+  }[];
 }> {
   const command = await prisma.vehicleCommand.findUnique({ where: { id: commandId } });
   if (!command) throw new CommandError('NOT_FOUND', 'Command not found.', 404);
-  const events = await prisma.commandAuditEvent.findMany({ where: { commandId }, orderBy: { createdAt: 'asc' } });
+  const events = await prisma.commandAuditEvent.findMany({
+    where: { commandId },
+    orderBy: { createdAt: 'asc' },
+  });
   return {
     command: serializeCommand(command),
     events: events.map((e) => ({ ...e, createdAt: e.createdAt.toISOString() })),

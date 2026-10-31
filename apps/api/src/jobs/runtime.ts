@@ -22,7 +22,11 @@ export function startWorker(
   });
   w.on('error', (err) => console.error(`[voltlink] worker ${name} error:`, err)); // mandatory listener
   w.on('failed', (job, err) =>
-    console.error(`[voltlink] job ${name} failed`, { jobId: job?.id, attempts: job?.attemptsMade, err }),
+    console.error(`[voltlink] job ${name} failed`, {
+      jobId: job?.id,
+      attempts: job?.attemptsMade,
+      err,
+    }),
   );
   workers.push(w);
   return w;

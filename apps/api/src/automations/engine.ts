@@ -91,7 +91,7 @@ function toAutomation(row: {
 
 export async function evaluateConditions(
   conditions: { type: ConditionType; params: Record<string, unknown> }[],
-  ctx: { vehicleId?: string; state?: Record<string, unknown> | null; now: Date },
+  ctx: { vehicleId?: string; state?: Record<string, unknown> | null; now: Date; timezone?: string },
 ): Promise<boolean> {
   for (const c of conditions) {
     const ok = await evaluateCondition(c.type, c.params, ctx);
@@ -100,10 +100,10 @@ export async function evaluateConditions(
   return true;
 }
 
-async function evaluateCondition(
+export async function evaluateCondition(
   type: ConditionType,
   params: Record<string, unknown>,
-  ctx: { vehicleId?: string; state?: Record<string, unknown> | null; now: Date },
+  ctx: { vehicleId?: string; state?: Record<string, unknown> | null; now: Date; timezone?: string },
 ): Promise<boolean> {
   switch (type) {
     case 'vehicle': {
@@ -112,12 +112,12 @@ async function evaluateCondition(
     }
     case 'day': {
       const days = (params.days as number[]) ?? [0, 1, 2, 3, 4, 5, 6];
-      return days.includes(ctx.now.getUTCDay());
+      return days.includes(localClock(ctx.now, ctx.timezone ?? 'UTC').day);
     }
     case 'time_range': {
       const start = String(params.start ?? '00:00');
       const end = String(params.end ?? '23:59');
-      const mins = ctx.now.getUTCHours() * 60 + ctx.now.getUTCMinutes();
+      const mins = localClock(ctx.now, ctx.timezone ?? 'UTC').minutes;
       const [sh, sm] = start.split(':').map((x) => Number(x) || 0);
       const [eh, em] = end.split(':').map((x) => Number(x) || 0);
       const s = (sh ?? 0) * 60 + (sm ?? 0);
@@ -192,6 +192,9 @@ async function executeAction(
   },
 ): Promise<string> {
   const dry = ctx.dryRun ? ' [dry run]' : '';
+  // Dry runs are pure: no notifications, no commands, no rows except the
+  // execution record (P-DRYRUN).
+  if (ctx.dryRun) return `Skipped (dry run): ${action.type}`;
   switch (action.type) {
     case 'notify_app':
       await notify({
@@ -321,9 +324,10 @@ export async function runAutomation(
   const vehicle = event.vehicleId
     ? await prisma.vehicle.findUnique({
         where: { id: event.vehicleId },
-        include: { snapshot: true },
+        include: { snapshot: true, organization: { select: { timezone: true } } },
       })
     : null;
+  const timezone = vehicle?.organization.timezone ?? row.user?.timezone ?? 'UTC';
   const state = (vehicle?.snapshot?.state ?? null) as Record<string, unknown> | null;
   const conditionsMet = await evaluateConditions(
     (row.conditions ?? []) as { type: ConditionType; params: Record<string, unknown> }[],
@@ -331,6 +335,7 @@ export async function runAutomation(
       vehicleId: event.vehicleId,
       state,
       now: new Date(),
+      timezone,
     },
   );
   if (!conditionsMet) {
@@ -393,6 +398,30 @@ export async function runAutomation(
 }
 
 /** Dispatch a trigger event to all matching automations (used by ingest + scheduler). */
+/** N-CONDITIONS: local day/time in the user's time zone. */
+export function localClock(date: Date, timezone: string): { day: number; minutes: number } {
+  let day = date.getUTCDay();
+  let minutes = date.getUTCHours() * 60 + date.getUTCMinutes();
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: timezone,
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(date);
+    const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const wd = parts.find((p) => p.type === 'weekday')?.value.toLowerCase();
+    if (wd) day = days.indexOf(wd.slice(0, 3));
+    const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? NaN);
+    const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? NaN);
+    if (Number.isFinite(hour) && Number.isFinite(minute)) minutes = hour * 60 + minute;
+  } catch {
+    /* UTC fallback */
+  }
+  return { day, minutes };
+}
+
 export async function dispatchTrigger(event: TriggerEvent): Promise<number> {
   const matches = await findMatchingAutomations(event);
   for (const a of matches) {

@@ -63,8 +63,13 @@ async function main(): Promise<void> {
       await pool.query('SELECT voltlink_ensure_partition($1)', [ts]);
     }
   };
-  void ensurePartitions().catch((err) => console.error('partition pre-create failed:', (err as Error).message));
-  const partitions = setInterval(() => void ensurePartitions().catch(() => undefined), 24 * 3600_000);
+  void ensurePartitions().catch((err) =>
+    console.error('partition pre-create failed:', (err as Error).message),
+  );
+  const partitions = setInterval(
+    () => void ensurePartitions().catch(() => undefined),
+    24 * 3600_000,
+  );
   partitions.unref();
 
   // Retention: daily.

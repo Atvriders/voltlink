@@ -10,6 +10,12 @@ import {
   userChannelUrl,
 } from '../notifications/simpleWebhooks';
 import { sealJson, openJson, randomToken } from '../core/crypto';
+import {
+  isKnownPushEndpoint,
+  pushConfig,
+  validatePushKeys,
+  decodeKey,
+} from '../notifications/push';
 
 /** G-08: hide token-bearing URL paths; only the scheme and host are shown. */
 function maskUrl(raw: string): string {
@@ -316,6 +322,14 @@ notificationsRouter.delete(
 
 // ---- Push subscriptions (Web Push) ----
 
+notificationsRouter.get(
+  '/push/config',
+  { auth: 'session', target: { kind: 'none' } },
+  async (_req, res) => {
+    res.json({ data: pushConfig() });
+  },
+);
+
 notificationsRouter.put(
   '/push/subscriptions',
   { auth: 'session', target: { kind: 'none' } },
@@ -330,6 +344,28 @@ notificationsRouter.put(
         .json({ error: { code: 'VALIDATION', message: 'endpoint and keys required.' } });
       return;
     }
+    // N-PUSH: only well-known browser push services are accepted.
+    if (typeof endpoint !== 'string' || endpoint.length > 2048 || !isKnownPushEndpoint(endpoint)) {
+      res.status(422).json({
+        error: { code: 'INVALID_ENDPOINT', message: 'Push endpoint is not a known push service.' },
+      });
+      return;
+    }
+    if (
+      typeof keys !== 'object' ||
+      keys === null ||
+      Array.isArray(keys) ||
+      !validatePushKeys(keys as Record<string, unknown>)
+    ) {
+      res.status(422).json({
+        error: {
+          code: 'INVALID_KEYS',
+          message: 'p256dh (65-byte uncompressed point) and auth (16 bytes) are required.',
+        },
+      });
+      return;
+    }
+    void decodeKey; // referenced for clarity in tests
     await prisma.pushSubscription.upsert({
       where: { userId_endpoint: { userId: sessionActor(req).userId, endpoint } },
       update: { keys: JSON.parse(JSON.stringify(keys)) },

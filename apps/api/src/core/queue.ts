@@ -35,7 +35,11 @@ class BullQueue implements JobQueue {
 
   async depth(queueName: string): Promise<number> {
     try {
-      const counts = await queue(queueName as QueueName).getJobCounts('active', 'waiting', 'delayed');
+      const counts = await queue(queueName as QueueName).getJobCounts(
+        'active',
+        'waiting',
+        'delayed',
+      );
       return Object.values(counts).reduce((a, b) => a + b, 0);
     } catch {
       return 0;

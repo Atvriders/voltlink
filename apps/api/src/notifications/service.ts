@@ -1,11 +1,18 @@
 // Notification service: in-app, email, push, ntfy, Gotify, Discord, Teams,
 // and generic webhooks — routed by per-user preferences.
+// N-DROPPED: every external channel writes to the NotificationOutbox first and
+// is delivered by the worker with retries and a dead-letter state. In-app
+// notifications and SSE remain synchronous so the UI feels instant, and an
+// SMTP failure can never abort telemetry ingest (delivery is fully decoupled).
 
 import crypto from 'node:crypto';
 import { prisma } from '../core/db';
 import { randomId } from '../core/crypto';
 import { ssePublish } from '../core/sse';
 import { sendMail } from '../auth/service';
+import { enqueue } from '../jobs/queues';
+import { PushEndpointGone, VapidRejected, sendPush } from './push';
+import { throttled, userChannelUrl, pushSimpleWebhook } from './simpleWebhooks';
 import type { DeliveryChannel, EventType, Severity } from '@voltlink/shared';
 
 export interface NotifyInput {
@@ -23,6 +30,18 @@ export interface NotifyInput {
   /** Restrict 'webhook' delivery to one endpoint (automations). */
   webhookEndpointId?: string;
 }
+
+const OUTBOX_CHANNELS = new Set<DeliveryChannel>([
+  'email',
+  'push',
+  'webhook',
+  'ntfy',
+  'gotify',
+  'discord',
+  'teams',
+]);
+
+export const OUTBOX_MAX_ATTEMPTS = 4;
 
 export async function notify(input: NotifyInput): Promise<void> {
   const severity = input.severity ?? 'info';
@@ -44,7 +63,25 @@ export async function notify(input: NotifyInput): Promise<void> {
   if (!user || user.deletionRequestedAt || user.suspendedAt) return;
 
   for (const channel of new Set(channels)) {
-    await deliver({ ...input, channel, severity, email: user.email });
+    if (channel === 'in_app') {
+      await deliverInApp({ ...input, severity });
+      continue;
+    }
+    // N-DROPPED: external channels go through the outbox. The row is the
+    // source of truth; the worker owns the actual network I/O.
+    if (!OUTBOX_CHANNELS.has(channel)) continue;
+    const outbox = await prisma.notificationOutbox.create({
+      data: {
+        userId: input.userId,
+        channel,
+        event: input.event,
+        severity,
+        title: input.title,
+        body: input.body,
+        vehicleId: input.vehicleId,
+      },
+    });
+    await enqueue('notifications', { outboxId: outbox.id, channel }, { jobId: `n-${outbox.id}` });
   }
   if (channels.includes('in_app')) {
     ssePublish({
@@ -55,28 +92,86 @@ export async function notify(input: NotifyInput): Promise<void> {
   }
 }
 
-async function deliver(
-  input: NotifyInput & { channel: DeliveryChannel; email: string },
-): Promise<void> {
-  const { channel } = input;
-  if (channel === 'in_app') {
-    await prisma.appNotification.create({
-      data: {
-        userId: input.userId,
-        event: input.event,
-        severity: input.severity ?? 'info',
-        title: input.title,
-        body: input.body,
-        vehicleId: input.vehicleId,
-        vehicleName: input.vehicleName,
-        channel: 'in_app',
-      },
+async function deliverInApp(input: NotifyInput & { severity: Severity }): Promise<void> {
+  await prisma.appNotification.create({
+    data: {
+      userId: input.userId,
+      event: input.event,
+      severity: input.severity,
+      title: input.title,
+      body: input.body,
+      vehicleId: input.vehicleId,
+      vehicleName: input.vehicleName,
+      channel: 'in_app',
+    },
+  });
+}
+
+/** Worker entry point for the 'notifications' queue (N-DROPPED). */
+export async function processOutboxJob(payload: {
+  outboxId: string;
+  channel: string;
+}): Promise<void> {
+  const row = await prisma.notificationOutbox.findUnique({ where: { id: payload.outboxId } });
+  if (!row || row.status !== 'pending') return; // already delivered / dead / cancelled
+  const user = await prisma.user.findUnique({ where: { id: row.userId } });
+  if (!user || user.deletionRequestedAt || user.suspendedAt) {
+    await prisma.notificationOutbox.update({
+      where: { id: row.id },
+      data: { status: 'dead', lastError: 'user gone', deadAt: new Date() },
     });
     return;
   }
+  try {
+    await deliverChannel(row, user.email);
+    await prisma.notificationOutbox.update({
+      where: { id: row.id },
+      data: { status: 'sent', sentAt: new Date(), attempts: { increment: 1 }, lastError: null },
+    });
+  } catch (err) {
+    const msg = (err as Error).message.slice(0, 500);
+    const attempts = row.attempts + 1;
+    if (attempts >= OUTBOX_MAX_ATTEMPTS) {
+      await prisma.notificationOutbox.update({
+        where: { id: row.id },
+        data: { status: 'dead', deadAt: new Date(), attempts, lastError: msg },
+      });
+      console.warn('[voltlink] notification dead-lettered:', payload.outboxId, msg);
+      return;
+    }
+    await prisma.notificationOutbox
+      .update({ where: { id: row.id }, data: { attempts, lastError: msg } })
+      .catch(() => undefined);
+    throw err; // BullMQ retries with backoff
+  }
+}
+
+interface OutboxRow {
+  id: string;
+  userId: string;
+  channel: string;
+  event: string;
+  severity: string;
+  title: string;
+  body: string;
+  vehicleId: string | null;
+}
+
+async function deliverChannel(row: OutboxRow, email: string): Promise<void> {
+  const channel = row.channel as DeliveryChannel;
+  const input = {
+    userId: row.userId,
+    event: row.event as EventType,
+    severity: row.severity,
+    title: row.title,
+    body: row.body,
+    vehicleId: row.vehicleId ?? undefined,
+  };
   if (channel === 'email') {
+    // N-SMTP: failures throw here and are retried by the queue; callers of
+    // notify() are long gone, so SMTP can never abort ingest or commands.
     await sendMail({
-      to: input.email,
+      to: email,
       subject: `VoltLink: ${input.title}`,
       text: input.body,
       html: `<p><strong>${escapeHtml(input.title)}</strong></p><p>${escapeHtml(input.body)}</p>`,
@@ -84,30 +179,37 @@ async function deliver(
     return;
   }
   if (channel === 'push') {
-    const subs = await prisma.pushSubscription.findMany({ where: { userId: input.userId } });
-    if (subs.length > 0) {
-      const { sendPush } = await import('./push');
-      for (const sub of subs) {
-        await sendPush(sub, {
-          title: input.title,
-          body: input.body,
-          severity: input.severity ?? 'info',
-          event: input.event,
-        }).catch(() => undefined);
+    const subs = await prisma.pushSubscription.findMany({ where: { userId: row.userId } });
+    for (const sub of subs) {
+      try {
+        await sendPush(
+          { id: sub.id, endpoint: sub.endpoint, keys: sub.keys },
+          { ...input, vehicleId: row.vehicleId ?? undefined },
+        );
+      } catch (err) {
+        if (err instanceof PushEndpointGone) {
+          // N-PUSH: the browser revoked the subscription — remove it so we
+          // stop sending to a dead endpoint.
+          await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => undefined);
+          continue;
+        }
+        if (err instanceof VapidRejected) {
+          await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => undefined);
+          continue;
+        }
+        throw err;
       }
     }
     return;
   }
   if (channel === 'webhook') {
-    const endpoints = input.webhookEndpointId
-      ? await prisma.webhookEndpoint.findMany({
-          where: { id: input.webhookEndpointId, userId: input.userId, enabled: true },
-        })
-      : await prisma.webhookEndpoint.findMany({ where: { userId: input.userId, enabled: true } });
+    const endpoints = await prisma.webhookEndpoint.findMany({
+      where: { userId: row.userId, enabled: true },
+    });
     for (const ep of endpoints) {
       const payload = {
         event: input.event,
-        severity: input.severity ?? 'info',
+        severity: input.severity,
         title: input.title,
         body: input.body,
         vehicleId: input.vehicleId ?? null,
@@ -139,23 +241,34 @@ async function deliver(
           where: { id: ep.id },
           data: { lastStatus: res.status, lastDeliveryAt: new Date() },
         });
-      } catch {
-        await prisma.webhookEndpoint.update({
-          where: { id: ep.id },
-          data: { lastStatus: 0, lastDeliveryAt: new Date() },
-        });
+        if (res.status >= 500) throw new Error(`webhook ${res.status}`);
+      } catch (err) {
+        await prisma.webhookEndpoint
+          .update({ where: { id: ep.id }, data: { lastStatus: 0, lastDeliveryAt: new Date() } })
+          .catch(() => undefined);
+        throw err;
       }
     }
     return;
   }
-  // External simple-webhook providers: ntfy, Gotify, Discord, Teams.
-  const { pushSimpleWebhook } = await import('./simpleWebhooks');
-  await pushSimpleWebhook(input.userId, channel, {
+  // ntfy / gotify / discord / teams
+  if (throttled(row.userId, channel)) return; // dropped by design (rate limit)
+  const url = await userChannelUrl(row.userId, providerKey(channel));
+  if (!url) return;
+  await pushSimpleWebhook(row.userId, channel, {
     title: input.title,
     body: input.body,
-    severity: input.severity ?? 'info',
+    severity: input.severity,
     event: input.event,
-  }).catch(() => undefined);
+  });
+}
+
+function providerKey(channel: string): string {
+  return (
+    { ntfy: 'ntfyUrl', gotify: 'gotifyUrl', discord: 'discordWebhook', teams: 'teamsWebhook' }[
+      channel
+    ] ?? ''
+  );
 }
 
 export function escapeHtml(s: string): string {

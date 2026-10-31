@@ -12,6 +12,7 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { buildApp } from '../src/app';
 import { prisma } from '../src/core/db';
+import { initRedis } from '../src/core/redis';
 import { randomId, sha256hex, sealJson } from '../src/core/crypto';
 import { createSession } from '../src/auth/service';
 import { csv } from '../src/core/util';
@@ -26,6 +27,7 @@ let server: Server;
 let base: string;
 
 beforeAll(async () => {
+  await initRedis(); // notify() enqueues outbox jobs (N-DROPPED)
   server = buildApp({ serveSpa: false }).listen(0);
   await new Promise<void>((resolve) => server.once('listening', resolve));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

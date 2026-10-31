@@ -54,7 +54,16 @@ async function main(): Promise<void> {
   startWorker('automations', async (job) => {
     const { dispatchTrigger } = await import('./automations/engine');
     const p = job.data as { userId: string; vehicleId?: string; trigger: string; data: unknown };
-    await dispatchTrigger({ type: p.trigger as never, userId: p.userId, vehicleId: p.vehicleId, data: p.data as Record<string, unknown> });
+    await dispatchTrigger({
+      type: p.trigger as never,
+      userId: p.userId,
+      vehicleId: p.vehicleId,
+      data: p.data as Record<string, unknown>,
+    });
+  });
+  startWorker('notifications', async (job) => {
+    const { processOutboxJob } = await import('./notifications/service');
+    await processOutboxJob(job.data as { outboxId: string; channel: string });
   });
   startWorker('maintenance', async (job) => {
     const { notify } = await import('./notifications/service');
@@ -73,7 +82,10 @@ async function main(): Promise<void> {
     const p = job.data as { accountId: string };
     const account = await prisma.providerAccount.findUnique({ where: { id: p.accountId } });
     if (!account || account.provider !== 'tesla') return;
-    console.warn('[voltlink] tesla-token-refresh: refresh wiring lands in Phase 6 (account %s)', p.accountId);
+    console.warn(
+      '[voltlink] tesla-token-refresh: refresh wiring lands in Phase 6 (account %s)',
+      p.accountId,
+    );
   });
   startWorker('demo', async (job) => {
     const p = job.data as { userId: string };
