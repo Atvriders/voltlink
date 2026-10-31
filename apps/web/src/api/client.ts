@@ -16,10 +16,12 @@ export function resetCsrf(): void {
 export class ApiError extends Error {
   code: string;
   status: number;
-  constructor(code: string, message: string, status: number) {
+  requestId?: string;
+  constructor(code: string, message: string, status: number, requestId?: string) {
     super(message);
     this.code = code;
     this.status = status;
+    this.requestId = requestId;
   }
 }
 
@@ -77,14 +79,18 @@ export async function api<T>(
   if (!res.ok) {
     let code = 'ERROR';
     let message = `Request failed (${res.status})`;
+    let requestId: string | undefined;
     try {
-      const body = (await res.json()) as { error?: { code?: string; message?: string } };
+      const body = (await res.json()) as {
+        error?: { code?: string; message?: string; requestId?: string };
+      };
       code = body.error?.code ?? code;
       message = body.error?.message ?? message;
+      requestId = body.error?.requestId;
     } catch {
       /* non-JSON error body */
     }
-    throw new ApiError(code, message, res.status);
+    throw new ApiError(code, message, res.status, requestId);
   }
   if (opts.raw) return (await res.text()) as T;
   const body = (await res.json()) as ApiResult<T>;

@@ -8,6 +8,7 @@ import { Crosshair, MapPin, Plus, Shield } from 'lucide-react';
 import type * as maplibregl from 'maplibre-gl';
 import { api } from '../api/client';
 import { useAnnounce } from '../lib/announcer';
+import { ErrorState } from '../components/QueryState';
 import MapView, { circleGeoJson } from '../components/MapView';
 import { Badge, Button, Card, Field, Input, Modal, Select } from '../components/ui';
 import type { Geofence, Place, PrivacyZone, VehicleWithState } from '@voltlink/shared';
@@ -33,23 +34,45 @@ export default function MapPage() {
   const [placeType, setPlaceType] = useState('custom');
   const [map, setMap] = useState<maplibregl.Map | null>(null);
 
-  const { data: vehicles } = useQuery({
+  const {
+    data: vehicles,
+    isError: vehiclesError,
+    error: vehiclesErr,
+    refetch: refetchVehicles,
+  } = useQuery({
     queryKey: ['vehicles'],
     queryFn: () => api<VehicleWithState[]>('/api/v1/vehicles'),
     refetchInterval: 15000,
   });
-  const { data: places } = useQuery({
+  const {
+    data: places,
+    isError: placesError,
+    error: placesErr,
+  } = useQuery({
     queryKey: ['places'],
     queryFn: () => api<Place[]>('/api/v1/vehicles/places/all'),
   });
-  const { data: fences } = useQuery({
+  const {
+    data: fences,
+    isError: fencesError,
+    error: fencesErr,
+  } = useQuery({
     queryKey: ['geofences'],
     queryFn: () => api<Geofence[]>('/api/v1/vehicles/geofences/all'),
   });
-  const { data: zones } = useQuery({
+  const {
+    data: zones,
+    isError: zonesError,
+    error: zonesErr,
+  } = useQuery({
     queryKey: ['privacy'],
     queryFn: () => api<PrivacyZone[]>('/api/v1/vehicles/privacy-zones'),
   });
+
+  const layerError =
+    vehiclesError || placesError || fencesError || zonesError
+      ? (vehiclesErr ?? placesErr ?? fencesErr ?? zonesErr)
+      : null;
 
   const layers = useMemo(() => {
     const out: {
@@ -122,6 +145,13 @@ export default function MapPage() {
 
   return (
     <div className="space-y-4">
+      {layerError && (
+        <ErrorState
+          title="Couldn’t load map data"
+          error={layerError}
+          onRetry={() => void refetchVehicles()}
+        />
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-lg font-extrabold">Map</h1>
         <span className="text-xs text-faint">

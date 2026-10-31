@@ -68,6 +68,7 @@ import { computeFreshness, controlsFor, type ParamControl } from '@voltlink/shar
 import { outcomeFor } from '../lib/commandLifecycle';
 import { useNow } from '../lib/useNow';
 import { useAnnounce } from '../lib/announcer';
+import { ErrorState, LoadingState } from '../components/QueryState';
 
 interface CommandWithEvents extends VehicleCommand {
   events?: { id: string; event: string; actor: string; detail: string; createdAt: string }[];
@@ -80,7 +81,13 @@ export default function LiveVehiclePage() {
   const qc = useQueryClient();
   const units = user?.units ?? 'metric';
 
-  const { data: vehicles } = useQuery({
+  const {
+    data: vehicles,
+    isLoading: vehiclesLoading,
+    isError: vehiclesError,
+    error: vehiclesErr,
+    refetch: refetchVehicles,
+  } = useQuery({
     queryKey: ['vehicles'],
     queryFn: () => api<VehicleWithState[]>('/api/v1/vehicles'),
     refetchInterval: 10000,
@@ -112,9 +119,13 @@ export default function LiveVehiclePage() {
 
   const [preset, setPreset] = useState<GraphicsPreset>(autoPreset());
 
-  if (!vehicles || !vehicle) {
+  // F-ERRSTATES: a slow list must read as "loading", never "not found".
+  if (vehiclesLoading) return <LoadingState label="Loading vehicle…" />;
+  if (vehiclesError)
+    return <ErrorState error={vehiclesErr} onRetry={() => void refetchVehicles()} />;
+  if (!vehicle) {
     return (
-      <div className="space-y-3">
+      <div role="alert" className="space-y-3">
         <p className="text-sm text-subtle">Vehicle not found.</p>
         <Link className="text-sm text-accent hover:underline" to="/">
           Back to overview

@@ -8,6 +8,7 @@ import { CalendarClock, ExternalLink, Plus, RefreshCw } from 'lucide-react';
 import { api } from '../api/client';
 import { Badge, Button, Card, Field, Input, Modal, Select } from '../components/ui';
 import { fmtClock } from '../lib/format';
+import { ErrorState } from '../components/QueryState';
 import type { Incident, PublicStatus, StatusComponent, StatusCheckHistory } from '@voltlink/shared';
 
 const STATUS_TONE: Record<string, 'ok' | 'warn' | 'danger' | 'info' | 'neutral'> = {
@@ -21,12 +22,21 @@ const STATUS_TONE: Record<string, 'ok' | 'warn' | 'danger' | 'info' | 'neutral'>
 
 export default function StatusAdminPage() {
   const qc = useQueryClient();
-  const { data: bundle } = useQuery({
+  const {
+    data: bundle,
+    isError: bundleError,
+    error: bundleErr,
+    refetch: refetchBundle,
+  } = useQuery({
     queryKey: ['public-status'],
     queryFn: () => api<PublicStatus>('/api/v1/status'),
     refetchInterval: 30000,
   });
-  const { data: history } = useQuery({
+  const {
+    data: history,
+    isError: historyError,
+    error: historyErr,
+  } = useQuery({
     queryKey: ['status-history'],
     queryFn: () => api<StatusCheckHistory[]>('/api/v1/status/checks/history?hours=24'),
   });
@@ -46,6 +56,12 @@ export default function StatusAdminPage() {
 
   return (
     <div className="space-y-4">
+      {(bundleError || historyError) && (
+        <ErrorState
+          error={(bundleErr ?? historyErr) as Error}
+          onRetry={() => void refetchBundle()}
+        />
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-lg font-extrabold">Status</h1>
         <Badge tone={STATUS_TONE[bundle?.overall ?? 'unknown']}>
@@ -209,7 +225,12 @@ function ComponentRow({ component }: { component: StatusComponent }) {
 
 function IncidentList() {
   const qc = useQueryClient();
-  const { data: incidents } = useQuery({
+  const {
+    data: incidents,
+    isError: incidentsError,
+    error: incidentsErr,
+    refetch: refetchIncidents,
+  } = useQuery({
     queryKey: ['incidents'],
     queryFn: () => api<Incident[]>('/api/v1/status/incidents'),
   });
@@ -221,6 +242,9 @@ function IncidentList() {
   });
   return (
     <>
+      {incidentsError && (
+        <ErrorState error={incidentsErr} onRetry={() => void refetchIncidents()} />
+      )}
       <ul className="space-y-2">
         {(incidents ?? []).map((i) => (
           <li key={i.id} className="rounded-lg border border-line bg-panel2 p-3">

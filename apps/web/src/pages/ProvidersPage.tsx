@@ -68,8 +68,18 @@ export default function ProvidersPage() {
   });
 
   const startTesla = async () => {
-    const { url } = await api<{ url: string }>('/api/v1/providers/tesla/authorize');
-    window.location.href = url;
+    try {
+      const { url } = await api<{ url: string }>('/api/v1/providers/tesla/authorize');
+      window.location.href = url;
+    } catch (e) {
+      setError(
+        e instanceof ApiError && e.status === 503
+          ? 'Tesla isn’t configured on this server (TESLA_CLIENT_ID).'
+          : e instanceof ApiError
+            ? e.message
+            : 'Could not start Tesla connection',
+      );
+    }
   };
 
   const demo = accounts?.find((a) => a.provider === 'demo');
