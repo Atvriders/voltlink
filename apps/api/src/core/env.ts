@@ -114,6 +114,8 @@ export const env = {
   TESLA_COMMAND_PROXY_URL: optional('TESLA_COMMAND_PROXY_URL', ''),
   TESLA_ALLOW_TEST_ENDPOINTS: optional('TESLA_ALLOW_TEST_ENDPOINTS', ''),
   TESLA_DAILY_BUDGET_USD: optional('TESLA_DAILY_BUDGET_USD', ''),
+  VL_GEOCODER: optional('VL_GEOCODER', 'off'),
+  VL_GEOCODER_URL: optional('VL_GEOCODER_URL', ''),
 
   TESSIE_BASE_URL: optional('TESSIE_BASE_URL', 'https://api.tessie.com'),
 

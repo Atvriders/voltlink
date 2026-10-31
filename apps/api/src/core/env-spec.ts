@@ -49,6 +49,8 @@ export const ENV_SPEC = z.object({
   TESLA_COMMAND_PROXY_URL: optionalString,
   TESLA_ALLOW_TEST_ENDPOINTS: optionalString,
   TESLA_DAILY_BUDGET_USD: optionalString,
+  VL_GEOCODER: optionalString,
+  VL_GEOCODER_URL: optionalString,
   TESSIE_BASE_URL: optionalString,
   VAPID_PUBLIC_KEY: optionalString,
   VAPID_PRIVATE_KEY: optionalString,

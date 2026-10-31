@@ -14,6 +14,7 @@ import { hooksRouter } from './routes/hooks';
 import { usersRouter } from './routes/users';
 import { providersRouter } from './routes/providers';
 import { vehiclesRouter } from './routes/vehicles';
+import { geocodeRouter } from './routes/geocode';
 import { commandsRouter } from './routes/commands';
 import { drivesRouter } from './routes/drives';
 import { chargingRouter } from './routes/charging';
@@ -115,6 +116,7 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
   app.use(usersRouter.prefix, usersRouter.router);
   app.use(providersRouter.prefix, providersRouter.router);
   app.use(vehiclesRouter.prefix, vehiclesRouter.router);
+  app.use(geocodeRouter.prefix, geocodeRouter.router);
   app.use(commandsRouter.prefix, commandsRouter.router);
   app.use(drivesRouter.prefix, drivesRouter.router);
   app.use(chargingRouter.prefix, chargingRouter.router);
