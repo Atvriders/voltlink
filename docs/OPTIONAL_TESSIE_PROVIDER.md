@@ -1,35 +1,29 @@
-# Optional Tessie provider
+# Tessie provider (optional)
 
-Tessie is a third-party Tesla data service. VoltLink includes an optional
-adapter so an operator who prefers Tessie's API can use it instead of (or
-alongside) the official Fleet API provider.
+Tessie is an optional third-party Tesla API. VoltLink maps Tessie's documented
+state schema and command list — no invented fields or commands.
 
-## Status: optional adapter
+## Connect
 
-- No Tessie SDK is required at build time — the adapter is a small HTTP client
-  over `TESSIE_BASE_URL`.
-- Configure nothing and the Tessie panel stays dormant; the rest of the
-  platform is unaffected.
+`POST /api/v1/providers/tessie/connect {token, label}` verifies the token
+against Tessie (`GET /vins`) **before** storing it, and stores the account as
+`connected` so Import is immediately available. The token is sealed at rest and
+never returned by any API.
 
-## Setup
+## Commands
 
-1. Sign up at <https://tessie.com>, generate an access token, and (optionally)
-   register a webhook that delivers refreshed tokens to:
+Tessie endpoints used: `GET /{vin}/state`, `GET /{vin}/status`, `POST /{vin}/wake`,
+`POST /{vin}/command/{name}` (e.g. `lock`, `start_charging`, `set_charge_limit`,
+`vent_windows`, `share`). Pre-wake happens for climate and charging commands;
+toggles are never auto-retried after an unknown outcome.
 
-   ```
-   POST https://<your-voltlink-host>/api/v1/providers/tessie/webhook
-   ```
+## Readiness
 
-2. In VoltLink: **Providers → Tessie → Connect** and paste the token.
-3. **Import vehicles**.
+`GET /api/v1/providers/readiness` verifies the stored token with a real call —
+Tessie readiness is never hard-coded.
 
-## Command mapping
+## Webhooks
 
-The adapter maps VoltLink commands onto Tessie's command endpoints
-(`lock`, `unlock`, `honk`, `flash`, `charge start/stop`, `wake`, …) with the
-same capability checks and lifecycle outcomes as the official provider.
-
-## Base URL
-
-`TESSIE_BASE_URL` defaults to `https://api.tessie.com`; set it if Tessie
-documents a regional or custom endpoint.
+Tessie has **no webhook API** (only an optional outbound WebSocket stream).
+`POST /api/v1/providers/tessie/webhook` answers 404; VoltLink does not implement
+one.
