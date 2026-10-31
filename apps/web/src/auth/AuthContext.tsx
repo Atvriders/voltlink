@@ -66,19 +66,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('voltlink:unauthorized', onUnauthorized);
   }, [refresh, resetClientState]);
 
-  const login = useCallback(async (email: string, password: string, totp?: string) => {
-    const res = await api<{ user?: UserPublic; totpRequired?: boolean }>('/api/v1/auth/login', {
-      method: 'POST',
-      body: { email, password, totp },
-    });
-    if (res.totpRequired) return { totpRequired: true };
-    if (res.user) {
-      resetClientState();
-      setUser(res.user);
-      applyTheme(res.user);
-    }
-    return {};
-  }, [resetClientState]);
+  const login = useCallback(
+    async (email: string, password: string, totp?: string) => {
+      const res = await api<{ user?: UserPublic; totpRequired?: boolean }>('/api/v1/auth/login', {
+        method: 'POST',
+        body: { email, password, totp },
+      });
+      if (res.totpRequired) return { totpRequired: true };
+      if (res.user) {
+        resetClientState();
+        setUser(res.user);
+        applyTheme(res.user);
+      }
+      return {};
+    },
+    [resetClientState],
+  );
 
   const logout = useCallback(async () => {
     try {

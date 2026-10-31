@@ -1,9 +1,10 @@
 // Reusable MapLibre component: fictional demo map with vehicles, places,
 // geofences, privacy zones, and route replay. No external tile service.
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type * as maplibregl from 'maplibre-gl';
 import { circleGeoJson, createMap, routeGeoJson } from '../lib/map';
+import { hasWebGL2 } from '../lib/webgl';
 
 export interface MapLayer {
   id: string;
@@ -30,10 +31,24 @@ export default function MapView({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const layersRef = useRef(layers);
   layersRef.current = layers;
+  const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
     if (!container.current) return;
-    const map = createMap(container.current);
+    if (!hasWebGL2()) {
+      setUnavailable(true);
+      return;
+    }
+    let map: maplibregl.Map;
+    try {
+      map = createMap(container.current);
+    } catch (err) {
+      // F-WEBGLBLANK: GPUInitializationError / context loss never blanks the
+      // app — show the fallback card and keep the page usable.
+      console.error('[voltlink] map unavailable:', err);
+      setUnavailable(true);
+      return;
+    }
     mapRef.current = map;
     map.on('click', (e) => {
       onPointPick?.(e.lngLat.lat, e.lngLat.lng);
@@ -85,6 +100,17 @@ export default function MapView({
     };
   }, [onReady, onPointPick]);
 
+  if (unavailable) {
+    return (
+      <div
+        role="note"
+        className={`flex items-center justify-center rounded-xl border border-line bg-panel2 ${className}`}
+        style={{ height }}
+      >
+        <p className="text-sm text-subtle">Map unavailable on this device</p>
+      </div>
+    );
+  }
   return (
     <div
       ref={container}

@@ -58,9 +58,7 @@ export default function SettingsPage() {
       {section === 'security' && <SecurityTab />}
       {section === 'sessions' && <SessionsTab />}
       {section === 'privacy' && <PrivacyTab />}
-      {!['profile', 'security', 'sessions', 'privacy'].includes(section) && (
-        <NotFoundSection />
-      )}
+      {!['profile', 'security', 'sessions', 'privacy'].includes(section) && <NotFoundSection />}
     </div>
   );
 }

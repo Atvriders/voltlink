@@ -14,6 +14,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Shell } from './components/Shell';
 import { StepUpDialogHost } from './components/StepUpDialog';
+import { ErrorBoundary, RouteErrorFallback } from './components/boundaries';
 import { Spinner } from './components/ui';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -73,29 +74,37 @@ function Protected({ children }: { children: React.ReactNode }) {
 
 function AuthenticatedLayout() {
   const { user, loading } = useAuth();
+  const location = useLocation();
   if (loading) return <PageFallback />;
   return (
     <Shell user={user}>
       <Suspense fallback={<PageFallback />}>
-        <Routes>
-          <Route path="/onboarding" element={<OnboardingPage />} />
-          <Route path="/vehicles/:id" element={<LiveVehiclePage />} />
-          <Route path="/showroom" element={<ShowroomPage />} />
-          <Route path="/map" element={<MapPage />} />
-          <Route path="/drives" element={<DrivesPage />} />
-          <Route path="/drives/:id" element={<DriveDetailPage />} />
-          <Route path="/charging" element={<ChargingPage />} />
-          <Route path="/battery" element={<BatteryPage />} />
-          <Route path="/automations" element={<AutomationsPage />} />
-          <Route path="/notifications" element={<NotificationsPage />} />
-          <Route path="/fleet" element={<FleetPage />} />
-          <Route path="/providers" element={<ProvidersPage />} />
-          <Route path="/status-admin" element={<StatusAdminPage />} />
-          <Route path="/admin" element={<AdminPage />} />
-          <Route path="/settings/*" element={<SettingsPage />} />
-          <Route path="/" element={<OverviewPage />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+        <ErrorBoundary
+          key={location.pathname}
+          fallback={(error, reset) => (
+            <RouteErrorFallback error={error} resetErrorBoundary={reset} />
+          )}
+        >
+          <Routes>
+            <Route path="/onboarding" element={<OnboardingPage />} />
+            <Route path="/vehicles/:id" element={<LiveVehiclePage />} />
+            <Route path="/showroom" element={<ShowroomPage />} />
+            <Route path="/map" element={<MapPage />} />
+            <Route path="/drives" element={<DrivesPage />} />
+            <Route path="/drives/:id" element={<DriveDetailPage />} />
+            <Route path="/charging" element={<ChargingPage />} />
+            <Route path="/battery" element={<BatteryPage />} />
+            <Route path="/automations" element={<AutomationsPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/fleet" element={<FleetPage />} />
+            <Route path="/providers" element={<ProvidersPage />} />
+            <Route path="/status-admin" element={<StatusAdminPage />} />
+            <Route path="/admin" element={<AdminPage />} />
+            <Route path="/settings/*" element={<SettingsPage />} />
+            <Route path="/" element={<OverviewPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </ErrorBoundary>
       </Suspense>
     </Shell>
   );
