@@ -2,7 +2,7 @@
 // preferences, privacy & retention, data export and account deletion.
 
 import { useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Download,
@@ -21,40 +21,58 @@ import { Badge, Button, Card, Field, Input, Modal, Select } from '../components/
 import { fmtDateTime } from '../lib/format';
 import type { SessionInfo } from '@voltlink/shared';
 
+// F-SETTINGSTABS: sections are URL-addressed links, never role=tablist and
+// never window.history.pushState (BrowserRouter would not see it).
+const SETTINGS_SECTIONS = [
+  ['profile', 'Profile', UserCircle],
+  ['security', 'Security', ShieldCheck],
+  ['sessions', 'Sessions', Laptop],
+  ['privacy', 'Privacy & data', Lock],
+] as const;
+
 export default function SettingsPage() {
   const location = useLocation();
-  const tab = location.pathname.split('/')[2] ?? 'profile';
-  const navigate = (t: string) => window.history.pushState(null, '', `/settings/${t}`);
-  const tabs = [
-    { id: 'profile', label: 'Profile', icon: UserCircle },
-    { id: 'security', label: 'Security', icon: ShieldCheck },
-    { id: 'sessions', label: 'Sessions', icon: Laptop },
-    { id: 'privacy', label: 'Privacy & data', icon: Lock },
-  ];
+  const section = location.pathname.split('/')[2] ?? 'profile';
   return (
     <div className="space-y-4">
       <h1 className="text-lg font-extrabold">Settings</h1>
-      <div
+      <nav
+        aria-label="Settings sections"
         className="flex gap-1 overflow-x-auto rounded-lg border border-line bg-panel p-1"
-        role="tablist"
       >
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            role="tab"
-            aria-selected={tab === t.id}
-            onClick={() => navigate(t.id)}
-            className={`flex shrink-0 items-center gap-1.5 rounded-md px-3 py-2 text-sm ${tab === t.id ? 'bg-panel2 text-ink' : 'text-subtle'}`}
+        {SETTINGS_SECTIONS.map(([to, label, Icon]) => (
+          <NavLink
+            key={to}
+            to={`/settings/${to}`}
+            className={({ isActive }) =>
+              `flex shrink-0 items-center gap-1.5 rounded-md px-3 py-2 text-sm ${
+                isActive ? 'bg-panel2 font-semibold text-ink' : 'text-subtle'
+              }`
+            }
           >
-            <t.icon size={14} /> {t.label}
-          </button>
+            <Icon size={14} /> {label}
+          </NavLink>
         ))}
-      </div>
-      {tab === 'profile' && <ProfileTab />}
-      {tab === 'security' && <SecurityTab />}
-      {tab === 'sessions' && <SessionsTab />}
-      {tab === 'privacy' && <PrivacyTab />}
+      </nav>
+      {section === 'profile' && <ProfileTab />}
+      {section === 'security' && <SecurityTab />}
+      {section === 'sessions' && <SessionsTab />}
+      {section === 'privacy' && <PrivacyTab />}
+      {!['profile', 'security', 'sessions', 'privacy'].includes(section) && (
+        <NotFoundSection />
+      )}
     </div>
+  );
+}
+
+function NotFoundSection() {
+  return (
+    <section role="alert" className="card space-y-3 p-6">
+      <h1 className="text-lg font-bold">Settings section not found</h1>
+      <Link to="/settings/profile" className="text-sm text-accent hover:underline">
+        Back to Profile settings
+      </Link>
+    </section>
   );
 }
 

@@ -125,7 +125,7 @@ export default function OnboardingPage() {
               body={
                 <p className="text-sm text-subtle">
                   Later, enable two-factor authentication and register a passkey in{' '}
-                  <Link className="text-accent underline" to="/settings">
+                  <Link className="text-accent underline" to="/settings/security">
                     Settings → Security
                   </Link>
                   . High-risk vehicle commands (unlock, remote start, valet) always require

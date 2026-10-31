@@ -1,7 +1,7 @@
 // VoltLink application shell and router.
 
 import { lazy, Suspense, useEffect } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Shell } from './components/Shell';
@@ -34,6 +34,18 @@ const queryClient = new QueryClient({
     queries: { staleTime: 15000, retry: 1, refetchOnWindowFocus: false },
   },
 });
+
+function NotFoundPage() {
+  return (
+    <section role="alert" className="card mx-auto max-w-lg space-y-3 p-6">
+      <h1 className="text-lg font-extrabold">Page not found</h1>
+      <p className="text-sm text-subtle">That address does not exist in VoltLink.</p>
+      <Link to="/" className="text-sm text-accent hover:underline">
+        Back to Overview
+      </Link>
+    </section>
+  );
+}
 
 function PageFallback() {
   return (
@@ -73,7 +85,7 @@ function AuthenticatedLayout() {
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/settings/*" element={<SettingsPage />} />
           <Route path="/" element={<OverviewPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
     </Shell>

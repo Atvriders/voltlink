@@ -148,7 +148,7 @@ export default function MapPage() {
         <Card
           title="Saved places"
           actions={
-            <Link className="text-xs text-accent hover:underline" to="/settings">
+            <Link className="text-xs text-accent hover:underline" to="/settings/privacy">
               Manage in settings
             </Link>
           }

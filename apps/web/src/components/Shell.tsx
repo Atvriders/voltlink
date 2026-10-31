@@ -234,7 +234,7 @@ function AccountMenu({ align = 'left', email }: { align?: 'left' | 'right'; emai
             Signed in as <span className="text-ink">{email}</span>
           </p>
           <Link
-            to="/settings"
+            to="/settings/profile"
             role="menuitem"
             className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm hover:bg-panel2"
             onClick={() => setOpen(false)}
@@ -418,7 +418,7 @@ export function Shell({ user, children }: { user: UserPublic | null; children: R
             </div>
             <ThemeMenu />
             <Link
-              to="/settings"
+              to="/settings/profile"
               className="rounded-lg p-2 text-subtle hover:bg-panel2 hover:text-ink"
               aria-label="Settings"
             >
