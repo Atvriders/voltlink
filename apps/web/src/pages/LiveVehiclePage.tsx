@@ -64,8 +64,9 @@ import {
   type VehicleWithState,
   type VehicleState,
 } from '@voltlink/shared';
-import { controlsFor, type ParamControl } from '@voltlink/shared';
+import { computeFreshness, controlsFor, type ParamControl } from '@voltlink/shared';
 import { outcomeFor } from '../lib/commandLifecycle';
+import { useNow } from '../lib/useNow';
 
 interface CommandWithEvents extends VehicleCommand {
   events?: { id: string; event: string; actor: string; detail: string; createdAt: string }[];
@@ -74,6 +75,7 @@ interface CommandWithEvents extends VehicleCommand {
 export default function LiveVehiclePage() {
   const { id } = useParams();
   const { user } = useAuth();
+  useNow(15_000); // F-FRESH: recompute the freshness label between refetches
   const qc = useQueryClient();
   const units = user?.units ?? 'metric';
 
@@ -134,8 +136,16 @@ export default function LiveVehiclePage() {
           </Badge>
         )}
         {state && (
-          <Badge tone={(FRESHNESS_LABEL[state.freshness] ?? FRESHNESS_LABEL.last_known!).tone}>
-            {(FRESHNESS_LABEL[state.freshness] ?? FRESHNESS_LABEL.last_known!).label}
+          <Badge
+            tone={
+              (FRESHNESS_LABEL[computeFreshness(state, Date.now())] ?? FRESHNESS_LABEL.last_known!)
+                .tone
+            }
+          >
+            {
+              (FRESHNESS_LABEL[computeFreshness(state, Date.now())] ?? FRESHNESS_LABEL.last_known!)
+                .label
+            }
           </Badge>
         )}{' '}
         {state?.chargingState === 'charging' && (

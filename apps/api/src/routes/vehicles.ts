@@ -14,6 +14,7 @@ import { getProvider, buildContext } from '../providers/registry';
 import { getQueue } from '../core/queue';
 import { audit } from '../core/settings';
 import { sendMail } from '../auth/service';
+import { computeFreshness } from '@voltlink/shared';
 
 export const vehiclesRouter = policyRouter('/api/v1/vehicles');
 
@@ -63,7 +64,15 @@ function toVehicleWithState(v: {
     state: v.snapshot
       ? {
           ...(v.snapshot.state as object),
-          freshness: v.snapshot.freshness,
+          // F-FRESH: recompute at read time so the label reflects the true age.
+          freshness: computeFreshness(
+            {
+              status: (v.snapshot.state as { status?: never })?.status,
+              fetchedAt: v.snapshot.fetchedAt.toISOString(),
+              liveAtIngest: (v.snapshot.state as { liveAtIngest?: boolean })?.liveAtIngest,
+            },
+            Date.now(),
+          ),
           fetchedAt: v.snapshot.fetchedAt.toISOString(),
         }
       : null,

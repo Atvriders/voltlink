@@ -103,7 +103,10 @@ export async function ingestVehicleState(
   const zones = await zonesForOrg(vehicle.organizationId);
   const zone = zoneAt(zones, state.lat, state.lon);
   const redacted = redactState(state, zone);
-  const stored = { ...redacted, freshness } as unknown as Record<string, unknown>;
+  const stored = { ...redacted, freshness, liveAtIngest: opts.live } as unknown as Record<
+    string,
+    unknown
+  >;
   const storedJson = JSON.parse(JSON.stringify(stored)) as object;
 
   // 1. Snapshot (latest-state table — dashboards never scan history).
