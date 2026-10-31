@@ -4,6 +4,8 @@
 // are recorded but never crash the caller.
 
 import { prisma } from '../core/db';
+import { safeFetch } from '../net/safeFetch';
+import { getOutboundPolicy } from '../net/policy';
 import { getSetting } from '../core/settings';
 import type { DeliveryChannel } from '@voltlink/shared';
 
@@ -31,12 +33,12 @@ export async function pushSimpleWebhook(userId: string, channel: DeliveryChannel
 
   let payload: string;
   if (channel === 'ntfy') {
-    await fetch(url, { method: 'POST', body: msg.body, headers: { Title: msg.title, Priority: msg.severity === 'critical' ? '5' : '3', Tags: 'voltlink' } });
+    await safeFetch(getOutboundPolicy(), url, { method: 'POST', body: msg.body, headers: { Title: msg.title, Priority: msg.severity === 'critical' ? '5' : '3', Tags: 'voltlink' } });
     return;
   }
   if (channel === 'gotify') {
     payload = JSON.stringify({ title: msg.title, message: msg.body, priority: msg.severity === 'critical' ? 8 : 5 });
-    await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload });
+    await safeFetch(getOutboundPolicy(), url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload });
     return;
   }
   if (channel === 'discord') {
@@ -45,12 +47,12 @@ export async function pushSimpleWebhook(userId: string, channel: DeliveryChannel
       username: 'VoltLink',
       embeds: [{ title: msg.title, description: msg.body, color, timestamp: new Date().toISOString() }],
     });
-    await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload });
+    await safeFetch(getOutboundPolicy(), url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload });
     return;
   }
   if (channel === 'teams') {
     payload = JSON.stringify({ '@type': 'MessageCard', '@context': 'http://schema.org/extensions', summary: msg.title, themeColor: '0078D7', title: msg.title, text: msg.body });
-    await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload });
+    await safeFetch(getOutboundPolicy(), url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload });
   }
 }
 

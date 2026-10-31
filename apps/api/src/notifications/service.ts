@@ -98,7 +98,9 @@ async function deliver(input: NotifyInput & { channel: DeliveryChannel; email: s
         headers['X-VoltLink-Event'] = input.event;
       }
       try {
-        const res = await fetch(ep.url, { method: 'POST', headers, body: JSON.stringify(payload) });
+        const { safeFetch } = await import('../net/safeFetch');
+        const { getOutboundPolicy } = await import('../net/policy');
+        const res = await safeFetch(getOutboundPolicy(), ep.url, { method: 'POST', headers, body: JSON.stringify(payload) });
         await prisma.webhookEndpoint.update({ where: { id: ep.id }, data: { lastStatus: res.status, lastDeliveryAt: new Date() } });
       } catch {
         await prisma.webhookEndpoint.update({ where: { id: ep.id }, data: { lastStatus: 0, lastDeliveryAt: new Date() } });

@@ -94,6 +94,16 @@ notificationsRouter.put('/channel-urls', { auth: 'session', target: { kind: 'non
         res.status(400).json({ error: { code: 'VALIDATION', message: `${key} must be a valid http(s) URL.` } });
         return;
       }
+      if (v) {
+        try {
+          const { getOutboundPolicy } = await import('../net/policy');
+          const { preflightUrl } = await import('../net/safeFetch');
+          await preflightUrl(getOutboundPolicy(), v);
+        } catch (err) {
+          res.status(422).json({ error: { code: 'URL_BLOCKED', message: (err as Error).message } });
+          return;
+        }
+      }
       await setUserChannelUrl(sessionActor(req).userId, key, v ?? null);
     }
   }
@@ -120,6 +130,14 @@ notificationsRouter.post('/webhooks', { auth: 'session', target: { kind: 'none' 
   const { name, url } = (req.body ?? {}) as { name?: string; url?: string };
   if (!name || !url || !validateWebhookUrl(url)) {
     res.status(400).json({ error: { code: 'VALIDATION', message: 'Name and a valid http(s) URL are required.' } });
+    return;
+  }
+  try {
+    const { getOutboundPolicy } = await import('../net/policy');
+    const { preflightUrl } = await import('../net/safeFetch');
+    await preflightUrl(getOutboundPolicy(), url);
+  } catch (err) {
+    res.status(422).json({ error: { code: 'URL_BLOCKED', message: (err as Error).message } });
     return;
   }
   const secret = randomToken(16);

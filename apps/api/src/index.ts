@@ -9,6 +9,7 @@ import { ensureComponents, runStatusChecks } from './status/service';
 
 async function main(): Promise<void> {
   validateEnv();
+  await import('./net/policy').then((m) => m.buildOutboundPolicy());
   await runMigrationLeader();
   await prisma.$connect();
   await ensureComponents();

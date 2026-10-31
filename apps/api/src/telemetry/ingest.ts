@@ -8,6 +8,7 @@ import { haversineKm, round2 } from '../core/geo';
 import { dispatchTrigger } from '../automations/engine';
 import { notify } from '../notifications/service';
 import type { VehicleState } from '@voltlink/shared';
+import { zonesForOrg, zoneAt, redactState, type ZoneLite } from '../privacy/zones';
 type IngestVehicle = { id: string; organizationId: string; displayName: string; demo: boolean; addedById: string | null };
 
 // In-flight lifecycle trackers keyed by vehicleId (per process).
@@ -24,7 +25,12 @@ export async function ingestVehicleState(vehicle: IngestVehicle, state: VehicleS
   const freshLimit = freshLimitFor(state);
   const freshness = opts.live && ageSec <= freshLimit ? 'live' : ageSec <= freshLimit * 3 ? 'recent' : ageSec <= freshLimit * 12 ? 'stale' : 'last_known';
 
-  const stored = { ...state, freshness } as unknown as Record<string, unknown>;
+  // Raw state stays in memory only: geofences, triggers and trackers use it.
+  // Everything persisted or published is the redacted state (Z-PRIVZONE).
+  const zones = await zonesForOrg(vehicle.organizationId);
+  const zone = zoneAt(zones, state.lat, state.lon);
+  const redacted = redactState(state, zone);
+  const stored = { ...redacted, freshness } as unknown as Record<string, unknown>;
   const storedJson = JSON.parse(JSON.stringify(stored)) as object;
 
   // 1. Snapshot (latest-state table — dashboards never scan history).
@@ -45,8 +51,9 @@ export async function ingestVehicleState(vehicle: IngestVehicle, state: VehicleS
       cl: state.chargeLimitPct ?? null,
       o: state.odometerKm ?? null,
       sp: state.speedKmh ?? null,
-      lt: state.lat ?? null,
-      ln: state.lon ?? null,
+      lt: redacted.lat ?? null,
+      ln: redacted.lon ?? null,
+      pz: zone ? zone.id : null,
       hd: state.headingDeg ?? null,
       it: state.insideTempC ?? null,
       ot: state.outsideTempC ?? null,
@@ -64,32 +71,24 @@ export async function ingestVehicleState(vehicle: IngestVehicle, state: VehicleS
     console.error('telemetry write failed:', (err as Error).message);
   }
 
-  // 3. Latest location (no logs — DB only).
+  // 3. Latest location (no logs — DB only). In-zone coordinates are nulled.
   if (typeof state.lat === 'number' && typeof state.lon === 'number') {
-    // Redact address when inside any privacy zone (iterate lazily).
-    let address = state.address ?? null;
-    if (address) {
-      const zones = await prisma.privacyZone.findMany({ where: { organizationId: vehicle.organizationId, enabled: true } });
-      for (const z of zones) {
-        if (haversineKm(state.lat, state.lon, z.lat, z.lon) <= z.radiusM / 1000) {
-          address = 'Private area';
-          break;
-        }
-      }
-    }
+    const lat = redacted.lat ?? null;
+    const lon = redacted.lon ?? null;
+    const address = redacted.address ?? null;
     await prisma.vehicleLocation.upsert({
       where: { vehicleId: vehicle.id },
-      update: { ts: fetchedAt, lat: state.lat, lon: state.lon, headingDeg: state.headingDeg, speedKmh: state.speedKmh, accuracyM: 5, address },
-      create: { vehicleId: vehicle.id, ts: fetchedAt, lat: state.lat, lon: state.lon, headingDeg: state.headingDeg, speedKmh: state.speedKmh, accuracyM: 5, address },
+      update: { ts: fetchedAt, lat, lon, privacyZoneId: zone?.id ?? null, headingDeg: state.headingDeg, speedKmh: state.speedKmh, accuracyM: 5, address },
+      create: { vehicleId: vehicle.id, ts: fetchedAt, lat, lon, privacyZoneId: zone?.id ?? null, headingDeg: state.headingDeg, speedKmh: state.speedKmh, accuracyM: 5, address },
     });
   }
 
   // 4. Drive detection (real providers only — demo history is seeded).
   if (!vehicle.demo) {
-    await detectDrive(vehicle.id, state, fetchedAt);
+    await detectDrive(vehicle.id, state, fetchedAt, zones);
   }
   // 5. Charging lifecycle (all providers; demo charging cycles are throttled).
-  await detectCharging(vehicle.id, vehicle.addedById ?? '', vehicle.displayName, state, fetchedAt, vehicle.demo);
+  await detectCharging(vehicle.id, vehicle.addedById ?? '', vehicle.displayName, state, fetchedAt, vehicle.demo, zones);
 
   // 6. Geofence evaluation.
   await evaluateGeofences(vehicle, state);
@@ -121,7 +120,7 @@ function publicStateForSse(stored: Record<string, unknown>): Record<string, unkn
 // Drive lifecycle
 // ---------------------------------------------------------------------------
 
-async function detectDrive(vehicleId: string, state: VehicleState, now: Date): Promise<void> {
+async function detectDrive(vehicleId: string, state: VehicleState, now: Date, zones: readonly ZoneLite[]): Promise<void> {
   const speed = state.speedKmh ?? 0;
   const moving = speed > MIN_DRIVE_SPEED;
   const current = driveTracker.get(vehicleId);
@@ -152,6 +151,11 @@ async function detectDrive(vehicleId: string, state: VehicleState, now: Date): P
     if (points.length < 3) return;
     const first = points[0]!;
     const last = points[points.length - 1]!;
+    // Endpoints inside a zone are redacted; route points inside any zone are
+    // never stored. Distance and duration still use every raw point.
+    const startZone = zoneAt(zones, first.lat, first.lon);
+    const endZone = zoneAt(zones, last.lat, last.lon);
+    const storedPoints = points.filter((pt) => zoneAt(zones, pt.lat, pt.lon) === null);
     let distanceKm = 0;
     for (let i = 1; i < points.length; i++) {
       distanceKm += haversineKm(points[i - 1]!.lat, points[i - 1]!.lon, points[i]!.lat, points[i]!.lon);
@@ -165,10 +169,12 @@ async function detectDrive(vehicleId: string, state: VehicleState, now: Date): P
         vehicleId,
         startAt: first.ts,
         endAt: last.ts,
-        startLat: first.lat,
-        startLon: first.lon,
-        endLat: last.lat,
-        endLon: last.lon,
+        startLat: startZone ? null : first.lat,
+        startLon: startZone ? null : first.lon,
+        startPrivacyZoneId: startZone?.id ?? null,
+        endLat: endZone ? null : last.lat,
+        endLon: endZone ? null : last.lon,
+        endPrivacyZoneId: endZone?.id ?? null,
         distanceKm: round2(distanceKm),
         durationSec,
         avgSpeedKmh: round2((distanceKm / durationSec) * 3600),
@@ -181,7 +187,7 @@ async function detectDrive(vehicleId: string, state: VehicleState, now: Date): P
       },
     });
     await prisma.driveRoutePoint.createMany({
-      data: points.map((p, i) => ({
+      data: storedPoints.map((p, i) => ({
         driveId: drive.id,
         seq: i,
         ts: p.ts,
@@ -201,7 +207,7 @@ async function detectDrive(vehicleId: string, state: VehicleState, now: Date): P
 // Charging lifecycle
 // ---------------------------------------------------------------------------
 
-async function detectCharging(vehicleId: string, ownerId: string, vehicleName: string, state: VehicleState, now: Date, isDemo: boolean): Promise<void> {
+async function detectCharging(vehicleId: string, ownerId: string, vehicleName: string, state: VehicleState, now: Date, isDemo: boolean, zones: readonly ZoneLite[]): Promise<void> {
   const charging = state.chargingState === 'charging';
   const current = chargeTracker.get(vehicleId);
 
@@ -223,11 +229,16 @@ async function detectCharging(vehicleId: string, ownerId: string, vehicleName: s
     const energyAddedKwh = Math.max(0, ((state.batteryPercent ?? current.lastPct) - current.startPct) / 100 * 60);
     if (energyAddedKwh < 0.2 && isDemo) return; // demo throttling
     const durationSec = Math.max(1, Math.round((now.getTime() - current.startedAt.getTime()) / 1000));
+    // Match location rules against the raw point first, then redact.
+    const zone = zoneAt(zones, state.lat, state.lon);
     const session = await prisma.chargingSession.create({
       data: {
         vehicleId,
         startAt: current.startedAt,
         endAt: now,
+        lat: state.lat ?? null,
+        lon: state.lon ?? null,
+        locationName: state.address ?? null,
         energyAddedKwh: round2(energyAddedKwh),
         batteryStartPct: current.startPct,
         batteryEndPct: state.batteryPercent ?? current.lastPct,
@@ -242,6 +253,12 @@ async function detectCharging(vehicleId: string, ownerId: string, vehicleName: s
       },
     });
     await applyCostCalculation(session.id);
+    if (zone) {
+      await prisma.chargingSession.update({
+        where: { id: session.id },
+        data: { lat: null, lon: null, locationName: null, privacyZoneId: zone.id },
+      });
+    }
     await recomputeAggregate(vehicleId, current.startedAt);
     const event = state.chargingState === 'complete' ? 'charging_completed' : 'charging_stopped';
     await notify({

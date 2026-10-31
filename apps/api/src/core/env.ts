@@ -118,6 +118,8 @@ export function validateEnv() {
     env.JWT_SECRET();
   }
   parseTrustProxy(env.TRUST_PROXY); // throws on the unsafe `true` value
+  // A bad VL_OUTBOUND_ALLOW entry must fail boot, not weaken the SSRF policy.
+  import('../net/outboundPolicy').then(({ parseAllowlist }) => parseAllowlist(process.env.VL_OUTBOUND_ALLOW));
   if (env.NODE_ENV === 'production') {
     env.MASTER_KEY();
     const httpInsecure = !/^https:\/\//.test(env.PUBLIC_URL) && !env.PUBLIC_URL.startsWith('http://localhost');

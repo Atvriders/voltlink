@@ -8,10 +8,13 @@ import { prisma } from './core/db';
 import { processCommandJob } from './commands/service';
 import { processTelemetryJob } from './telemetry/poller';
 import { setSetting } from './core/settings';
+import { runPrivacyRedaction } from './jobs/privacy-redaction';
+import { runAccountDeletion } from './jobs/account-deletion';
 
 async function main(): Promise<void> {
   validateEnv();
   await runMigrationLeader();
+  await import('./net/policy').then((m) => m.buildOutboundPolicy());
   await prisma.$connect();
 
   const queue = getQueue();
@@ -31,6 +34,8 @@ async function main(): Promise<void> {
         },
       });
     }),
+    queue.consume('privacy-redaction', 2, async (payload) => { await runPrivacyRedaction((payload as { zoneId: string }).zoneId); }),
+    queue.consume('account-deletion', 1, async (payload) => { await runAccountDeletion((payload as { userId: string }).userId); }),
     queue.consume('demo', 1, async (payload) => {
       // demo seed completion bookkeeping
       const p = payload as { userId: string };

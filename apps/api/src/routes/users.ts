@@ -6,6 +6,7 @@ import { policyRouter, sessionActor } from '../authz/policy';
 import { AccessDenied } from '../authz/errors';
 import { hashPassword, verifyPassword, randomToken } from '../core/crypto';
 import { audit, getSettingsBundle } from '../core/settings';
+import { sseRevokeUser } from '../core/sse';
 import { getQueue } from '../core/queue';
 import { removeCredentials } from '../providers/registry';
 import { sha256hex } from '../core/crypto';
@@ -137,6 +138,7 @@ usersRouter.post('/me/delete', { auth: 'session', stepUp: {}, target: { kind: 's
   const accounts = await prisma.providerAccount.findMany({ where: { organization: { memberships: { some: { userId: user.id } } } } });
   await prisma.user.update({ where: { id: user.id }, data: { deletionRequestedAt: new Date() } });
   await prisma.userSession.updateMany({ where: { userId: user.id }, data: { revokedAt: new Date() } });
+  sseRevokeUser(user.id);
   await prisma.apiKey.updateMany({ where: { userId: user.id }, data: { revokedAt: new Date() } });
   await prisma.pushSubscription.deleteMany({ where: { userId: user.id } });
   await prisma.webhookEndpoint.deleteMany({ where: { userId: user.id } });

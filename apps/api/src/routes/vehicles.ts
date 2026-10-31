@@ -6,6 +6,7 @@ import { prisma } from '../core/db';
 import { env } from '../core/env';
 import { sha256hex, randomToken } from '../core/crypto';
 import { policyRouter, sessionActor, type RoutePolicy } from '../authz/policy';
+import { invalidateZonesForOrg } from '../privacy/zones';
 import { accessibleVehicleIds } from '../authz/access';
 import { AccessDenied } from '../authz/errors';
 import { ingestVehicleState } from '../telemetry/ingest';
@@ -85,18 +86,28 @@ vehiclesRouter.post('/privacy-zones', { auth: 'session', target: { kind: 'org', 
     return;
   }
   const z = await prisma.privacyZone.create({ data: { organizationId: orgId, createdById: sessionActor(req).userId, ...parsed.data } });
+  invalidateZonesForOrg(orgId);
+  if (z.enabled) await getQueue().enqueue('privacy-redaction', { zoneId: z.id }, { delayMs: 60_000 });
   await audit({ actorId: sessionActor(req).userId, action: 'privacy.zone_created', entityType: 'privacyZone', entityId: z.id });
   res.status(201).json({ data: z });
 });
 
 vehiclesRouter.patch('/privacy-zones/:id', { auth: 'session', target: { kind: 'resource', resource: 'privacyZone', from: 'param:id', perm: 'privacy.manage' } }, async (req, res) => {
   const zone = req.access!.resource!;
-  const body = (req.body ?? {}) as { enabled?: boolean; name?: string; radiusM?: number };
+  const body = (req.body ?? {}) as { enabled?: boolean; name?: string; radiusM?: number; lat?: number; lon?: number };
   const data: Record<string, unknown> = {};
   if (typeof body.enabled === 'boolean') data.enabled = body.enabled;
   if (typeof body.name === 'string' && body.name.trim()) data.name = body.name.trim().slice(0, 60);
-  if (typeof body.radiusM === 'number') data.radiusM = body.radiusM;
-  await prisma.privacyZone.update({ where: { id: zone.id }, data });
+  if (typeof body.radiusM === 'number' && body.radiusM >= 10 && body.radiusM <= 10000) data.radiusM = body.radiusM;
+  if (typeof body.lat === 'number' && body.lat >= -90 && body.lat <= 90) data.lat = body.lat;
+  if (typeof body.lon === 'number' && body.lon >= -180 && body.lon <= 180) data.lon = body.lon;
+  const updated = await prisma.privacyZone.update({ where: { id: zone.id }, data });
+  invalidateZonesForOrg(updated.organizationId);
+  // Enabling, moving or enlarging re-runs redaction (idempotent; the 60 s
+  // delay exceeds the ingest cache TTL). Shrinking never restores data.
+  if (updated.enabled && ('enabled' in data || 'lat' in data || 'lon' in data || 'radiusM' in data)) {
+    await getQueue().enqueue('privacy-redaction', { zoneId: zone.id }, { delayMs: 60_000 });
+  }
   await audit({ actorId: sessionActor(req).userId, action: 'privacy.zone_updated', entityType: 'privacyZone', entityId: zone.id });
   res.json({ data: { ok: true } });
 });

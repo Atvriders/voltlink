@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import { pool, withAdvisoryLock } from '../core/db';
+import { runDataTasks } from './dataTasks';
 
 export async function runMigrationLeader(): Promise<void> {
   await withAdvisoryLock('voltlink:migrations', async () => {
@@ -22,6 +23,7 @@ export async function runMigrationLeader(): Promise<void> {
     } else {
       execFileSync(prismaBin, ['migrate', 'deploy'], { cwd: process.cwd(), stdio: 'inherit', env: process.env });
     }
+    await runDataTasks();
   });
 }
 

@@ -80,3 +80,17 @@ export function ssePublish(event: { type: string; data: unknown; userId?: string
 export function sseCount(): number {
   return clients.size;
 }
+
+/** End every SSE stream of a user (A-SSEREVOKE: sessions revoked or account
+ * deletion requested). */
+export function sseRevokeUser(userId: string): void {
+  for (const c of clients) {
+    if (c.userId !== userId) continue;
+    try {
+      c.res.end();
+    } catch {
+      /* ignore */
+    }
+    clients.delete(c);
+  }
+}
