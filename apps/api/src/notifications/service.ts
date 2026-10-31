@@ -28,8 +28,13 @@ export async function notify(input: NotifyInput): Promise<void> {
   const severity = input.severity ?? 'info';
   let channels = input.channels;
   if (!channels) {
-    const prefs = await prisma.notificationPreference.findMany({ where: { userId: input.userId, event: input.event, enabled: true } });
-    channels = prefs.length > 0 ? (prefs.map((p) => p.channel as DeliveryChannel) as DeliveryChannel[]) : (['in_app'] as DeliveryChannel[]);
+    const prefs = await prisma.notificationPreference.findMany({
+      where: { userId: input.userId, event: input.event, enabled: true },
+    });
+    channels =
+      prefs.length > 0
+        ? (prefs.map((p) => p.channel as DeliveryChannel) as DeliveryChannel[])
+        : (['in_app'] as DeliveryChannel[]);
   }
   if (!channels.includes('in_app') && !input.force) {
     // in-app is the baseline; every user gets in-app copies
@@ -42,11 +47,17 @@ export async function notify(input: NotifyInput): Promise<void> {
     await deliver({ ...input, channel, severity, email: user.email });
   }
   if (channels.includes('in_app')) {
-    ssePublish({ type: 'notification', data: { event: input.event, severity, title: input.title }, userId: input.userId });
+    ssePublish({
+      type: 'notification',
+      data: { event: input.event, severity, title: input.title },
+      userId: input.userId,
+    });
   }
 }
 
-async function deliver(input: NotifyInput & { channel: DeliveryChannel; email: string }): Promise<void> {
+async function deliver(
+  input: NotifyInput & { channel: DeliveryChannel; email: string },
+): Promise<void> {
   const { channel } = input;
   if (channel === 'in_app') {
     await prisma.appNotification.create({
@@ -77,14 +88,21 @@ async function deliver(input: NotifyInput & { channel: DeliveryChannel; email: s
     if (subs.length > 0) {
       const { sendPush } = await import('./push');
       for (const sub of subs) {
-        await sendPush(sub, { title: input.title, body: input.body, severity: input.severity ?? 'info', event: input.event }).catch(() => undefined);
+        await sendPush(sub, {
+          title: input.title,
+          body: input.body,
+          severity: input.severity ?? 'info',
+          event: input.event,
+        }).catch(() => undefined);
       }
     }
     return;
   }
   if (channel === 'webhook') {
     const endpoints = input.webhookEndpointId
-      ? await prisma.webhookEndpoint.findMany({ where: { id: input.webhookEndpointId, userId: input.userId, enabled: true } })
+      ? await prisma.webhookEndpoint.findMany({
+          where: { id: input.webhookEndpointId, userId: input.userId, enabled: true },
+        })
       : await prisma.webhookEndpoint.findMany({ where: { userId: input.userId, enabled: true } });
     for (const ep of endpoints) {
       const payload = {
@@ -105,7 +123,8 @@ async function deliver(input: NotifyInput & { channel: DeliveryChannel; email: s
         if (ep.secretSealed) {
           const sealed = openJson<{ current: string; previous?: string }>(ep.secretSealed);
           secrets.push(sealed.current);
-          if (sealed.previous && (!ep.previousUntil || ep.previousUntil > new Date())) secrets.push(sealed.previous);
+          if (sealed.previous && (!ep.previousUntil || ep.previousUntil > new Date()))
+            secrets.push(sealed.previous);
         }
       } catch {
         /* unreadable secret: send unsigned once, then record the failure */
@@ -116,21 +135,37 @@ async function deliver(input: NotifyInput & { channel: DeliveryChannel; email: s
         const { safeFetch } = await import('../net/safeFetch');
         const { getOutboundPolicy } = await import('../net/policy');
         const res = await safeFetch(getOutboundPolicy(), ep.url, { method: 'POST', headers, body });
-        await prisma.webhookEndpoint.update({ where: { id: ep.id }, data: { lastStatus: res.status, lastDeliveryAt: new Date() } });
+        await prisma.webhookEndpoint.update({
+          where: { id: ep.id },
+          data: { lastStatus: res.status, lastDeliveryAt: new Date() },
+        });
       } catch {
-        await prisma.webhookEndpoint.update({ where: { id: ep.id }, data: { lastStatus: 0, lastDeliveryAt: new Date() } });
+        await prisma.webhookEndpoint.update({
+          where: { id: ep.id },
+          data: { lastStatus: 0, lastDeliveryAt: new Date() },
+        });
       }
     }
     return;
   }
   // External simple-webhook providers: ntfy, Gotify, Discord, Teams.
   const { pushSimpleWebhook } = await import('./simpleWebhooks');
-  await pushSimpleWebhook(input.userId, channel, { title: input.title, body: input.body, severity: input.severity ?? 'info', event: input.event }).catch(() => undefined);
+  await pushSimpleWebhook(input.userId, channel, {
+    title: input.title,
+    body: input.body,
+    severity: input.severity ?? 'info',
+    event: input.event,
+  }).catch(() => undefined);
 }
 
 export function escapeHtml(s: string): string {
   // G-10: single quotes too, so user text is safe inside single-quoted attributes.
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 export function hmacSign(secret: string, body: string): string {

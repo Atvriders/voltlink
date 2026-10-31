@@ -156,7 +156,8 @@ export type EventType = (typeof EVENT_TYPES)[number];
 
 export type Severity = 'info' | 'success' | 'warning' | 'critical';
 
-export type DeliveryChannel = 'in_app' | 'email' | 'push' | 'webhook' | 'ntfy' | 'gotify' | 'discord' | 'teams';
+export type DeliveryChannel =
+  'in_app' | 'email' | 'push' | 'webhook' | 'ntfy' | 'gotify' | 'discord' | 'teams';
 
 export interface AppNotification {
   id: string;

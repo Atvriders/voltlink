@@ -15,16 +15,29 @@ async function resealSecretsV2(): Promise<void> {
     const context = `provider-credential:${c.providerAccountId}`;
     const next = rewrap(c.ciphertext, context);
     if (next.ciphertext !== c.ciphertext) {
-      await prisma.providerCredential.update({ where: { id: c.id }, data: { keyVersion: next.keyVersion, algorithm: next.algorithm, ciphertext: next.ciphertext } });
+      await prisma.providerCredential.update({
+        where: { id: c.id },
+        data: {
+          keyVersion: next.keyVersion,
+          algorithm: next.algorithm,
+          ciphertext: next.ciphertext,
+        },
+      });
     }
   }
-  const users = await prisma.user.findMany({ where: { totpSecretSealed: { not: null } }, select: { id: true, totpSecretSealed: true } });
+  const users = await prisma.user.findMany({
+    where: { totpSecretSealed: { not: null } },
+    select: { id: true, totpSecretSealed: true },
+  });
   for (const u of users) {
     if (!u.totpSecretSealed) continue;
     const context = `totp:${u.id}`;
     const next = rewrap(u.totpSecretSealed, context);
     if (next.ciphertext !== u.totpSecretSealed) {
-      await prisma.user.update({ where: { id: u.id }, data: { totpSecretSealed: next.ciphertext } });
+      await prisma.user.update({
+        where: { id: u.id },
+        data: { totpSecretSealed: next.ciphertext },
+      });
     }
   }
 }
@@ -33,7 +46,10 @@ async function enqueueZoneRedaction(): Promise<void> {
   // Existing history was never redacted: enqueue a retroactive job per enabled
   // zone (guide 05 §7.2). The queue may be unavailable at migration time on a
   // web-only boot; the worker role re-runs these tasks and will pick it up.
-  const zones = await prisma.privacyZone.findMany({ where: { enabled: true }, select: { id: true } });
+  const zones = await prisma.privacyZone.findMany({
+    where: { enabled: true },
+    select: { id: true },
+  });
   for (const z of zones) {
     try {
       await getQueue().enqueue('privacy-redaction', { zoneId: z.id }, { delayMs: 60_000 });

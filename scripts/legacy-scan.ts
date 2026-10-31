@@ -35,11 +35,33 @@ const ALLOWED = [
 ];
 
 const SCAN_EXTS = new Set([
-  '.ts', '.tsx', '.js', '.mjs', '.cjs', '.json', '.md', '.sql', '.prisma',
-  '.yml', '.yaml', '.html', '.css', '.sh', '.py', '.env.example',
+  '.ts',
+  '.tsx',
+  '.js',
+  '.mjs',
+  '.cjs',
+  '.json',
+  '.md',
+  '.sql',
+  '.prisma',
+  '.yml',
+  '.yaml',
+  '.html',
+  '.css',
+  '.sh',
+  '.py',
+  '.env.example',
 ]);
 
-const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'test-results', 'playwright-report', 'web-dist', '.blend']);
+const SKIP_DIRS = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  'test-results',
+  'playwright-report',
+  'web-dist',
+  '.blend',
+]);
 
 export interface LegacyFinding {
   file: string;
@@ -48,7 +70,10 @@ export interface LegacyFinding {
 
 export function scanLegacyContent(root = process.cwd()): LegacyFinding[] {
   const findings: LegacyFinding[] = [];
-  const pattern = new RegExp(LEGACY_TERMS.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i');
+  const pattern = new RegExp(
+    LEGACY_TERMS.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
+    'i',
+  );
 
   const walk = (dir: string): void => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

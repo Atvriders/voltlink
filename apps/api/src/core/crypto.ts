@@ -7,7 +7,12 @@ import { env } from './env';
 // ---- Passwords ----
 
 export function hashPassword(plain: string): Promise<string> {
-  return argon2.hash(plain, { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 });
+  return argon2.hash(plain, {
+    type: argon2.argon2id,
+    memoryCost: 19456,
+    timeCost: 2,
+    parallelism: 1,
+  });
 }
 
 export function verifyPassword(hash: string, plain: string): Promise<boolean> {
@@ -43,7 +48,11 @@ function masterKey(): Buffer {
 }
 
 /** Encrypt `plaintext` (UTF-8 string) into a versioned envelope. */
-export function sealEnvelope(plaintext: string): { keyVersion: number; algorithm: string; ciphertext: string } {
+export function sealEnvelope(plaintext: string): {
+  keyVersion: number;
+  algorithm: string;
+  ciphertext: string;
+} {
   const dek = crypto.randomBytes(32);
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', dek, iv);
@@ -77,7 +86,9 @@ export function openEnvelope(ciphertext: string): string {
     throw new Error('Invalid credential envelope');
   }
   if (String(envl.v) !== String(KEY_VERSION)) {
-    throw new Error(`Unsupported envelope key version ${envl.v} — rotate keys or restore the original master key.`);
+    throw new Error(
+      `Unsupported envelope key version ${envl.v} — rotate keys or restore the original master key.`,
+    );
   }
   const wiv = envl.wiv;
   const wtag = envl.wtag;
@@ -85,7 +96,8 @@ export function openEnvelope(ciphertext: string): string {
   const iv = envl.iv;
   const tag = envl.tag;
   const body = envl.body;
-  if (!wiv || !wtag || !dekB64 || !iv || !tag || !body) throw new Error('Invalid credential envelope');
+  if (!wiv || !wtag || !dekB64 || !iv || !tag || !body)
+    throw new Error('Invalid credential envelope');
   const wcipher = crypto.createDecipheriv('aes-256-gcm', masterKey(), Buffer.from(wiv, 'base64'));
   wcipher.setAuthTag(Buffer.from(wtag, 'base64'));
   const dek = Buffer.concat([wcipher.update(Buffer.from(dekB64, 'base64')), wcipher.final()]);

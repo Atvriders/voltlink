@@ -1,31 +1,31 @@
+# VoltLink CI (guide 04 §7.1 + guide 08 §14). Every action is pinned by commit
+# SHA. Publish only after every job passes; versions are never re-pointed.
 name: CI
+
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+    tags: ['v*']
   pull_request:
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Least privilege by default. The docker job re-declares the one extra scope it
-# needs (packages: write).
 permissions:
   contents: read
 
 env:
-  # Not a secret: CI needs a valid signing key to boot the app; env validation
-  # rejects short/placeholder values. Generated with `openssl rand -hex 32`;
-  # never used by any deployment.
+  # Not a secret: CI needs valid boot keys; never used by any deployment.
   JWT_SECRET: da1ed84cbe380e8b2639006b5bdfcdce0ebc47754ca248e1277b16a8f8be4093
   VL_MASTER_KEY: MWY0MjZiYTc5OGIxMzQ3M2FkYTlmNjJmYzM3M2I0YzQ=
   DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink
-  # Migration tests create throwaway databases (role with CREATEDB).
+  REDIS_URL: redis://127.0.0.1:6379
   TEST_DATABASE_ADMIN_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/postgres
+  VL_SETUP_TOKEN: ci-setup-token-0123456789abcdef0123456789abcdef
 
 jobs:
-  build-and-test:
+  checks:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -34,13 +34,88 @@ jobs:
           POSTGRES_USER: voltlink
           POSTGRES_PASSWORD: voltlink
           POSTGRES_DB: voltlink
-        ports: ["5432:5432"]
+        ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U voltlink -d voltlink"
           --health-interval 10s --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Format gate (prettier)
+        run: npx prettier --check .
+      - name: Lint (zero warnings)
+        run: npx eslint . --max-warnings=0
+      - name: Typecheck including tests, e2e and scripts (C-TYPECHECK)
+        run: npm run typecheck
+      - name: Compose passes every ENV_SPEC variable (I-COMPOSEENV)
+        run: npm run check:compose
+      - name: Compose files parse (G-01)
+        run: |
+          docker compose -f docker-compose.yml config -q
+          docker compose -f compose.production.yml config -q
+      - name: Trivy ignore hygiene (I-TRIVY)
+        run: npx tsx scripts/check-trivy-ignore.ts
+      - name: Prisma client + migrations
+        run: |
+          npx prisma generate --schema apps/api/prisma/schema.prisma
+          npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+      - name: Create the shadow database (P-DBDRIFT gates)
+        run: |
+          apt-get update -qq && apt-get install -y -qq postgresql-client >/dev/null
+          PGPASSWORD=voltlink createdb -h 127.0.0.1 -U voltlink shadow
+        env:
+          SHADOW_DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/shadow
+      - name: 'Drift gate 1: migrations folder matches schema (P-DBDRIFT)'
+        run: |
+          npx prisma migrate diff --from-migrations apps/api/prisma/migrations \
+            --to-schema-datamodel apps/api/prisma/schema.prisma \
+            --shadow-database-url "$SHADOW_DATABASE_URL" --exit-code
+        env:
+          SHADOW_DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/shadow
+      - name: 'Drift gate 2: deployed database matches schema (P-DBDRIFT)'
+        run: |
+          npx prisma migrate diff --from-url "$DATABASE_URL" \
+            --to-schema-datamodel apps/api/prisma/schema.prisma \
+            --shadow-database-url "$SHADOW_DATABASE_URL" --exit-code
+        env:
+          SHADOW_DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/shadow
+      - name: Build (bundle + selftest entry + SPA)
+        run: npm run build
+      - name: Legacy scan
+        run: npm run legacy:scan
+      - name: Naming scan
+        run: npm run naming:scan
+      - name: GLB / manifest validation (guide 06)
+        run: python3 blender/scripts/validate_assets.py
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
+  unit-int:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: voltlink
+          POSTGRES_PASSWORD: voltlink
+          POSTGRES_DB: voltlink
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U voltlink -d voltlink"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 24
           cache: npm
@@ -48,22 +123,10 @@ jobs:
       - run: npm -w @voltlink/shared run build
       - run: npx prisma generate --schema apps/api/prisma/schema.prisma
       - run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
-      - run: npm run typecheck
-      - run: npx eslint . --max-warnings=0
       - run: npm test
-      - run: npm run build
-      - run: npm run legacy:scan
-      - run: npm run naming:scan
-      - run: python3 blender/scripts/validate_assets.py
-      - name: Dependency audit (fails on critical)
-        run: npm audit --audit-level=critical
-      - name: Dependency audit (reports high)
-        continue-on-error: true
-        run: npm audit --audit-level=high
 
-  e2e:
+  migrations:
     runs-on: ubuntu-latest
-    needs: build-and-test
     services:
       postgres:
         image: postgres:17-alpine
@@ -71,122 +134,193 @@ jobs:
           POSTGRES_USER: voltlink
           POSTGRES_PASSWORD: voltlink
           POSTGRES_DB: voltlink
-        ports: ["5432:5432"]
+        ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U voltlink -d voltlink"
           --health-interval 10s --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 24
           cache: npm
       - run: npm ci
       - run: npm -w @voltlink/shared run build
       - run: npx prisma generate --schema apps/api/prisma/schema.prisma
-      - run: npm -w @voltlink/api run build
-      - run: npm -w @voltlink/web run build
-      - run: mkdir -p apps/api/web-dist && cp -r apps/web/dist/* apps/api/web-dist/
-      - run: npx playwright install --with-deps chromium
-      # The API runs its own advisory-lock migration leader at boot.
-      - name: Start API (background)
-        run: |
-          cd apps/api
-          NODE_ENV=development PORT=3111 node dist/index.cjs > /tmp/voltlink-api.log 2>&1 &
-          for i in $(seq 1 60); do curl -sf http://127.0.0.1:3111/healthz && break; sleep 1; done
-      - name: API smoke (register → demo → vehicles)
-        run: |
-          node - <<'EOF'
-          const base = 'http://127.0.0.1:3111';
-          (async () => {
-            const csrfRes = await fetch(base + '/api/v1/auth/csrf');
-            const csrfCookie = csrfRes.headers.getSetCookie()[0].split(';')[0];
-            const token = (await csrfRes.json()).data.token;
-            const h = { 'content-type': 'application/json', cookie: csrfCookie, 'x-vl-csrf': token };
-            const reg = await fetch(base + '/api/v1/auth/register', { method: 'POST', headers: h, body: JSON.stringify({ name: 'Smoke', email: `smoke-${Date.now()}@ci.test`, password: 'smoke-password-123' }) });
-            console.log('register:', reg.status);
-            const sess = reg.headers.getSetCookie().map(c => c.split(';')[0]).find(c => c.startsWith('vl_session'));
-            const h2 = { 'content-type': 'application/json', cookie: `${csrfCookie}; ${sess}`, 'x-vl-csrf': token };
-            const demo = await fetch(base + '/api/v1/providers/demo/connect', { method: 'POST', headers: h2 });
-            console.log('demo connect:', demo.status, (await demo.json()).data?.vehiclesImported);
-            const veh = await fetch(base + '/api/v1/vehicles', { headers: { cookie: `${csrfCookie}; ${sess}` } });
-            const vbody = await veh.json();
-            console.log('vehicles:', veh.status, vbody.data?.length);
-            if (!(reg.status === 201 && demo.status === 200 && veh.status === 200 && vbody.data?.length >= 5)) process.exit(1);
-          })().catch(e => { console.error(e); process.exit(1); });
-          EOF
-      - run: npx playwright test --reporter=list
+      - name: Migration tests (throwaway databases)
+        run: npx vitest run test/migration.test.ts test/migrations.test.ts
+        working-directory: apps/api
+
+  e2e-fullstack:
+    runs-on: ubuntu-latest
+    needs: [checks]
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: voltlink
+          POSTGRES_PASSWORD: voltlink
+          POSTGRES_DB: voltlink
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U voltlink -d voltlink"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: bash scripts/e2e/start-stack.sh
+      - name: Smoke (register, demo, command, SSE)
+        run: node scripts/smoke.mjs
+        env:
+          SMOKE_BASE: http://127.0.0.1:3111
       - name: API log
         if: always()
         run: tail -60 /tmp/voltlink-api.log
 
-  assets:
+  image:
     runs-on: ubuntu-latest
+    needs: [checks, unit-int, migrations, e2e-fullstack]
     steps:
-      - uses: actions/checkout@v5
-      # Committed GLBs must pass container/part-name validation and match the
-      # manifest (regenerating with Blender happens in development; CI checks
-      # the committed artifacts so a broken rebuild cannot ship silently).
-      - run: python3 blender/scripts/validate_assets.py
-      - run: test -f apps/web/public/assets/models/manifest.json
-
-  docker:
-    runs-on: ubuntu-latest
-    needs: [build-and-test, e2e, assets]
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v4
-      - name: Log in to GHCR
-        if: github.event_name == 'push' && github.server_url == 'https://github.com'
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build image for scanning
-        uses: docker/build-push-action@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
+      - name: Build image (in-image selftest runs as a build step)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: .
           file: Dockerfile
           load: true
           push: false
           tags: voltlink:ci
-      - name: Scan image for HIGH/CRITICAL vulnerabilities
-        uses: aquasecurity/trivy-action@v0.36.0
-        env:
-          TRIVY_USERNAME: ${{ github.actor }}
-          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+      - name: Scan image (HIGH/CRITICAL fail, Trivy ignores honoured)
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8
         with:
           image-ref: voltlink:ci
           format: table
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
-          trivyignores: docker/.trivyignore
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.server_url == 'https://github.com' }}
-          provenance: true
-          sbom: true
-          tags: |
-            ghcr.io/atvriders/voltlink:latest
-            ghcr.io/atvriders/voltlink:v1.0.0
-            ghcr.io/atvriders/voltlink:${{ github.sha }}
+          trivyignores: .trivyignore.yaml
+      - name: Boot stack from the image and smoke it
+        run: |
+          POSTGRES_PASSWORD=voltlink JWT_SECRET="$JWT_SECRET" VL_MASTER_KEY="$VL_MASTER_KEY" \
+            PUBLIC_URL=http://127.0.0.1:3110 VL_ALLOW_INSECURE_HTTP=true VL_SETUP_TOKEN="$VL_SETUP_TOKEN" \
+            docker compose -f compose.production.yml -f docker-compose.ci.yml up -d --wait
+          node scripts/smoke.mjs
+          docker compose -f compose.production.yml restart worker
+          node scripts/smoke.mjs
+          docker compose -f compose.production.yml down -v
+
+  compose-dev-smoke:
+    runs-on: ubuntu-latest
+    needs: [image]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Dev compose parses and interpolates
+        run: docker compose -f docker-compose.yml config -q
+      - name: ENV_SPEC contract
+        run: npm run check:compose
 
   secret-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
-      - name: Gitleaks
-        uses: gitleaks/gitleaks-action@v2
+      - name: Gitleaks over the full history
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: [image, secret-scan, compose-dev-smoke]
+    if: github.event_name == 'push' && github.server_url == 'https://github.com'
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # The full commit-SHA tag only: latest/vX.Y.Z are pointed at it by
+          # promote AFTER verify-published boots the digest (I-V100).
+          tags: |
+            type=sha,format=long
+      - id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          provenance: true
+          sbom: true
+
+  verify-published:
+    runs-on: ubuntu-latest
+    needs: [publish]
+    if: github.event_name == 'push' && github.server_url == 'https://github.com'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Boot the published digest and smoke it
+        env:
+          VOLTLINK_IMAGE_TAG: sha256:${{ needs.publish.outputs.digest }}
+        run: |
+          POSTGRES_PASSWORD=voltlink JWT_SECRET="$JWT_SECRET" VL_MASTER_KEY="$VL_MASTER_KEY" \
+            PUBLIC_URL=http://127.0.0.1:3110 VL_ALLOW_INSECURE_HTTP=true VL_SETUP_TOKEN="$VL_SETUP_TOKEN" \
+            docker compose -f compose.production.yml up -d --wait
+          node scripts/smoke.mjs
+          docker compose -f compose.production.yml down -v
+
+  promote:
+    runs-on: ubuntu-latest
+    needs: [publish, verify-published]
+    if: github.event_name == 'push' && github.server_url == 'https://github.com'
+    permissions:
+      packages: write
+    steps:
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Versions are never re-pointed: latest only from main, vX.Y.Z only from a
+      # pushed git tag (I-V100). The tag simply re-labels the verified digest.
+      - name: Point latest at the verified digest (main only)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker buildx imagetools create \
+            --tag "ghcr.io/${{ github.repository }}:latest" \
+            "ghcr.io/${{ github.repository }}@${{ needs.publish.outputs.digest }}"
+      - name: Point the version tag at the verified digest (git tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          docker buildx imagetools create \
+            --tag "ghcr.io/${{ github.repository }}:${GITHUB_REF_NAME}" \
+            "ghcr.io/${{ github.repository }}@${{ needs.publish.outputs.digest }}"

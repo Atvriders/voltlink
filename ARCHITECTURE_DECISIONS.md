@@ -13,7 +13,7 @@ Deviations from the kit's target design are recorded here, per START_HERE.md
    outbox target (`NotificationChannel.configCiphertext`).
 
 2. **`POST /api/v1/providers/tesla/authorize` → kept as `GET
-   /tesla/authorize`** (no body, no `organizationId` parameter). The
+/tesla/authorize`** (no body, no `organizationId` parameter). The
    organization is taken from the actor's oldest active membership at
    authorize time and stored in the `OAuthState` row, and is re-verified at
    the callback (membership still active + `providers.manage`). This matches

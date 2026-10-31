@@ -28,13 +28,27 @@ async function main(): Promise<void> {
     res.json({ data: await publicStatusBundle() });
   });
   app.get('/api/v1/status/rss', async (_req, res) => {
-    const bundle = (await publicStatusBundle()) as { incidents: { id: string; title: string; severity: string; status: string; updates: { message: string; createdAt: string }[] }[]; updatedAt: string };
+    const bundle = (await publicStatusBundle()) as {
+      incidents: {
+        id: string;
+        title: string;
+        severity: string;
+        status: string;
+        updates: { message: string; createdAt: string }[];
+      }[];
+      updatedAt: string;
+    };
     const items = bundle.incidents
       .slice(0, 20)
-      .map((i) => `<item><title>${escapeXml(i.title)}</title><guid>${i.id}</guid><pubDate>${new Date(bundle.updatedAt).toUTCString()}</pubDate><description>${escapeXml(i.updates[0]?.message ?? i.status)}</description></item>`)
+      .map(
+        (i) =>
+          `<item><title>${escapeXml(i.title)}</title><guid>${i.id}</guid><pubDate>${new Date(bundle.updatedAt).toUTCString()}</pubDate><description>${escapeXml(i.updates[0]?.message ?? i.status)}</description></item>`,
+      )
       .join('');
     res.setHeader('Content-Type', 'application/rss+xml; charset=utf-8');
-    res.send(`<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>VoltLink Status</title><description>VoltLink platform status updates</description>${items}</channel></rss>`);
+    res.send(
+      `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>VoltLink Status</title><description>VoltLink platform status updates</description>${items}</channel></rss>`,
+    );
   });
   app.get('/api/v1/status/badge.svg', async (_req, res) => {
     const bundle = (await publicStatusBundle()) as { overall: string };
@@ -50,7 +64,9 @@ async function main(): Promise<void> {
     const width = 24 + label.length * 7 + 10;
     res.setHeader('Content-Type', 'image/svg+xml');
     res.setHeader('Cache-Control', 'public, max-age=60');
-    res.send(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="20"><rect width="${width}" height="20" rx="4" fill="#424242"/><rect x="${width / 2}" width="${width / 2}" height="20" fill="${color}"/><text x="6" y="14" font-family="Arial" font-size="11" fill="#fff">VoltLink</text><text x="${width / 2 + 6}" y="14" font-family="Arial" font-size="11" fill="#fff">${label}</text></svg>`);
+    res.send(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="20"><rect width="${width}" height="20" rx="4" fill="#424242"/><rect x="${width / 2}" width="${width / 2}" height="20" fill="${color}"/><text x="6" y="14" font-family="Arial" font-size="11" fill="#fff">VoltLink</text><text x="${width / 2 + 6}" y="14" font-family="Arial" font-size="11" fill="#fff">${label}</text></svg>`,
+    );
   });
 
   // Serve the SPA too (status page route inside the app).
@@ -73,7 +89,9 @@ async function main(): Promise<void> {
   checks.unref();
 
   const port = Number(process.env.STATUS_PORT || 3001);
-  const server = app.listen(port, env.HOST, () => console.log(`[voltlink] status listening on ${env.HOST}:${port}`));
+  const server = app.listen(port, env.HOST, () =>
+    console.log(`[voltlink] status listening on ${env.HOST}:${port}`),
+  );
   const shutdown = () => {
     server.close(() => prisma.$disconnect().then(() => process.exit(0)));
     setTimeout(() => process.exit(0), 5000).unref();
@@ -88,5 +106,9 @@ void main().catch((err) => {
 });
 
 function escapeXml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }

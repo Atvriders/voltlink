@@ -25,13 +25,13 @@ At the start of the VoltLink effort, the imported foundation had:
 
 ## What changed in the rebrand
 
-| Area | Result |
-| --- | --- |
-| Domain | ham-radio logging → connected-vehicle platform |
+| Area     | Result                                                                                |
+| -------- | ------------------------------------------------------------------------------------- |
+| Domain   | ham-radio logging → connected-vehicle platform                                        |
 | Database | fresh PostgreSQL schema (35+ models), partitioned telemetry; no renamed legacy tables |
-| Auth | Argon2id, TOTP, passkeys, session revocation added |
-| Runtime | role-based processes (web/worker/scheduler/status), PG+Redis queue |
-| Frontend | React 19 SPA, 5 themes, WebGL showroom |
-| Ops | Docker multi-role image, GHCR publishing, status platform |
+| Auth     | Argon2id, TOTP, passkeys, session revocation added                                    |
+| Runtime  | role-based processes (web/worker/scheduler/status), PG+Redis queue                    |
+| Frontend | React 19 SPA, 5 themes, WebGL showroom                                                |
+| Ops      | Docker multi-role image, GHCR publishing, status platform                             |
 
 See `ARCHITECTURE_DECISIONS.md` for the decision log.

@@ -28,15 +28,15 @@ vehicle page's command stepper.
 
 ## Command groups
 
-| Group | Commands |
-| --- | --- |
-| Access | lock, unlock |
-| Lights | flash_lights, honk_horn |
-| Climate | climate_on, climate_off, set_temperature |
-| Charging | charge_start, charge_stop, charge_limit |
-| Wake | wake, remote_start |
-| Cargo | open_trunk, open_frunk |
-| Security | enable_sentry, disable_sentry |
+| Group    | Commands                                 |
+| -------- | ---------------------------------------- |
+| Access   | lock, unlock                             |
+| Lights   | flash_lights, honk_horn                  |
+| Climate  | climate_on, climate_off, set_temperature |
+| Charging | charge_start, charge_stop, charge_limit  |
+| Wake     | wake, remote_start                       |
+| Cargo    | open_trunk, open_frunk                   |
+| Security | enable_sentry, disable_sentry            |
 
 ## High-risk step-up
 

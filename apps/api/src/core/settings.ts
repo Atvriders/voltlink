@@ -50,7 +50,11 @@ export async function getSetting(key: string): Promise<string> {
   if (!row) {
     const fallback = DEFAULT_SETTINGS[key];
     if (fallback !== undefined) {
-      await prisma.appSetting.upsert({ where: { key }, update: {}, create: { key, value: fallback } });
+      await prisma.appSetting.upsert({
+        where: { key },
+        update: {},
+        create: { key, value: fallback },
+      });
       return fallback;
     }
     return '';
@@ -70,5 +74,8 @@ export async function getSettingsBundle(): Promise<Record<string, string>> {
 }
 
 export async function commandsGloballyEnabled(): Promise<boolean> {
-  return (await getSetting('commandsEnabled')) === 'true' && (await getSetting('globalReadOnly')) !== 'true';
+  return (
+    (await getSetting('commandsEnabled')) === 'true' &&
+    (await getSetting('globalReadOnly')) !== 'true'
+  );
 }

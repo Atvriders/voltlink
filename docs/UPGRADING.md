@@ -14,6 +14,7 @@ docker compose -f compose.production.yml up -d
 
   ```bash
   VOLTLINK_IMAGE_TAG=<previous-tag> docker compose -f compose.production.yml up -d
+  ```
 
 ## Rename to voltlink (technical identifiers)
 
@@ -35,6 +36,7 @@ VoltLink 1.1.0 (unreleased) renames every technical identifier to `voltlink`
 
   Roll forward-only schema migrations may reject older images — check
   `CHANGELOG.md` for migration notes before downgrading.
+  ```
 
 ## Development compose
 

@@ -33,12 +33,24 @@ export class CredentialError extends Error {
   }
 }
 
-export async function saveCredentials(providerAccountId: string, payload: StoredCredential): Promise<void> {
+export async function saveCredentials(
+  providerAccountId: string,
+  payload: StoredCredential,
+): Promise<void> {
   const sealed = sealJson(payload);
   await prisma.providerCredential.upsert({
     where: { providerAccountId },
-    update: { keyVersion: sealed.keyVersion, algorithm: sealed.algorithm, ciphertext: sealed.ciphertext },
-    create: { providerAccountId, keyVersion: sealed.keyVersion, algorithm: sealed.algorithm, ciphertext: sealed.ciphertext },
+    update: {
+      keyVersion: sealed.keyVersion,
+      algorithm: sealed.algorithm,
+      ciphertext: sealed.ciphertext,
+    },
+    create: {
+      providerAccountId,
+      keyVersion: sealed.keyVersion,
+      algorithm: sealed.algorithm,
+      ciphertext: sealed.ciphertext,
+    },
   });
 }
 
@@ -92,7 +104,12 @@ export function getProvider(providerId: string): VehicleProvider {
   return p;
 }
 
-export function listProviders(): { id: string; label: string; enabled: boolean; requiresCredentials: boolean }[] {
+export function listProviders(): {
+  id: string;
+  label: string;
+  enabled: boolean;
+  requiresCredentials: boolean;
+}[] {
   return [
     { id: 'tesla', label: 'Tesla (official API)', enabled: true, requiresCredentials: true },
     { id: 'tessie', label: 'Tessie API (optional)', enabled: true, requiresCredentials: true },
@@ -101,11 +118,28 @@ export function listProviders(): { id: string; label: string; enabled: boolean; 
   ];
 }
 
-export async function connectDemoAccount(organizationId: string, connectedById: string): Promise<{ accountId: string; vehiclesImported: number }> {
-  const existing = await prisma.providerAccount.findFirst({ where: { organizationId, provider: 'demo' } });
-  if (existing) return { accountId: existing.id, vehiclesImported: await prisma.vehicle.count({ where: { providerAccountId: existing.id } }) };
+export async function connectDemoAccount(
+  organizationId: string,
+  connectedById: string,
+): Promise<{ accountId: string; vehiclesImported: number }> {
+  const existing = await prisma.providerAccount.findFirst({
+    where: { organizationId, provider: 'demo' },
+  });
+  if (existing)
+    return {
+      accountId: existing.id,
+      vehiclesImported: await prisma.vehicle.count({ where: { providerAccountId: existing.id } }),
+    };
   const account = await prisma.providerAccount.create({
-    data: { organizationId, connectedById, provider: 'demo', label: 'Demo Fleet', status: 'connected', demo: true, scopes: JSON.parse('["demo"]') },
+    data: {
+      organizationId,
+      connectedById,
+      provider: 'demo',
+      label: 'Demo Fleet',
+      status: 'connected',
+      demo: true,
+      scopes: JSON.parse('["demo"]'),
+    },
   });
   const ctx = await buildContext(account);
   const demoProvider = providers.demo;
@@ -133,6 +167,11 @@ export async function connectDemoAccount(organizationId: string, connectedById: 
     });
   }
   await prisma.user.update({ where: { id: connectedById }, data: { demoEnabled: true } });
-  await audit({ actorId: connectedById, action: 'provider.connect_demo', entityType: 'provider', entityId: account.id });
+  await audit({
+    actorId: connectedById,
+    action: 'provider.connect_demo',
+    entityType: 'provider',
+    entityId: account.id,
+  });
   return { accountId: account.id, vehiclesImported: descriptors.length };
 }

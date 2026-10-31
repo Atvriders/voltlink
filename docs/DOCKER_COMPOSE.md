@@ -37,13 +37,13 @@ Published tags: `latest`, `v1.0.0`, and the full commit SHA for every main push.
 
 One image, four roles, selected with `VL_ROLE`:
 
-| `VL_ROLE` | Process | Healthcheck |
-| --- | --- | --- |
-| `web` | API + SPA + SSE | HTTP `GET /healthz` |
-| `worker` | telemetry poll + command jobs | Redis ping (when `REDIS_URL` set) |
-| `scheduler` | retention + scheduled jobs | process liveness |
-| `status` | standalone public status site | HTTP `GET /healthz` |
-| `migrate` | one-shot: apply migrations | — |
+| `VL_ROLE`   | Process                       | Healthcheck                       |
+| ----------- | ----------------------------- | --------------------------------- |
+| `web`       | API + SPA + SSE               | HTTP `GET /healthz`               |
+| `worker`    | telemetry poll + command jobs | Redis ping (when `REDIS_URL` set) |
+| `scheduler` | retention + scheduled jobs    | process liveness                  |
+| `status`    | standalone public status site | HTTP `GET /healthz`               |
+| `migrate`   | one-shot: apply migrations    | —                                 |
 
 ## Scaling
 

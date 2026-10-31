@@ -99,10 +99,21 @@ function getTransporter(): ReturnType<typeof nodemailer.createTransport> | null 
   return transporter;
 }
 
-export async function sendMail(opts: { to: string; subject: string; text: string; html: string }): Promise<{ sent: boolean; detail: string }> {
+export async function sendMail(opts: {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+}): Promise<{ sent: boolean; detail: string }> {
   const t = getTransporter();
   if (t) {
-    await t.sendMail({ from: env.MAIL_FROM, to: opts.to, subject: opts.subject, text: opts.text, html: opts.html });
+    await t.sendMail({
+      from: env.MAIL_FROM,
+      to: opts.to,
+      subject: opts.subject,
+      text: opts.text,
+      html: opts.html,
+    });
     return { sent: true, detail: 'smtp' };
   }
   return { sent: false, detail: 'no-smtp' };
@@ -133,38 +144,60 @@ function echoableToken(token: string): void {
 
 export async function setupStatus(): Promise<{ needsSetup: boolean; registrationMode: string }> {
   const bootstrapped = await getSetting('instance.bootstrappedAt');
-  const mode = (await getSetting('instance.registrationMode')) || (bootstrapped ? 'invite' : 'setup');
+  const mode =
+    (await getSetting('instance.registrationMode')) || (bootstrapped ? 'invite' : 'setup');
   return { needsSetup: !bootstrapped, registrationMode: bootstrapped ? mode : 'setup' };
 }
-
 
 async function verifySetupToken(input: string): Promise<void> {
   const configured = process.env.VL_SETUP_TOKEN;
   if (configured) {
-    if (configured.length < 32) throw new AuthError('SETUP_TOKEN_REQUIRED', 'VL_SETUP_TOKEN must be at least 32 characters.', 500);
+    if (configured.length < 32)
+      throw new AuthError(
+        'SETUP_TOKEN_REQUIRED',
+        'VL_SETUP_TOKEN must be at least 32 characters.',
+        500,
+      );
     const a = Buffer.from(sha256hex(input));
     const b = Buffer.from(sha256hex(configured));
-    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) throw new AuthError('SETUP_TOKEN_INVALID', 'The setup token is incorrect.', 401);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b))
+      throw new AuthError('SETUP_TOKEN_INVALID', 'The setup token is incorrect.', 401);
     return;
   }
   const row = await prisma.appSetting.findUnique({ where: { key: 'instance.setupTokenHash' } });
-  if (!row) throw new AuthError('SETUP_TOKEN_REQUIRED', 'No setup token is available on this instance.', 500);
+  if (!row)
+    throw new AuthError(
+      'SETUP_TOKEN_REQUIRED',
+      'No setup token is available on this instance.',
+      500,
+    );
   const a = Buffer.from(sha256hex(input));
   const b = Buffer.from(row.value, 'hex');
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) throw new AuthError('SETUP_TOKEN_INVALID', 'The setup token is incorrect.', 401);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b))
+    throw new AuthError('SETUP_TOKEN_INVALID', 'The setup token is incorrect.', 401);
 }
 
-export async function bootstrapInstanceAdmin(input: { email: string; name: string; password: string; setupToken: string }): Promise<{ user: UserPublic }> {
+export async function bootstrapInstanceAdmin(input: {
+  email: string;
+  name: string;
+  password: string;
+  setupToken: string;
+}): Promise<{ user: UserPublic }> {
   const email = input.email.trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new AuthError('INVALID_EMAIL', 'Enter a valid email address.');
-  if (input.password.length < 10) throw new AuthError('WEAK_PASSWORD', 'Password must be at least 10 characters.');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    throw new AuthError('INVALID_EMAIL', 'Enter a valid email address.');
+  if (input.password.length < 10)
+    throw new AuthError('WEAK_PASSWORD', 'Password must be at least 10 characters.');
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) throw new AuthError('EMAIL_TAKEN', 'An account with this email already exists.', 409);
+  if (existing)
+    throw new AuthError('EMAIL_TAKEN', 'An account with this email already exists.', 409);
   await verifySetupToken(input.setupToken);
   const passwordHash = await hashPassword(input.password);
   try {
     const user = await prisma.$transaction(async (tx) => {
-      await tx.appSetting.create({ data: { key: 'instance.bootstrappedAt', value: new Date().toISOString() } });
+      await tx.appSetting.create({
+        data: { key: 'instance.bootstrappedAt', value: new Date().toISOString() },
+      });
       const created = await tx.user.create({
         data: {
           email,
@@ -176,7 +209,12 @@ export async function bootstrapInstanceAdmin(input: { email: string; name: strin
         },
       });
       const org = await tx.organization.create({
-        data: { kind: 'OPERATOR', name: 'VoltLink operators', createdById: created.id, memberships: { create: { userId: created.id, role: 'OWNER' } } },
+        data: {
+          kind: 'OPERATOR',
+          name: 'VoltLink operators',
+          createdById: created.id,
+          memberships: { create: { userId: created.id, role: 'OWNER' } },
+        },
       });
       await tx.appSetting.create({ data: { key: 'instance.operatorOrgId', value: org.id } });
       await tx.appSetting.upsert({
@@ -187,7 +225,12 @@ export async function bootstrapInstanceAdmin(input: { email: string; name: strin
       await tx.appSetting.deleteMany({ where: { key: 'instance.setupTokenHash' } });
       return created;
     });
-    await audit({ actorId: user.id, action: 'auth.bootstrap', entityType: 'user', entityId: user.id });
+    await audit({
+      actorId: user.id,
+      action: 'auth.bootstrap',
+      entityType: 'user',
+      entityId: user.id,
+    });
     return { user: publicUser(user) };
   } catch (e) {
     if ((e as { code?: string }).code === 'P2002') {
@@ -197,20 +240,36 @@ export async function bootstrapInstanceAdmin(input: { email: string; name: strin
   }
 }
 
-export type RegistrationResult = { kind: 'created'; user: UserPublic } | { kind: 'check_email' } | { kind: 'closed' };
+export type RegistrationResult =
+  { kind: 'created'; user: UserPublic } | { kind: 'check_email' } | { kind: 'closed' };
 
-export async function registerUser(input: { email: string; name: string; password: string; inviteToken?: string }): Promise<RegistrationResult> {
+export async function registerUser(input: {
+  email: string;
+  name: string;
+  password: string;
+  inviteToken?: string;
+}): Promise<RegistrationResult> {
   const email = input.email.trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new AuthError('INVALID_EMAIL', 'Enter a valid email address.');
-  if (input.password.length < 10) throw new AuthError('WEAK_PASSWORD', 'Password must be at least 10 characters.');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    throw new AuthError('INVALID_EMAIL', 'Enter a valid email address.');
+  if (input.password.length < 10)
+    throw new AuthError('WEAK_PASSWORD', 'Password must be at least 10 characters.');
   const { needsSetup, registrationMode } = await setupStatus();
-  if (needsSetup) throw new AuthError('SETUP_REQUIRED', 'This instance needs first-run setup.', 403);
+  if (needsSetup)
+    throw new AuthError('SETUP_REQUIRED', 'This instance needs first-run setup.', 403);
   const existing = await prisma.user.findUnique({ where: { email } });
   if (registrationMode === 'invite') {
     // The secret invitation token from the email link is required; the email
     // alone never grants entry (a bearer of the link is the invitee).
-    if (!input.inviteToken) throw new AuthError('INVITE_REQUIRED', 'An invitation token is required to register on this instance.', 403);
-    const invitation = await prisma.invitation.findUnique({ where: { tokenHash: sha256hex(input.inviteToken) } });
+    if (!input.inviteToken)
+      throw new AuthError(
+        'INVITE_REQUIRED',
+        'An invitation token is required to register on this instance.',
+        403,
+      );
+    const invitation = await prisma.invitation.findUnique({
+      where: { tokenHash: sha256hex(input.inviteToken) },
+    });
     if (
       !invitation ||
       invitation.kind !== 'membership' ||
@@ -219,18 +278,41 @@ export async function registerUser(input: { email: string; name: string; passwor
       invitation.acceptedAt ||
       invitation.expiresAt <= new Date()
     ) {
-      throw new AuthError('INVITE_REQUIRED', 'This invitation is invalid, expired or already used.', 403);
+      throw new AuthError(
+        'INVITE_REQUIRED',
+        'This invitation is invalid, expired or already used.',
+        403,
+      );
     }
-    if (existing) throw new AuthError('EMAIL_TAKEN', 'An account with this email already exists.', 409);
+    if (existing)
+      throw new AuthError('EMAIL_TAKEN', 'An account with this email already exists.', 409);
     const passwordHash = await hashPassword(input.password);
     const user = await prisma.user.create({
-      data: { email, name: input.name.trim() || (email.split('@')[0] ?? 'VoltLink user'), passwordHash, emailVerifiedAt: new Date(), webauthnUserId: randomToken(32) },
+      data: {
+        email,
+        name: input.name.trim() || (email.split('@')[0] ?? 'VoltLink user'),
+        passwordHash,
+        emailVerifiedAt: new Date(),
+        webauthnUserId: randomToken(32),
+      },
     });
     await prisma.$transaction([
       prisma.invitation.update({ where: { id: invitation.id }, data: { acceptedAt: new Date() } }),
-      prisma.membership.create({ data: { organizationId: invitation.organizationId, userId: user.id, role: invitation.role ?? 'VIEWER', invitedById: invitation.invitedById } }),
+      prisma.membership.create({
+        data: {
+          organizationId: invitation.organizationId,
+          userId: user.id,
+          role: invitation.role ?? 'VIEWER',
+          invitedById: invitation.invitedById,
+        },
+      }),
     ]);
-    await audit({ actorId: user.id, action: 'auth.register_invite', entityType: 'user', entityId: user.id });
+    await audit({
+      actorId: user.id,
+      action: 'auth.register_invite',
+      entityType: 'user',
+      entityId: user.id,
+    });
     return { kind: 'created', user: publicUser(user) };
   }
   if (registrationMode === 'closed') {
@@ -238,16 +320,37 @@ export async function registerUser(input: { email: string; name: string; passwor
   }
   // open mode: uniform 202 check_email answer for new and existing emails.
   if (!env.SMTP_URL) {
-    throw new AuthError('REGISTRATION_UNAVAILABLE', 'Open registration requires SMTP configuration.', 503);
+    throw new AuthError(
+      'REGISTRATION_UNAVAILABLE',
+      'Open registration requires SMTP configuration.',
+      503,
+    );
   }
   if (!existing) {
     const passwordHash = await hashPassword(input.password);
     const user = await prisma.user.create({
-      data: { email, name: input.name.trim() || (email.split('@')[0] ?? 'VoltLink user'), passwordHash, webauthnUserId: randomToken(32) },
+      data: {
+        email,
+        name: input.name.trim() || (email.split('@')[0] ?? 'VoltLink user'),
+        passwordHash,
+        webauthnUserId: randomToken(32),
+      },
     });
-    await prisma.organization.create({ data: { kind: 'PERSONAL', name: user.name, createdById: user.id, memberships: { create: { userId: user.id, role: 'OWNER' } } } });
+    await prisma.organization.create({
+      data: {
+        kind: 'PERSONAL',
+        name: user.name,
+        createdById: user.id,
+        memberships: { create: { userId: user.id, role: 'OWNER' } },
+      },
+    });
     await requestVerificationFor(user);
-    await audit({ actorId: user.id, action: 'auth.register', entityType: 'user', entityId: user.id });
+    await audit({
+      actorId: user.id,
+      action: 'auth.register',
+      entityType: 'user',
+      entityId: user.id,
+    });
   } else {
     await sendMail({
       to: email,
@@ -266,13 +369,21 @@ export async function registerUser(input: { email: string; name: string; passwor
 export async function createVerification(userId: string): Promise<{ token: string; link: string }> {
   const token = randomToken();
   await prisma.emailVerification.create({
-    data: { userId, tokenHash: tokenHash(token), expiresAt: new Date(Date.now() + 24 * 3600 * 1000) },
+    data: {
+      userId,
+      tokenHash: tokenHash(token),
+      expiresAt: new Date(Date.now() + 24 * 3600 * 1000),
+    },
   });
   const link = `${env.PUBLIC_URL}/verify-email?token=${encodeURIComponent(token)}`;
   return { token, link };
 }
 
-export async function requestVerificationFor(user: { id: string; email: string; name: string }): Promise<void> {
+export async function requestVerificationFor(user: {
+  id: string;
+  email: string;
+  name: string;
+}): Promise<void> {
   const { token, link } = await createVerification(user.id);
   await sendMail({
     to: user.email,
@@ -285,19 +396,30 @@ export async function requestVerificationFor(user: { id: string; email: string; 
 
 export async function verifyEmail(token: string): Promise<void> {
   const row = await prisma.emailVerification.findUnique({ where: { tokenHash: tokenHash(token) } });
-  if (!row || row.usedAt || row.expiresAt < new Date()) throw new AuthError('INVALID_TOKEN', 'This verification link is invalid or expired.');
+  if (!row || row.usedAt || row.expiresAt < new Date())
+    throw new AuthError('INVALID_TOKEN', 'This verification link is invalid or expired.');
   await prisma.$transaction([
     prisma.emailVerification.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
     prisma.user.update({ where: { id: row.userId }, data: { emailVerifiedAt: new Date() } }),
   ]);
-  await audit({ actorId: row.userId, action: 'auth.verify_email', entityType: 'user', entityId: row.userId });
+  await audit({
+    actorId: row.userId,
+    action: 'auth.verify_email',
+    entityType: 'user',
+    entityId: row.userId,
+  });
 }
 
 // ---------------------------------------------------------------------------
 // Sessions
 // ---------------------------------------------------------------------------
 
-export async function createSession(userId: string, ip?: string, userAgent?: string, label?: string): Promise<{ token: string; sessionId: string; expiresAt: Date }> {
+export async function createSession(
+  userId: string,
+  ip?: string,
+  userAgent?: string,
+  label?: string,
+): Promise<{ token: string; sessionId: string; expiresAt: Date }> {
   const sessionId = randomId();
   const token = signSessionJwt(userId, sessionId, env.JWT_EXPIRES_SEC);
   const session = await prisma.userSession.create({
@@ -314,7 +436,10 @@ export async function createSession(userId: string, ip?: string, userAgent?: str
   return { token, sessionId: session.id, expiresAt: session.expiresAt };
 }
 
-export async function setSessionCookie(res: { cookie: (name: string, value: string, opts: unknown) => void }, token: string): Promise<void> {
+export async function setSessionCookie(
+  res: { cookie: (name: string, value: string, opts: unknown) => void },
+  token: string,
+): Promise<void> {
   res.cookie(env.SESSION_COOKIE, token, {
     httpOnly: true,
     secure: new URL(env.PUBLIC_URL).protocol === 'https:',
@@ -324,7 +449,10 @@ export async function setSessionCookie(res: { cookie: (name: string, value: stri
   });
 }
 
-export async function listSessions(userId: string, currentSessionId?: string): Promise<SessionInfo[]> {
+export async function listSessions(
+  userId: string,
+  currentSessionId?: string,
+): Promise<SessionInfo[]> {
   const rows = await prisma.userSession.findMany({
     where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
     orderBy: { createdAt: 'desc' },
@@ -344,10 +472,18 @@ export async function revokeSession(userId: string, sessionId: string): Promise<
   const row = await prisma.userSession.findUnique({ where: { id: sessionId } });
   if (!row || row.userId !== userId) throw new AuthError('NOT_FOUND', 'Session not found.', 404);
   await prisma.userSession.update({ where: { id: sessionId }, data: { revokedAt: new Date() } });
-  await audit({ actorId: userId, action: 'auth.revoke_session', entityType: 'session', entityId: sessionId });
+  await audit({
+    actorId: userId,
+    action: 'auth.revoke_session',
+    entityType: 'session',
+    entityId: sessionId,
+  });
 }
 
-export async function revokeAllOtherSessions(userId: string, currentSessionId: string): Promise<void> {
+export async function revokeAllOtherSessions(
+  userId: string,
+  currentSessionId: string,
+): Promise<void> {
   await prisma.userSession.updateMany({
     where: { userId, revokedAt: null, id: { not: currentSessionId } },
     data: { revokedAt: new Date() },
@@ -356,7 +492,9 @@ export async function revokeAllOtherSessions(userId: string, currentSessionId: s
 }
 
 export async function touchSession(sessionId: string): Promise<void> {
-  await prisma.userSession.update({ where: { id: sessionId }, data: { lastSeenAt: new Date() } }).catch(() => undefined);
+  await prisma.userSession
+    .update({ where: { id: sessionId }, data: { lastSeenAt: new Date() } })
+    .catch(() => undefined);
 }
 
 // ---------------------------------------------------------------------------
@@ -370,7 +508,12 @@ function dummyHash(): Promise<string> {
   return dummyHashPromise;
 }
 
-export async function login(input: { email: string; password: string; ip?: string; userAgent?: string }): Promise<{
+export async function login(input: {
+  email: string;
+  password: string;
+  ip?: string;
+  userAgent?: string;
+}): Promise<{
   user?: UserPublic;
   mfaRequired: boolean;
   methods: string[];
@@ -392,7 +535,10 @@ export async function login(input: { email: string; password: string; ip?: strin
 }
 
 /** Complete the MFA step with a TOTP or recovery code. Returns the session. */
-export async function loginMfa(req: Request, input: { code?: string; recoveryCode?: string; ip?: string; userAgent?: string }): Promise<{ token: string; user: UserPublic }> {
+export async function loginMfa(
+  req: Request,
+  input: { code?: string; recoveryCode?: string; ip?: string; userAgent?: string },
+): Promise<{ token: string; user: UserPublic }> {
   const ceremony = await readCeremonyFromReq(req);
   const user = await prisma.user.findUniqueOrThrow({ where: { id: ceremony.userId! } });
   await assertNotThrottled(`user:${user.id}`);
@@ -401,16 +547,28 @@ export async function loginMfa(req: Request, input: { code?: string; recoveryCod
   else if (input.recoveryCode) ok = await consumeRecoveryCode(user.id, input.recoveryCode);
   if (!ok) {
     await recordFailure(`user:${user.id}`);
-    const attempts = await prisma.authChallenge.update({ where: { id: ceremony.id }, data: { attempts: { increment: 1 } } });
+    const attempts = await prisma.authChallenge.update({
+      where: { id: ceremony.id },
+      data: { attempts: { increment: 1 } },
+    });
     if (attempts.attempts >= 5) {
-      await prisma.authChallenge.update({ where: { id: ceremony.id }, data: { consumedAt: new Date() } });
+      await prisma.authChallenge.update({
+        where: { id: ceremony.id },
+        data: { consumedAt: new Date() },
+      });
     }
     throw new AuthError('MFA_FAILED', 'The code was not accepted.', 401);
   }
   await consumeCeremonyFrom(ceremony.id);
   await clearFailures(`user:${user.id}`);
   const { token } = await createSession(user.id, input.ip, input.userAgent);
-  await audit({ actorId: user.id, action: 'auth.login', entityType: 'user', entityId: user.id, ip: input.ip });
+  await audit({
+    actorId: user.id,
+    action: 'auth.login',
+    entityType: 'user',
+    entityId: user.id,
+    ip: input.ip,
+  });
   return { token, user: publicUser(user) };
 }
 
@@ -422,7 +580,13 @@ export async function requestPasswordReset(email: string): Promise<{ ok: true }>
   const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
   if (!user) return { ok: true }; // do not reveal account existence
   const token = randomToken();
-  await prisma.passwordReset.create({ data: { userId: user.id, tokenHash: tokenHash(token), expiresAt: new Date(Date.now() + 3600_000) } });
+  await prisma.passwordReset.create({
+    data: {
+      userId: user.id,
+      tokenHash: tokenHash(token),
+      expiresAt: new Date(Date.now() + 3600_000),
+    },
+  });
   const link = `${env.PUBLIC_URL}/reset-password?token=${encodeURIComponent(token)}`;
   await sendMail({
     to: user.email,
@@ -435,16 +599,29 @@ export async function requestPasswordReset(email: string): Promise<{ ok: true }>
 }
 
 export async function resetPassword(token: string, newPassword: string): Promise<void> {
-  if (newPassword.length < 10) throw new AuthError('WEAK_PASSWORD', 'Password must be at least 10 characters.');
+  if (newPassword.length < 10)
+    throw new AuthError('WEAK_PASSWORD', 'Password must be at least 10 characters.');
   const row = await prisma.passwordReset.findUnique({ where: { tokenHash: tokenHash(token) } });
-  if (!row || row.usedAt || row.expiresAt < new Date()) throw new AuthError('INVALID_TOKEN', 'This reset link is invalid or expired.');
+  if (!row || row.usedAt || row.expiresAt < new Date())
+    throw new AuthError('INVALID_TOKEN', 'This reset link is invalid or expired.');
   await prisma.$transaction([
     prisma.passwordReset.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
-    prisma.user.update({ where: { id: row.userId }, data: { passwordHash: await hashPassword(newPassword), lockedAt: null } }),
-    prisma.userSession.updateMany({ where: { userId: row.userId, revokedAt: null }, data: { revokedAt: new Date() } }),
+    prisma.user.update({
+      where: { id: row.userId },
+      data: { passwordHash: await hashPassword(newPassword), lockedAt: null },
+    }),
+    prisma.userSession.updateMany({
+      where: { userId: row.userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    }),
   ]);
   await clearFailures(`user:${row.userId}`);
-  await audit({ actorId: row.userId, action: 'auth.password_reset', entityType: 'user', entityId: row.userId });
+  await audit({
+    actorId: row.userId,
+    action: 'auth.password_reset',
+    entityType: 'user',
+    entityId: row.userId,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -453,7 +630,10 @@ export async function resetPassword(token: string, newPassword: string): Promise
 
 export async function verifyTotpForUser(userId: string, token: string): Promise<boolean> {
   if (!/^\d{6}$/.test(token)) return false;
-  const u = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { totpSecretSealed: true, totpLastStep: true } });
+  const u = await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { totpSecretSealed: true, totpLastStep: true },
+  });
   if (!u.totpSecretSealed) return false;
   let secret: string;
   try {
@@ -469,7 +649,10 @@ export async function verifyTotpForUser(userId: string, token: string): Promise<
   });
   if (!r.valid || !('timeStep' in r)) return false;
   const advanced = await prisma.user.updateMany({
-    where: { id: userId, OR: [{ totpLastStep: null }, { totpLastStep: { lt: BigInt(r.timeStep) } }] },
+    where: {
+      id: userId,
+      OR: [{ totpLastStep: null }, { totpLastStep: { lt: BigInt(r.timeStep) } }],
+    },
     data: { totpLastStep: BigInt(r.timeStep) },
   });
   return advanced.count === 1;
@@ -477,19 +660,34 @@ export async function verifyTotpForUser(userId: string, token: string): Promise<
 
 export async function totpSetup(userId: string): Promise<{ secret: string; otpauthUrl: string }> {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
-  if (user.totpEnabled) throw new AuthError('TOTP_ALREADY_ENABLED', 'TOTP is already enabled; disable it first to replace it.', 409);
+  if (user.totpEnabled)
+    throw new AuthError(
+      'TOTP_ALREADY_ENABLED',
+      'TOTP is already enabled; disable it first to replace it.',
+      409,
+    );
   const secret = generateSecret();
   await prisma.user.update({
     where: { id: userId },
-    data: { totpPendingSealed: seal(secret, `totp-pending:${userId}`).ciphertext, totpPendingExpiresAt: new Date(Date.now() + 600_000) },
+    data: {
+      totpPendingSealed: seal(secret, `totp-pending:${userId}`).ciphertext,
+      totpPendingExpiresAt: new Date(Date.now() + 600_000),
+    },
   });
   const otpauthUrl = generateURI({ issuer: env.TOTP_ISSUER, label: user.email, secret });
   return { secret, otpauthUrl };
 }
 
-export async function totpConfirm(userId: string, code: string): Promise<{ recoveryCodes: string[] }> {
+export async function totpConfirm(
+  userId: string,
+  code: string,
+): Promise<{ recoveryCodes: string[] }> {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
-  if (!user.totpPendingSealed || !user.totpPendingExpiresAt || user.totpPendingExpiresAt < new Date()) {
+  if (
+    !user.totpPendingSealed ||
+    !user.totpPendingExpiresAt ||
+    user.totpPendingExpiresAt < new Date()
+  ) {
     throw new AuthError('NO_TOTP', 'Start TOTP setup first.');
   }
   let secret: string;
@@ -499,7 +697,8 @@ export async function totpConfirm(userId: string, code: string): Promise<{ recov
     throw new AuthError('NO_TOTP', 'Start TOTP setup first.');
   }
   const r = await verify({ secret, token: code, epochTolerance: 30 });
-  if (!r.valid || !('timeStep' in r)) throw new AuthError('BAD_TOTP', 'Invalid authentication code.');
+  if (!r.valid || !('timeStep' in r))
+    throw new AuthError('BAD_TOTP', 'Invalid authentication code.');
   const recoveryCodes = generateRecoveryCodes();
   await prisma.$transaction([
     prisma.user.update({
@@ -518,7 +717,12 @@ export async function totpConfirm(userId: string, code: string): Promise<{ recov
       data: recoveryCodes.map((code) => ({ userId, codeHash: recoveryCodeHash(code) })),
     }),
   ]);
-  await audit({ actorId: userId, action: 'auth.enable_totp', entityType: 'user', entityId: userId });
+  await audit({
+    actorId: userId,
+    action: 'auth.enable_totp',
+    entityType: 'user',
+    entityId: userId,
+  });
   return { recoveryCodes };
 }
 
@@ -526,9 +730,17 @@ export async function totpDisable(userId: string): Promise<void> {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
   if (!user.totpEnabled) throw new AuthError('NO_TOTP', 'TOTP is not enabled.', 400);
   const passkeys = await prisma.passkeyCredential.count({ where: { userId } });
-  await prisma.user.update({ where: { id: userId }, data: { totpEnabled: false, totpSecretSealed: null, totpLastStep: null, totpEnabledAt: null } });
+  await prisma.user.update({
+    where: { id: userId },
+    data: { totpEnabled: false, totpSecretSealed: null, totpLastStep: null, totpEnabledAt: null },
+  });
   if (passkeys === 0) await prisma.recoveryCode.deleteMany({ where: { userId } });
-  await audit({ actorId: userId, action: 'auth.disable_totp', entityType: 'user', entityId: userId });
+  await audit({
+    actorId: userId,
+    action: 'auth.disable_totp',
+    entityType: 'user',
+    entityId: userId,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -559,17 +771,29 @@ export function recoveryCodeHash(code: string): string {
 
 export async function consumeRecoveryCode(userId: string, code: string): Promise<boolean> {
   const hash = recoveryCodeHash(code);
-  const consumed = await prisma.recoveryCode.updateMany({ where: { userId, codeHash: hash, usedAt: null }, data: { usedAt: new Date() } });
+  const consumed = await prisma.recoveryCode.updateMany({
+    where: { userId, codeHash: hash, usedAt: null },
+    data: { usedAt: new Date() },
+  });
   return consumed.count === 1;
 }
 
-export async function regenerateRecoveryCodes(userId: string): Promise<{ recoveryCodes: string[] }> {
+export async function regenerateRecoveryCodes(
+  userId: string,
+): Promise<{ recoveryCodes: string[] }> {
   const codes = generateRecoveryCodes();
   await prisma.$transaction([
     prisma.recoveryCode.deleteMany({ where: { userId } }),
-    prisma.recoveryCode.createMany({ data: codes.map((code) => ({ userId, codeHash: recoveryCodeHash(code) })) }),
+    prisma.recoveryCode.createMany({
+      data: codes.map((code) => ({ userId, codeHash: recoveryCodeHash(code) })),
+    }),
   ]);
-  await audit({ actorId: userId, action: 'auth.regenerate_recovery_codes', entityType: 'user', entityId: userId });
+  await audit({
+    actorId: userId,
+    action: 'auth.regenerate_recovery_codes',
+    entityType: 'user',
+    entityId: userId,
+  });
   return { recoveryCodes: codes };
 }
 
@@ -595,13 +819,20 @@ export async function passkeyRegistrationOptions(userId: string) {
     userDisplayName: user.name,
     userID: isoBase64URL.toBuffer(user.webauthnUserId!),
     attestationType: 'none',
-    excludeCredentials: creds.map((c) => ({ id: c.credentialId, transports: (c.transports as string[]) ?? [] })),
+    excludeCredentials: creds.map((c) => ({
+      id: c.credentialId,
+      transports: (c.transports as string[]) ?? [],
+    })),
     authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
   });
   return options;
 }
 
-export async function verifyPasskeyRegistration(req: Request, userId: string, body: { name?: string; response: RegistrationResponseJSON }): Promise<void> {
+export async function verifyPasskeyRegistration(
+  req: Request,
+  userId: string,
+  body: { name?: string; response: RegistrationResponseJSON },
+): Promise<void> {
   const { rpID, origin } = webauthnRelyingParty();
   const ch = await consumeCeremony(req, 'passkey_register');
   let verification: Awaited<ReturnType<typeof verifyRegistrationResponse>>;
@@ -616,7 +847,8 @@ export async function verifyPasskeyRegistration(req: Request, userId: string, bo
   } catch {
     throw new AuthError('PASSKEY_FAILED', 'Passkey registration failed.', 400);
   }
-  if (!verification.verified || !verification.registrationInfo) throw new AuthError('PASSKEY_FAILED', 'Passkey registration failed.', 400);
+  if (!verification.verified || !verification.registrationInfo)
+    throw new AuthError('PASSKEY_FAILED', 'Passkey registration failed.', 400);
   const { credential } = verification.registrationInfo;
   await prisma.passkeyCredential.create({
     data: {
@@ -630,7 +862,12 @@ export async function verifyPasskeyRegistration(req: Request, userId: string, bo
       name: (body.name ?? 'Passkey').trim().slice(0, 60) || 'Passkey',
     },
   });
-  await audit({ actorId: userId, action: 'auth.add_passkey', entityType: 'user', entityId: userId });
+  await audit({
+    actorId: userId,
+    action: 'auth.add_passkey',
+    entityType: 'user',
+    entityId: userId,
+  });
 }
 
 export async function passkeyLoginOptions() {
@@ -641,7 +878,14 @@ export async function passkeyLoginOptions() {
 export async function passkeyStepUpOptions(userId: string) {
   const { rpID } = webauthnRelyingParty();
   const creds = await prisma.passkeyCredential.findMany({ where: { userId } });
-  return generateAuthenticationOptions({ rpID, userVerification: 'required', allowCredentials: creds.map((c) => ({ id: c.credentialId, transports: (c.transports as string[]) ?? [] })) });
+  return generateAuthenticationOptions({
+    rpID,
+    userVerification: 'required',
+    allowCredentials: creds.map((c) => ({
+      id: c.credentialId,
+      transports: (c.transports as string[]) ?? [],
+    })),
+  });
 }
 
 async function verifyPasskeyAssertion(
@@ -659,7 +903,11 @@ async function verifyPasskeyAssertion(
   if (purpose === 'stepup_passkey') {
     if (!actor || cred.userId !== actor.userId) {
       await recordFailure(`user:${actor?.userId ?? cred.userId}`);
-      throw new AccessDenied('PASSKEY_MISMATCH', 'This passkey does not belong to your account.', 403);
+      throw new AccessDenied(
+        'PASSKEY_MISMATCH',
+        'This passkey does not belong to your account.',
+        403,
+      );
     }
   }
   await assertNotThrottled(`user:${cred.userId}`);
@@ -668,7 +916,11 @@ async function verifyPasskeyAssertion(
   if (purpose === 'stepup_passkey') {
     if (ch.userId !== actor!.userId || ch.sessionId !== actor!.sessionId) {
       await recordFailure(`user:${actor!.userId}`);
-      throw new AccessDenied('PASSKEY_MISMATCH', 'This step-up session does not belong to your account.', 403);
+      throw new AccessDenied(
+        'PASSKEY_MISMATCH',
+        'This step-up session does not belong to your account.',
+        403,
+      );
     }
   }
   try {
@@ -685,14 +937,23 @@ async function verifyPasskeyAssertion(
         transports: (cred.transports as string[]) ?? [],
       },
     });
-    return { verified: v.verified, newCounter: v.authenticationInfo.newCounter, backedUp: v.authenticationInfo.credentialBackedUp };
+    return {
+      verified: v.verified,
+      newCounter: v.authenticationInfo.newCounter,
+      backedUp: v.authenticationInfo.credentialBackedUp,
+    };
   } catch {
     await recordFailure(`user:${cred.userId}`);
     throw new AuthError('PASSKEY_FAILED', 'Passkey sign-in failed.', 401);
   }
 }
 
-export async function passkeyLogin(req: Request, body: { response: AuthenticationResponseJSON }, ip?: string, userAgent?: string) {
+export async function passkeyLogin(
+  req: Request,
+  body: { response: AuthenticationResponseJSON },
+  ip?: string,
+  userAgent?: string,
+) {
   const credentialId = body.response?.id;
   if (!credentialId) throw new AuthError('PASSKEY_FAILED', 'Passkey sign-in failed.', 401);
   const result = await verifyPasskeyAssertion(req, 'passkey_login', body, credentialId);
@@ -705,20 +966,40 @@ export async function passkeyLogin(req: Request, body: { response: Authenticatio
   await clearFailures(`user:${cred.userId}`);
   const { token } = await createSession(cred.userId, ip, userAgent);
   const user = await prisma.user.findUniqueOrThrow({ where: { id: cred.userId } });
-  await audit({ actorId: cred.userId, action: 'auth.passkey_login', entityType: 'user', entityId: cred.userId, ip });
+  await audit({
+    actorId: cred.userId,
+    action: 'auth.passkey_login',
+    entityType: 'user',
+    entityId: cred.userId,
+    ip,
+  });
   return { token, user: publicUser(user) };
 }
 
 export async function listPasskeys(userId: string) {
-  const rows = await prisma.passkeyCredential.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
-  return rows.map((r) => ({ id: r.id, name: r.name, backedUp: r.backedUp, lastUsedAt: r.lastUsedAt?.toISOString() ?? null, createdAt: r.createdAt.toISOString() }));
+  const rows = await prisma.passkeyCredential.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'desc' },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    backedUp: r.backedUp,
+    lastUsedAt: r.lastUsedAt?.toISOString() ?? null,
+    createdAt: r.createdAt.toISOString(),
+  }));
 }
 
 export async function deletePasskey(userId: string, passkeyId: string): Promise<void> {
   const row = await prisma.passkeyCredential.findUnique({ where: { id: passkeyId } });
   if (!row || row.userId !== userId) throw new AuthError('NOT_FOUND', 'Passkey not found.', 404);
   await prisma.passkeyCredential.delete({ where: { id: passkeyId } });
-  await audit({ actorId: userId, action: 'auth.remove_passkey', entityType: 'user', entityId: userId });
+  await audit({
+    actorId: userId,
+    action: 'auth.remove_passkey',
+    entityType: 'user',
+    entityId: userId,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -728,7 +1009,12 @@ export async function deletePasskey(userId: string, passkeyId: string): Promise<
 export async function stepUp(
   actor: { kind: 'session'; userId: string; sessionId: string },
   req: Request,
-  input: { method: 'password' | 'totp' | 'recovery_code' | 'passkey'; password?: string; code?: string; response?: AuthenticationResponseJSON },
+  input: {
+    method: 'password' | 'totp' | 'recovery_code' | 'passkey';
+    password?: string;
+    code?: string;
+    response?: AuthenticationResponseJSON;
+  },
 ): Promise<{ stepUpUntil: string }> {
   await assertNotThrottled(`user:${actor.userId}`);
   let ok = false;
@@ -744,19 +1030,38 @@ export async function stepUp(
     const credentialId = input.response?.id;
     if (!credentialId) ok = false;
     else {
-      const result = await verifyPasskeyAssertion(req, 'stepup_passkey', { response: input.response! }, credentialId, actor);
+      const result = await verifyPasskeyAssertion(
+        req,
+        'stepup_passkey',
+        { response: input.response! },
+        credentialId,
+        actor,
+      );
       ok = result.verified;
     }
   }
   if (!ok) {
     await recordFailure(`user:${actor.userId}`);
-    await audit({ actorId: actor.userId, action: 'auth.step_up_failed', entityType: 'session', entityId: actor.sessionId });
+    await audit({
+      actorId: actor.userId,
+      action: 'auth.step_up_failed',
+      entityType: 'session',
+      entityId: actor.sessionId,
+    });
     throw new AuthError('STEP_UP_FAILED', 'Confirmation failed.', 401);
   }
   await clearFailures(`user:${actor.userId}`);
   const until = new Date(Date.now() + env.STEPUP_WINDOW_SEC * 1000);
-  await prisma.userSession.update({ where: { id: actor.sessionId }, data: { stepUpAt: new Date(), stepUpMethod: method } });
-  await audit({ actorId: actor.userId, action: 'auth.step_up', entityType: 'session', entityId: actor.sessionId });
+  await prisma.userSession.update({
+    where: { id: actor.sessionId },
+    data: { stepUpAt: new Date(), stepUpMethod: method },
+  });
+  await audit({
+    actorId: actor.userId,
+    action: 'auth.step_up',
+    entityType: 'session',
+    entityId: actor.sessionId,
+  });
   void method;
   return { stepUpUntil: until.toISOString() };
 }
@@ -767,10 +1072,18 @@ export async function stepUp(
 
 export async function setRegistrationMode(mode: 'invite' | 'open' | 'closed'): Promise<void> {
   if (mode === 'open' && !env.SMTP_URL) {
-    throw new AuthError('SMTP_REQUIRED', 'Open registration requires an SMTP server (SMTP_URL).', 400);
+    throw new AuthError(
+      'SMTP_REQUIRED',
+      'Open registration requires an SMTP server (SMTP_URL).',
+      400,
+    );
   }
   await setSetting('instance.registrationMode', mode);
-  await audit({ action: `admin.registration_mode_${mode}`, entityType: 'instance', entityId: 'registrationMode' });
+  await audit({
+    action: `admin.registration_mode_${mode}`,
+    entityType: 'instance',
+    entityId: 'registrationMode',
+  });
 }
 
 // ceremony helpers used by routes
@@ -782,9 +1095,15 @@ export async function createMfaCeremony(
   res: { cookie: (name: string, value: string, opts: unknown) => void },
   userId: string,
 ): Promise<void> {
-  await createCeremony(res as Parameters<typeof createCeremony>[0], { purpose: 'mfa_login', userId });
+  await createCeremony(res as Parameters<typeof createCeremony>[0], {
+    purpose: 'mfa_login',
+    userId,
+  });
 }
 
 export async function consumeCeremonyFrom(id: string): Promise<void> {
-  await prisma.authChallenge.updateMany({ where: { id, consumedAt: null }, data: { consumedAt: new Date() } });
+  await prisma.authChallenge.updateMany({
+    where: { id, consumedAt: null },
+    data: { consumedAt: new Date() },
+  });
 }

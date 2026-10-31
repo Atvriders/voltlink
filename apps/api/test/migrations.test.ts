@@ -146,7 +146,9 @@ describe('Migration A: telemetry schema and voltlink rename', () => {
     const pool = new Pool({ connectionString: dbUrl, max: 10 });
     try {
       const results = await Promise.all(
-        Array.from({ length: 10 }, () => pool.query(`SELECT voltlink_ensure_partition('2027-01-15T00:00:00Z')`)),
+        Array.from({ length: 10 }, () =>
+          pool.query(`SELECT voltlink_ensure_partition('2027-01-15T00:00:00Z')`),
+        ),
       );
       for (const r of results) expect(r).toBeDefined();
       const { rows } = await pool.query(
@@ -169,7 +171,11 @@ describe('Migration A: telemetry schema and voltlink rename', () => {
     // public.telemetry_reading table and no tenancy tables (see migration.test.ts
     // for the same pattern with the same legacy fixture).
     for (const name of fs.readdirSync(oldMigrations)) {
-      if (name.startsWith('20261030213636') || name.startsWith('20261030213700') || name.startsWith('20261030214947')) {
+      if (
+        name.startsWith('20261030213636') ||
+        name.startsWith('20261030213700') ||
+        name.startsWith('20261030214947')
+      ) {
         fs.rmSync(path.join(oldMigrations, name), { recursive: true, force: true });
       }
     }
@@ -192,7 +198,9 @@ describe('Migration A: telemetry schema and voltlink rename', () => {
       // soft-deleted owner is purged, leaving the two v1 rows intact.
       const after = await post.query(`SELECT count(*)::int AS n FROM telemetry.telemetry_reading`);
       expect(after.rows[0].n).toBe(2);
-      const v2 = await post.query(`SELECT count(*)::int AS n FROM telemetry.telemetry_reading WHERE vehicle_id = 'v2'`);
+      const v2 = await post.query(
+        `SELECT count(*)::int AS n FROM telemetry.telemetry_reading WHERE vehicle_id = 'v2'`,
+      );
       expect(v2.rows[0].n).toBe(0);
       const inPublic = await post.query(
         `SELECT to_regclass('public.telemetry_reading') IS NOT NULL AS still_public`,

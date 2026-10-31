@@ -1,12 +1,6 @@
 {
   "generator": "blender/scripts/generate_vehicle.py",
-  "classes": [
-    "compact_sedan",
-    "sport_sedan",
-    "compact_crossover",
-    "suv",
-    "pickup"
-  ],
+  "classes": ["compact_sedan", "sport_sedan", "compact_crossover", "suv", "pickup"],
   "assets": [
     {
       "class": "compact_crossover",

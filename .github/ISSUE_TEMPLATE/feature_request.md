@@ -1,7 +1,7 @@
 ---
 name: Feature request
 about: Suggest an idea for VoltLink
-title: "[feature] "
+title: '[feature] '
 labels: enhancement
 ---
 

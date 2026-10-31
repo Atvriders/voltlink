@@ -5,12 +5,12 @@ implements the same contract — state fetch, command dispatch, account linking 
 so the rest of the platform (telemetry, controls, automations, fleet) never
 knows which one is behind a vehicle.
 
-| Provider | What it is | Use it for |
-| --- | --- | --- |
-| **Tesla** | Official Tesla Fleet API (OAuth) | Real Tesla vehicles |
-| **Tessie** | Optional third-party Tesla data service | Vehicles that need the Tessie API instead |
-| **Demo** | Deterministic simulator with 5 fictional vehicles and 30 days of history | Evaluating every feature without a car |
-| **Mock** | Scriptable provider with per-command scripts | Tests and failure-path drills |
+| Provider   | What it is                                                               | Use it for                                |
+| ---------- | ------------------------------------------------------------------------ | ----------------------------------------- |
+| **Tesla**  | Official Tesla Fleet API (OAuth)                                         | Real Tesla vehicles                       |
+| **Tessie** | Optional third-party Tesla data service                                  | Vehicles that need the Tessie API instead |
+| **Demo**   | Deterministic simulator with 5 fictional vehicles and 30 days of history | Evaluating every feature without a car    |
+| **Mock**   | Scriptable provider with per-command scripts                             | Tests and failure-path drills             |
 
 ## Connecting
 

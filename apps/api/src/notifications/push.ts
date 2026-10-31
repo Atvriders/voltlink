@@ -9,7 +9,10 @@ export interface PushSubRow {
   keys: unknown;
 }
 
-export async function sendPush(sub: PushSubRow, message: { title: string; body: string; severity: string; event: string }): Promise<void> {
+export async function sendPush(
+  sub: PushSubRow,
+  message: { title: string; body: string; severity: string; event: string },
+): Promise<void> {
   if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) return; // push not configured
   webpush.setVapidDetails(env.VAPID_SUBJECT, env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
   const payload = JSON.stringify({

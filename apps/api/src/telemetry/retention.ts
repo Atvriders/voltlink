@@ -4,7 +4,12 @@
 import { prisma, query } from '../core/db';
 import { getSetting } from '../core/settings';
 
-export async function runRetention(): Promise<{ telemetryRows: number; routePoints: number; checks: number; detail: string }> {
+export async function runRetention(): Promise<{
+  telemetryRows: number;
+  routePoints: number;
+  checks: number;
+  detail: string;
+}> {
   const telemetryDays = Number((await getSetting('telemetryRetentionDays')) || '365');
   const locationDays = Number((await getSetting('locationRetentionDays')) || '90');
 
@@ -58,5 +63,10 @@ export async function runRetention(): Promise<{ telemetryRows: number; routePoin
       detail: `telemetry>${telemetryDays}d, locations>${locationDays}d, checks>90d`,
     },
   });
-  return { telemetryRows, routePoints: rp.count, checks: checks.count, detail: 'retention complete' };
+  return {
+    telemetryRows,
+    routePoints: rp.count,
+    checks: checks.count,
+    detail: 'retention complete',
+  };
 }

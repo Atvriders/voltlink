@@ -15,11 +15,15 @@ const readAll: RoutePolicy = {
 drivesRouter.get('/', readAll, async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const pageSize = Math.min(200, Math.max(1, Number(req.query.pageSize) || 20));
-  const vehicleId = typeof req.query.vehicleId === 'string' && req.query.vehicleId ? req.query.vehicleId : undefined;
+  const vehicleId =
+    typeof req.query.vehicleId === 'string' && req.query.vehicleId
+      ? req.query.vehicleId
+      : undefined;
   const search = typeof req.query.search === 'string' ? req.query.search : undefined;
   const from = typeof req.query.from === 'string' ? new Date(req.query.from) : undefined;
   const to = typeof req.query.to === 'string' ? new Date(req.query.to) : undefined;
-  const classification = typeof req.query.classification === 'string' ? req.query.classification : undefined;
+  const classification =
+    typeof req.query.classification === 'string' ? req.query.classification : undefined;
   const sort = String(req.query.sort ?? 'startAt');
   const order = req.query.order === 'asc' ? 'asc' : 'desc';
 
@@ -30,16 +34,35 @@ drivesRouter.get('/', readAll, async (req, res) => {
   }
   const where: Record<string, unknown> = {
     vehicleId: { in: ids },
-    ...(from || to ? { startAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}),
+    ...(from || to
+      ? { startAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+      : {}),
     ...(classification ? { classification } : {}),
   };
   if (search) {
-    where.OR = [{ startAddress: { contains: search, mode: 'insensitive' } }, { endAddress: { contains: search, mode: 'insensitive' } }, { driverName: { contains: search, mode: 'insensitive' } }];
+    where.OR = [
+      { startAddress: { contains: search, mode: 'insensitive' } },
+      { endAddress: { contains: search, mode: 'insensitive' } },
+      { driverName: { contains: search, mode: 'insensitive' } },
+    ];
   }
   const [rows, total] = await Promise.all([
     prisma.drive.findMany({
       where: where as never,
-      orderBy: { [sort in ['startAt', 'endAt', 'distanceKm', 'durationSec', 'energyKwh', 'efficiencyWhPerKm', 'maxSpeedKmh'] ? sort : 'startAt']: order },
+      orderBy: {
+        [sort in
+        [
+          'startAt',
+          'endAt',
+          'distanceKm',
+          'durationSec',
+          'energyKwh',
+          'efficiencyWhPerKm',
+          'maxSpeedKmh',
+        ]
+          ? sort
+          : 'startAt']: order,
+      },
       skip: (page - 1) * pageSize,
       take: pageSize,
       include: { vehicle: { select: { displayName: true } } },
@@ -50,7 +73,10 @@ drivesRouter.get('/', readAll, async (req, res) => {
 });
 
 drivesRouter.get('/totals', readAll, async (req, res) => {
-  const vehicleId = typeof req.query.vehicleId === 'string' && req.query.vehicleId ? req.query.vehicleId : undefined;
+  const vehicleId =
+    typeof req.query.vehicleId === 'string' && req.query.vehicleId
+      ? req.query.vehicleId
+      : undefined;
   const ids = vehicleId ? [vehicleId] : req.access!.vehicleIds!;
   if (ids.length === 0) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No vehicles accessible.' } });
@@ -70,38 +96,79 @@ drivesRouter.get('/totals', readAll, async (req, res) => {
   });
 });
 
-drivesRouter.get('/:id', { auth: 'any', apiScope: 'vehicles:read', target: { kind: 'resource', resource: 'drive', from: 'param:id', perm: 'vehicles.read' } }, async (req, res) => {
-  const drive = await prisma.drive.findUnique({ where: { id: String(req.params.id) }, include: { vehicle: { select: { displayName: true } } } });
-  if (!drive) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Drive not found.' } });
-    return;
-  }
-  const withRoute = typeof req.query.route === 'string' && req.query.route !== 'false';
-  let route;
-  if (withRoute) {
-    const points = await prisma.driveRoutePoint.findMany({ where: { driveId: drive.id }, orderBy: { seq: 'asc' } });
-    route = points.map((p) => ({ ts: p.ts.toISOString(), lat: p.lat, lon: p.lon, speedKmh: p.speedKmh, headingDeg: p.headingDeg ?? undefined, batteryPct: p.batteryPct ?? undefined }));
-  }
-  res.json({ data: { ...toDriveDto(drive), route } });
-});
+drivesRouter.get(
+  '/:id',
+  {
+    auth: 'any',
+    apiScope: 'vehicles:read',
+    target: { kind: 'resource', resource: 'drive', from: 'param:id', perm: 'vehicles.read' },
+  },
+  async (req, res) => {
+    const drive = await prisma.drive.findUnique({
+      where: { id: String(req.params.id) },
+      include: { vehicle: { select: { displayName: true } } },
+    });
+    if (!drive) {
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Drive not found.' } });
+      return;
+    }
+    const withRoute = typeof req.query.route === 'string' && req.query.route !== 'false';
+    let route;
+    if (withRoute) {
+      const points = await prisma.driveRoutePoint.findMany({
+        where: { driveId: drive.id },
+        orderBy: { seq: 'asc' },
+      });
+      route = points.map((p) => ({
+        ts: p.ts.toISOString(),
+        lat: p.lat,
+        lon: p.lon,
+        speedKmh: p.speedKmh,
+        headingDeg: p.headingDeg ?? undefined,
+        batteryPct: p.batteryPct ?? undefined,
+      }));
+    }
+    res.json({ data: { ...toDriveDto(drive), route } });
+  },
+);
 
-drivesRouter.patch('/:id', { auth: 'any', apiScope: 'history:write', target: { kind: 'resource', resource: 'drive', from: 'param:id', perm: 'vehicles.history_edit' } }, async (req, res) => {
-  const drive = await prisma.drive.findUnique({ where: { id: String(req.params.id) }, include: { vehicle: { select: { displayName: true } } } });
-  if (!drive) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Drive not found.' } });
-    return;
-  }
-  const body = (req.body ?? {}) as { classification?: string; tags?: string[]; notes?: string };
-  const data: Record<string, unknown> = {};
-  if (['business', 'personal', 'unknown'].includes(body.classification ?? '')) data.classification = body.classification;
-  if (Array.isArray(body.tags)) data.tags = JSON.parse(JSON.stringify(body.tags.slice(0, 20)));
-  if (typeof body.notes === 'string') data.notes = body.notes.slice(0, 2000);
-  await prisma.drive.update({ where: { id: drive.id }, data });
-  res.json({ data: { ok: true } });
-});
+drivesRouter.patch(
+  '/:id',
+  {
+    auth: 'any',
+    apiScope: 'history:write',
+    target: {
+      kind: 'resource',
+      resource: 'drive',
+      from: 'param:id',
+      perm: 'vehicles.history_edit',
+    },
+  },
+  async (req, res) => {
+    const drive = await prisma.drive.findUnique({
+      where: { id: String(req.params.id) },
+      include: { vehicle: { select: { displayName: true } } },
+    });
+    if (!drive) {
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Drive not found.' } });
+      return;
+    }
+    const body = (req.body ?? {}) as { classification?: string; tags?: string[]; notes?: string };
+    const data: Record<string, unknown> = {};
+    if (['business', 'personal', 'unknown'].includes(body.classification ?? ''))
+      data.classification = body.classification;
+    if (Array.isArray(body.tags)) data.tags = JSON.parse(JSON.stringify(body.tags.slice(0, 20)));
+    if (typeof body.notes === 'string') data.notes = body.notes.slice(0, 2000);
+    await prisma.drive.update({ where: { id: drive.id }, data });
+    res.json({ data: { ok: true } });
+  },
+);
 
 drivesRouter.get('/export/csv', readAll, async (req, res) => {
-  const vehicleId = typeof req.query.vehicleId === 'string' && req.query.vehicleId ? req.query.vehicleId : undefined;
+  const vehicleId =
+    typeof req.query.vehicleId === 'string' && req.query.vehicleId
+      ? req.query.vehicleId
+      : undefined;
   const ids = vehicleId ? [vehicleId] : req.access!.vehicleIds!;
   if (ids.length === 0) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No vehicles accessible.' } });
@@ -112,10 +179,41 @@ drivesRouter.get('/export/csv', readAll, async (req, res) => {
     orderBy: { startAt: 'desc' },
     include: { vehicle: { select: { displayName: true } } },
   });
-  const header = ['id', 'vehicle', 'startAt', 'endAt', 'startAddress', 'endAddress', 'distanceKm', 'durationSec', 'avgSpeedKmh', 'maxSpeedKmh', 'energyKwh', 'efficiencyWhPerKm', 'classification', 'tags', 'driverName'];
+  const header = [
+    'id',
+    'vehicle',
+    'startAt',
+    'endAt',
+    'startAddress',
+    'endAddress',
+    'distanceKm',
+    'durationSec',
+    'avgSpeedKmh',
+    'maxSpeedKmh',
+    'energyKwh',
+    'efficiencyWhPerKm',
+    'classification',
+    'tags',
+    'driverName',
+  ];
   const lines = rows.map((d) =>
-    [d.id, d.vehicle.displayName, d.startAt.toISOString(), d.endAt.toISOString(), d.startAddress ?? '', d.endAddress ?? '', d.distanceKm, d.durationSec, d.avgSpeedKmh, d.maxSpeedKmh, d.energyKwh, d.efficiencyWhPerKm, d.classification, (d.tags as string[]).join('|'), d.driverName ?? '']
-      .map((v) => String(v).replace(/"/g, '""')),
+    [
+      d.id,
+      d.vehicle.displayName,
+      d.startAt.toISOString(),
+      d.endAt.toISOString(),
+      d.startAddress ?? '',
+      d.endAddress ?? '',
+      d.distanceKm,
+      d.durationSec,
+      d.avgSpeedKmh,
+      d.maxSpeedKmh,
+      d.energyKwh,
+      d.efficiencyWhPerKm,
+      d.classification,
+      (d.tags as string[]).join('|'),
+      d.driverName ?? '',
+    ].map((v) => String(v).replace(/"/g, '""')),
   );
   const body = csv([header, ...lines]);
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -124,7 +222,10 @@ drivesRouter.get('/export/csv', readAll, async (req, res) => {
 });
 
 drivesRouter.get('/export/json', readAll, async (req, res) => {
-  const vehicleId = typeof req.query.vehicleId === 'string' && req.query.vehicleId ? req.query.vehicleId : undefined;
+  const vehicleId =
+    typeof req.query.vehicleId === 'string' && req.query.vehicleId
+      ? req.query.vehicleId
+      : undefined;
   const ids = vehicleId ? [vehicleId] : req.access!.vehicleIds!;
   if (ids.length === 0) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No vehicles accessible.' } });
@@ -141,11 +242,30 @@ drivesRouter.get('/export/json', readAll, async (req, res) => {
 });
 
 function toDriveDto(d: {
-  id: string; vehicleId: string; startAt: Date; endAt: Date; startLat: number | null; startLon: number | null;
-  startAddress: string | null; endLat: number | null; endLon: number | null; endAddress: string | null;
-  distanceKm: number; durationSec: number; avgSpeedKmh: number; maxSpeedKmh: number; energyKwh: number;
-  efficiencyWhPerKm: number; estCost: number | null; currency: string; elevationGainM: number | null;
-  avgOutsideTempC: number | null; driverName: string | null; tags: unknown; classification: string; notes: string | null;
+  id: string;
+  vehicleId: string;
+  startAt: Date;
+  endAt: Date;
+  startLat: number | null;
+  startLon: number | null;
+  startAddress: string | null;
+  endLat: number | null;
+  endLon: number | null;
+  endAddress: string | null;
+  distanceKm: number;
+  durationSec: number;
+  avgSpeedKmh: number;
+  maxSpeedKmh: number;
+  energyKwh: number;
+  efficiencyWhPerKm: number;
+  estCost: number | null;
+  currency: string;
+  elevationGainM: number | null;
+  avgOutsideTempC: number | null;
+  driverName: string | null;
+  tags: unknown;
+  classification: string;
+  notes: string | null;
   vehicle?: { displayName: string };
 }) {
   return {

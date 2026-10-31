@@ -38,7 +38,12 @@ describe('role → permission matrix (golden)', () => {
   });
 
   it('VIEWER has read permissions only', () => {
-    expect(ROLE_PERMISSIONS.VIEWER).toEqual(['org.read', 'fleet.read', 'automations.read', 'vehicles.read']);
+    expect(ROLE_PERMISSIONS.VIEWER).toEqual([
+      'org.read',
+      'fleet.read',
+      'automations.read',
+      'vehicles.read',
+    ]);
   });
 
   it('operator-only permissions exist only in operator roles', () => {
@@ -64,7 +69,16 @@ describe('role → permission matrix (golden)', () => {
 
   it('grants define the exact per-level permissions', () => {
     expect(GRANT_PERMISSIONS.VIEWER).toEqual(['vehicles.read']);
-    expect(GRANT_PERMISSIONS.DRIVER).toEqual(['vehicles.read', 'vehicles.command', 'vehicles.history_edit']);
-    expect(GRANT_PERMISSIONS.MANAGER).toEqual(['vehicles.read', 'vehicles.command', 'vehicles.history_edit', 'vehicles.manage']);
+    expect(GRANT_PERMISSIONS.DRIVER).toEqual([
+      'vehicles.read',
+      'vehicles.command',
+      'vehicles.history_edit',
+    ]);
+    expect(GRANT_PERMISSIONS.MANAGER).toEqual([
+      'vehicles.read',
+      'vehicles.command',
+      'vehicles.history_edit',
+      'vehicles.manage',
+    ]);
   });
 });

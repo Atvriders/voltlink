@@ -50,13 +50,21 @@ class Api {
   }
 
   async post(path: string, body?: unknown) {
-    const res = await fetch(`${base()}${path}`, { method: 'POST', headers: this.applyHeaders(), body: body === undefined ? undefined : JSON.stringify(body) });
+    const res = await fetch(`${base()}${path}`, {
+      method: 'POST',
+      headers: this.applyHeaders(),
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
     this.absorb(res);
     return res;
   }
 
   async patch(path: string, body?: unknown) {
-    const res = await fetch(`${base()}${path}`, { method: 'PATCH', headers: this.applyHeaders(body), body: body === undefined ? undefined : JSON.stringify(body) });
+    const res = await fetch(`${base()}${path}`, {
+      method: 'PATCH',
+      headers: this.applyHeaders(body),
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
     this.absorb(res);
     return res;
   }
@@ -76,7 +84,9 @@ class Api {
       body: '{}',
     });
     this.absorb(res);
-    const pair = [...this.jar.setCookie].reverse().find((c) => c.split(';')[0]!.startsWith('vl_csrf='));
+    const pair = [...this.jar.setCookie]
+      .reverse()
+      .find((c) => c.split(';')[0]!.startsWith('vl_csrf='));
     this.csrf = pair ? pair.split(';')[0]!.split('=')[1]! : '';
     expect(this.csrf.length).toBeGreaterThan(0);
   }
@@ -98,7 +108,12 @@ async function inviteRegister(api: Api, email: string, password: string) {
     },
   });
   const org = await prisma.organization.create({
-    data: { kind: 'PERSONAL', name: 'Host org', createdById: host.id, memberships: { create: { userId: host.id, role: 'OWNER' } } },
+    data: {
+      kind: 'PERSONAL',
+      name: 'Host org',
+      createdById: host.id,
+      memberships: { create: { userId: host.id, role: 'OWNER' } },
+    },
   });
   const token = `it-${crypto.randomBytes(24).toString('hex')}`;
   await prisma.invitation.create({
@@ -113,7 +128,16 @@ async function inviteRegister(api: Api, email: string, password: string) {
     },
   });
   orgs.push(org.id);
-  return { res: await api.post('/api/v1/auth/register', { name: 'IT Tester', email, password, inviteToken: token }), host, org };
+  return {
+    res: await api.post('/api/v1/auth/register', {
+      name: 'IT Tester',
+      email,
+      password,
+      inviteToken: token,
+    }),
+    host,
+    org,
+  };
 }
 
 const emails: string[] = [];
@@ -148,7 +172,9 @@ describe('auth', () => {
     expect(res.status).toBe(201);
     const me = await api.get('/api/v1/auth/me');
     expect(me.status).toBe(200);
-    const body = (await me.json()) as { data: { user: { email: string }; memberships: { role: string }[] } };
+    const body = (await me.json()) as {
+      data: { user: { email: string }; memberships: { role: string }[] };
+    };
     expect(body.data.user.email).toBe(email);
     expect(body.data.memberships[0]!.role).toBe('OWNER');
   });
@@ -160,7 +186,12 @@ describe('auth', () => {
     expect(first.status).toBe(201);
     // A second registration attempt (invite consumed) is denied without
     // revealing whether the email exists.
-    const second = await api.post('/api/v1/auth/register', { name: 'IT Tester', email, password: 'integration-pass-123', inviteToken: 'wrong' });
+    const second = await api.post('/api/v1/auth/register', {
+      name: 'IT Tester',
+      email,
+      password: 'integration-pass-123',
+      inviteToken: 'wrong',
+    });
     expect([403, 409]).toContain(second.status);
   });
 
@@ -169,12 +200,41 @@ describe('auth', () => {
     emails.push(email);
     const hostEmail = `whost-${Date.now()}@example.test`;
     emails.push(hostEmail);
-    const host = await prisma.user.create({ data: { email: hostEmail, name: 'Host', passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s', webauthnUserId: crypto.randomBytes(16).toString('hex'), emailVerifiedAt: new Date() } });
-    const org = await prisma.organization.create({ data: { kind: 'PERSONAL', name: 'Host org', createdById: host.id, memberships: { create: { userId: host.id, role: 'OWNER' } } } });
+    const host = await prisma.user.create({
+      data: {
+        email: hostEmail,
+        name: 'Host',
+        passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
+        webauthnUserId: crypto.randomBytes(16).toString('hex'),
+        emailVerifiedAt: new Date(),
+      },
+    });
+    const org = await prisma.organization.create({
+      data: {
+        kind: 'PERSONAL',
+        name: 'Host org',
+        createdById: host.id,
+        memberships: { create: { userId: host.id, role: 'OWNER' } },
+      },
+    });
     orgs.push(org.id);
     const token = `it-${crypto.randomBytes(24).toString('hex')}`;
-    await prisma.invitation.create({ data: { organizationId: org.id, kind: 'membership', email, tokenHash: (await import('../src/core/crypto')).sha256hex(token), invitedById: host.id, expiresAt: new Date(Date.now() + 3600_000) } });
-    const res = await api.post('/api/v1/auth/register', { name: 'IT Tester', email, password: 'short', inviteToken: token });
+    await prisma.invitation.create({
+      data: {
+        organizationId: org.id,
+        kind: 'membership',
+        email,
+        tokenHash: (await import('../src/core/crypto')).sha256hex(token),
+        invitedById: host.id,
+        expiresAt: new Date(Date.now() + 3600_000),
+      },
+    });
+    const res = await api.post('/api/v1/auth/register', {
+      name: 'IT Tester',
+      email,
+      password: 'short',
+      inviteToken: token,
+    });
     expect(res.status).toBe(400);
   });
 
@@ -182,7 +242,11 @@ describe('auth', () => {
     const bare = await fetch(`${base()}/api/v1/auth/register`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: 'X', email: `x-${Date.now()}@example.test`, password: 'password-123' }),
+      body: JSON.stringify({
+        name: 'X',
+        email: `x-${Date.now()}@example.test`,
+        password: 'password-123',
+      }),
     });
     // First attempt has no cookie → token issued; retry without header → mismatch.
     expect(bare.status).toBe(403);
@@ -223,10 +287,15 @@ describe('demo + vehicles + commands', () => {
   });
 
   it('issues honk_horn and observes the queued lifecycle', async () => {
-    const vehicles = (await (await api.get('/api/v1/vehicles')).json()) as { data: { id: string }[] };
+    const vehicles = (await (await api.get('/api/v1/vehicles')).json()) as {
+      data: { id: string }[];
+    };
     const vid = vehicles.data[0]!.id;
     // Possession step-up is required before issuing commands.
-    const su = await api.post('/api/v1/auth/step-up', { method: 'password', password: 'integration-pass-123' });
+    const su = await api.post('/api/v1/auth/step-up', {
+      method: 'password',
+      password: 'integration-pass-123',
+    });
     expect(su.status).toBeLessThan(300);
     const issue = await api.post('/api/v1/commands', { type: 'honk_horn', vehicleId: vid });
     expect(issue.status).toBeLessThan(300);
@@ -239,7 +308,10 @@ describe('demo + vehicles + commands', () => {
   });
 
   it('rejects commands for unknown vehicles', async () => {
-    const res = await api.post('/api/v1/commands', { type: 'honk_horn', vehicleId: 'does-not-exist' });
+    const res = await api.post('/api/v1/commands', {
+      type: 'honk_horn',
+      vehicleId: 'does-not-exist',
+    });
     expect(res.status).toBeGreaterThanOrEqual(400);
   });
 });

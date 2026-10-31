@@ -1,0 +1,11 @@
+# Trivy ignores (I-TRIVY, guide 04 §7.1): each entry needs a real expiry and an
+# owner note. Re-check on every image scan; entries past expiry are ignored by
+# the CI gate (scripts/check-trivy-ignore.ts refuses expired entries).
+vulnerabilities:
+  # Node.js base-image findings fixed upstream in a later node:24-bookworm-slim
+  # digest; re-check when Dependabot bumps NODE_IMAGE.
+  - id: CVE-2025-XXXX
+    paths:
+      - 'usr/local/bin/node'
+    expired_at: 2026-12-31T00:00:00Z
+    statement: 'Placeholder example — verify against the current trivy report and replace with real findings or remove.'

@@ -6,8 +6,28 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { prepare } from '../lib/push';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Activity, Bell, Battery, BatteryCharging, Boxes, Car, ChevronDown, CircleUserRound, Gauge, LayoutDashboard,
-  Map as MapIcon, Menu, Moon, Palette, PlugZap, Settings, ShieldCheck, Sun, Users, X, Zap, MonitorPlay,
+  Activity,
+  Bell,
+  Battery,
+  BatteryCharging,
+  Boxes,
+  Car,
+  ChevronDown,
+  CircleUserRound,
+  Gauge,
+  LayoutDashboard,
+  Map as MapIcon,
+  Menu,
+  Moon,
+  Palette,
+  PlugZap,
+  Settings,
+  ShieldCheck,
+  Sun,
+  Users,
+  X,
+  Zap,
+  MonitorPlay,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { setTheme, THEMES } from '../auth/AuthContext';
@@ -37,7 +57,9 @@ function Logo() {
       <img src="/logo.svg" alt="" className="h-8 w-8 rounded-lg" />
       <div className="leading-tight">
         <p className="text-base font-extrabold tracking-tight">VoltLink</p>
-        <p className="text-[10px] uppercase tracking-widest text-faint">Connected Vehicle Platform</p>
+        <p className="text-[10px] uppercase tracking-widest text-faint">
+          Connected Vehicle Platform
+        </p>
       </div>
     </div>
   );
@@ -54,7 +76,10 @@ function useVehicles() {
 function useUnread() {
   return useQuery({
     queryKey: ['notifications', 'unread'],
-    queryFn: () => api<{ unread: number }>('/api/v1/notifications?pageSize=1').then((d) => ({ unread: (d as { unread?: number }).unread ?? 0 })),
+    queryFn: () =>
+      api<{ unread: number }>('/api/v1/notifications?pageSize=1').then((d) => ({
+        unread: (d as { unread?: number }).unread ?? 0,
+      })),
     refetchInterval: 30000,
   });
 }
@@ -81,23 +106,47 @@ function VehicleSwitcher() {
   if (!vehicles || vehicles.length === 0) return null;
   return (
     <div className="relative" ref={ref}>
-      <button onClick={() => setOpen((o) => !o)} className="flex items-center gap-2 rounded-lg border border-line bg-panel2 px-2.5 py-1.5 text-sm hover:border-faint" aria-expanded={open} aria-haspopup="listbox">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2 rounded-lg border border-line bg-panel2 px-2.5 py-1.5 text-sm hover:border-faint"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+      >
         <Car size={15} className="text-accent" />
         <span className="hidden sm:inline">Fleet</span>
         <span className="text-faint">{vehicles.length}</span>
         <ChevronDown size={13} />
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-40 mt-1 w-56 rounded-xl border border-line bg-panel p-1 shadow-2xl" role="listbox">
+        <div
+          className="absolute right-0 top-full z-40 mt-1 w-56 rounded-xl border border-line bg-panel p-1 shadow-2xl"
+          role="listbox"
+        >
           {vehicles.map((v) => (
-            <button key={v.id} onClick={() => pick(v.id)} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-panel2">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: v.exteriorColor ?? '#8b9bb4' }} aria-hidden />
+            <button
+              key={v.id}
+              onClick={() => pick(v.id)}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-panel2"
+            >
+              <span
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ background: v.exteriorColor ?? '#8b9bb4' }}
+                aria-hidden
+              />
               <span className="flex-1 truncate">{v.displayName}</span>
-              {v.state?.chargingState === 'charging' && <Zap size={13} className="text-charging" aria-label="charging" />}
+              {v.state?.chargingState === 'charging' && (
+                <Zap size={13} className="text-charging" aria-label="charging" />
+              )}
             </button>
           ))}
           <div className="my-1 border-t border-line" />
-          <button onClick={() => { setOpen(false); navigate('/showroom'); }} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-subtle hover:bg-panel2">
+          <button
+            onClick={() => {
+              setOpen(false);
+              navigate('/showroom');
+            }}
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-subtle hover:bg-panel2"
+          >
             <Boxes size={14} /> Open showroom
           </button>
         </div>
@@ -118,13 +167,29 @@ function ThemeMenu() {
   }, []);
   return (
     <div className="relative" ref={ref}>
-      <button onClick={() => setOpen((o) => !o)} className="rounded-lg p-2 text-subtle hover:bg-panel2 hover:text-ink" aria-label="Theme" aria-expanded={open}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="rounded-lg p-2 text-subtle hover:bg-panel2 hover:text-ink"
+        aria-label="Theme"
+        aria-expanded={open}
+      >
         <Palette size={17} />
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-40 mt-1 w-52 rounded-xl border border-line bg-panel p-1 shadow-2xl" role="menu">
+        <div
+          className="absolute right-0 top-full z-40 mt-1 w-52 rounded-xl border border-line bg-panel p-1 shadow-2xl"
+          role="menu"
+        >
           {THEMES.map((t) => (
-            <button key={t.id} role="menuitem" onClick={() => { setTheme(t.id); setOpen(false); }} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-panel2">
+            <button
+              key={t.id}
+              role="menuitem"
+              onClick={() => {
+                setTheme(t.id);
+                setOpen(false);
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-panel2"
+            >
               {t.id.includes('light') ? <Sun size={14} /> : <Moon size={14} />}
               {t.name}
             </button>
@@ -182,14 +247,18 @@ export function Shell({ user, children }: { user: UserPublic | null; children: R
     setMobileOpen(false);
   }, [location.pathname]);
 
-  const active = NAV.find((n) => (n.to === '/' ? location.pathname === '/' : location.pathname.startsWith(n.to)));
+  const active = NAV.find((n) =>
+    n.to === '/' ? location.pathname === '/' : location.pathname.startsWith(n.to),
+  );
 
   return (
     <div className="flex min-h-screen">
       {/* Sidebar (desktop) */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-line bg-panel lg:flex">
         <div className="flex h-16 items-center border-b border-line px-4">
-          <Link to="/"><Logo /></Link>
+          <Link to="/">
+            <Logo />
+          </Link>
         </div>
         <nav className="flex-1 overflow-y-auto p-2" aria-label="Main navigation">
           {NAV.map((item) => (
@@ -198,18 +267,27 @@ export function Shell({ user, children }: { user: UserPublic | null; children: R
               to={item.to}
               className={({ isActive }) =>
                 `mb-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium ${
-                  isActive || (item.to === '/' && location.pathname === '/') ? 'bg-accent/15 text-accent' : 'text-subtle hover:bg-panel2 hover:text-ink'
+                  isActive || (item.to === '/' && location.pathname === '/')
+                    ? 'bg-accent/15 text-accent'
+                    : 'text-subtle hover:bg-panel2 hover:text-ink'
                 }`
               }
             >
               <item.icon size={16} />
               {item.label}
-              {item.to === '/notifications' && unread > 0 && <span className="ml-auto rounded-full bg-danger px-1.5 text-[10px] font-bold text-white">{unread}</span>}
+              {item.to === '/notifications' && unread > 0 && (
+                <span className="ml-auto rounded-full bg-danger px-1.5 text-[10px] font-bold text-white">
+                  {unread}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
         <div className="border-t border-line p-3">
-          <Link to="/presentation" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-subtle hover:bg-panel2 hover:text-ink">
+          <Link
+            to="/presentation"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-subtle hover:bg-panel2 hover:text-ink"
+          >
             <MonitorPlay size={16} /> Presentation mode
           </Link>
           <div className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-faint">
@@ -222,15 +300,29 @@ export function Shell({ user, children }: { user: UserPublic | null; children: R
       {/* Mobile drawer */}
       {mobileOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} aria-hidden />
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setMobileOpen(false)}
+            aria-hidden
+          />
           <aside className="absolute inset-y-0 left-0 flex w-72 flex-col border-r border-line bg-panel p-2">
             <div className="flex h-14 items-center justify-between border-b border-line px-2">
               <Logo />
-              <button onClick={() => setMobileOpen(false)} aria-label="Close menu" className="rounded-lg p-2 text-subtle hover:bg-panel2"><X size={18} /></button>
+              <button
+                onClick={() => setMobileOpen(false)}
+                aria-label="Close menu"
+                className="rounded-lg p-2 text-subtle hover:bg-panel2"
+              >
+                <X size={18} />
+              </button>
             </div>
             <nav className="flex-1 overflow-y-auto py-2">
               {NAV.map((item) => (
-                <NavLink key={item.to} to={item.to} className="mb-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium text-subtle hover:bg-panel2 hover:text-ink">
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className="mb-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium text-subtle hover:bg-panel2 hover:text-ink"
+                >
                   <item.icon size={16} /> {item.label}
                 </NavLink>
               ))}
@@ -243,20 +335,38 @@ export function Shell({ user, children }: { user: UserPublic | null; children: R
       <div className="flex min-w-0 flex-1 flex-col lg:pl-60">
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-line bg-canvas/90 px-3 backdrop-blur sm:px-4">
           <div className="flex items-center gap-2">
-            <button className="rounded-lg p-2 text-subtle hover:bg-panel2 lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu">
+            <button
+              className="rounded-lg p-2 text-subtle hover:bg-panel2 lg:hidden"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open menu"
+            >
               <Menu size={18} />
             </button>
-            <div className="lg:hidden"><Logo /></div>
-            <h1 className="hidden text-sm font-bold text-subtle lg:block">{active?.label ?? 'Overview'}</h1>
+            <div className="lg:hidden">
+              <Logo />
+            </div>
+            <h1 className="hidden text-sm font-bold text-subtle lg:block">
+              {active?.label ?? 'Overview'}
+            </h1>
           </div>
           <div className="flex items-center gap-1.5">
             <VehicleSwitcher />
-            <Link to="/notifications" className="relative rounded-lg p-2 text-subtle hover:bg-panel2 hover:text-ink" aria-label={`Notifications (${unread} unread)`}>
+            <Link
+              to="/notifications"
+              className="relative rounded-lg p-2 text-subtle hover:bg-panel2 hover:text-ink"
+              aria-label={`Notifications (${unread} unread)`}
+            >
               <Bell size={17} />
-              {unread > 0 && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-danger" />}
+              {unread > 0 && (
+                <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-danger" />
+              )}
             </Link>
             <ThemeMenu />
-            <Link to="/settings" className="rounded-lg p-2 text-subtle hover:bg-panel2 hover:text-ink" aria-label="Settings">
+            <Link
+              to="/settings"
+              className="rounded-lg p-2 text-subtle hover:bg-panel2 hover:text-ink"
+              aria-label="Settings"
+            >
               <Settings size={17} />
             </Link>
           </div>
@@ -265,9 +375,19 @@ export function Shell({ user, children }: { user: UserPublic | null; children: R
         <main className="mx-auto w-full max-w-7xl flex-1 p-3 sm:p-5">{children}</main>
 
         {/* Mobile bottom nav */}
-        <nav className="sticky bottom-0 z-20 flex justify-around border-t border-line bg-panel px-1 py-1.5 lg:hidden" aria-label="Mobile navigation">
+        <nav
+          className="sticky bottom-0 z-20 flex justify-around border-t border-line bg-panel px-1 py-1.5 lg:hidden"
+          aria-label="Mobile navigation"
+        >
           {NAV.slice(0, 5).map((item) => (
-            <NavLink key={item.to} to={item.to} className={({ isActive }) => `flex flex-col items-center gap-0.5 rounded-lg px-2 py-1 text-[10px] ${isActive ? 'text-accent' : 'text-faint'}`} aria-label={item.label}>
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                `flex flex-col items-center gap-0.5 rounded-lg px-2 py-1 text-[10px] ${isActive ? 'text-accent' : 'text-faint'}`
+              }
+              aria-label={item.label}
+            >
               <item.icon size={17} />
               {item.label}
             </NavLink>
@@ -288,5 +408,9 @@ export function useNow(intervalMs = 5000): number {
 }
 
 export function ChargingBadge() {
-  return <Badge tone="charging" pulse>Charging</Badge>;
+  return (
+    <Badge tone="charging" pulse>
+      Charging
+    </Badge>
+  );
 }

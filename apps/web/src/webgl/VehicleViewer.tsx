@@ -46,7 +46,20 @@ function findPart(obj: THREE.Object3D, name: string): THREE.Object3D | null {
   return null;
 }
 
-function VehicleModel({ url, state, preset, signal, onLoaded }: { url: string; vehicle: VehicleWithState; state: VehicleState | null; preset: GraphicsPreset; signal: { ok: boolean }; onLoaded?: () => void }) {
+function VehicleModel({
+  url,
+  state,
+  preset,
+  signal,
+  onLoaded,
+}: {
+  url: string;
+  vehicle: VehicleWithState;
+  state: VehicleState | null;
+  preset: GraphicsPreset;
+  signal: { ok: boolean };
+  onLoaded?: () => void;
+}) {
   const gltf = useLoader(GLTFLoader, url);
   const ref = useRef<THREE.Group>(null);
   const stateRef = useRef(state);
@@ -55,7 +68,19 @@ function VehicleModel({ url, state, preset, signal, onLoaded }: { url: string; v
   const parts = useMemo(() => {
     const scene = gltf.scene.clone();
     const map: Record<string, THREE.Object3D> = {};
-    for (const p of ['door_fl', 'door_fr', 'door_rl', 'door_rr', 'trunk', 'frunk', 'charge_port', 'charge_connector', 'headlights', 'taillights', 'interior']) {
+    for (const p of [
+      'door_fl',
+      'door_fr',
+      'door_rl',
+      'door_rr',
+      'trunk',
+      'frunk',
+      'charge_port',
+      'charge_connector',
+      'headlights',
+      'taillights',
+      'interior',
+    ]) {
       const found = findPart(scene, p);
       if (found) map[p] = found;
     }
@@ -102,24 +127,40 @@ function VehicleModel({ url, state, preset, signal, onLoaded }: { url: string; v
       const part = map[name];
       if (part && !part.userData.baseRot) part.userData.baseRot = part.rotation.y;
       if (part) {
-        const target = (part.userData.baseRot ?? 0) + (open ? (name.includes('r') ? -0.65 : 0.65) : 0);
+        const target =
+          (part.userData.baseRot ?? 0) + (open ? (name.includes('r') ? -0.65 : 0.65) : 0);
         part.rotation.y = THREE.MathUtils.damp(part.rotation.y, target, 6, 1 / 60);
       }
     }
     const trunk = map.trunk;
     if (trunk) {
       if (!trunk.userData.baseRotX) trunk.userData.baseRotX = trunk.rotation.x;
-      trunk.rotation.x = THREE.MathUtils.damp(trunk.rotation.x, (trunk.userData.baseRotX ?? 0) + (s.trunkOpen ? -0.85 : 0), 6, 1 / 60);
+      trunk.rotation.x = THREE.MathUtils.damp(
+        trunk.rotation.x,
+        (trunk.userData.baseRotX ?? 0) + (s.trunkOpen ? -0.85 : 0),
+        6,
+        1 / 60,
+      );
     }
     const frunk = map.frunk;
     if (frunk) {
       if (!frunk.userData.baseRotX) frunk.userData.baseRotX = frunk.rotation.x;
-      frunk.rotation.x = THREE.MathUtils.damp(frunk.rotation.x, (frunk.userData.baseRotX ?? 0) + (s.frunkOpen ? 0.8 : 0), 6, 1 / 60);
+      frunk.rotation.x = THREE.MathUtils.damp(
+        frunk.rotation.x,
+        (frunk.userData.baseRotX ?? 0) + (s.frunkOpen ? 0.8 : 0),
+        6,
+        1 / 60,
+      );
     }
     const port = map.charge_port;
     if (port) {
       if (!port.userData.baseRotY) port.userData.baseRotY = port.rotation.y;
-      port.rotation.y = THREE.MathUtils.damp(port.rotation.y, (port.userData.baseRotY ?? 0) + (s.chargePortOpen ? 0.7 : 0), 6, 1 / 60);
+      port.rotation.y = THREE.MathUtils.damp(
+        port.rotation.y,
+        (port.userData.baseRotY ?? 0) + (s.chargePortOpen ? 0.7 : 0),
+        6,
+        1 / 60,
+      );
     }
     // Headlights
     if (map.headlights) {
@@ -136,7 +177,7 @@ function VehicleModel({ url, state, preset, signal, onLoaded }: { url: string; v
       conn.visible = s.plugConnected || s.chargingState === 'charging';
       if (s.chargingState === 'charging') {
         const m = conn as THREE.Mesh;
-        const mat = (m.material as THREE.MeshStandardMaterial | THREE.MeshStandardMaterial[]);
+        const mat = m.material as THREE.MeshStandardMaterial | THREE.MeshStandardMaterial[];
         const mats = Array.isArray(mat) ? mat : [mat];
         const intensity = 0.5 + Math.sin(t * 3) * 0.5;
         for (const mm of mats) mm.emissive = new THREE.Color('#22d3ee').multiplyScalar(intensity);
@@ -169,7 +210,13 @@ function VehicleModel({ url, state, preset, signal, onLoaded }: { url: string; v
   return <primitive ref={ref} object={parts.scene} />;
 }
 
-function FallbackVehicle({ vehicle, state }: { vehicle: VehicleWithState; state: VehicleState | null }) {
+function FallbackVehicle({
+  vehicle,
+  state,
+}: {
+  vehicle: VehicleWithState;
+  state: VehicleState | null;
+}) {
   // Original procedural fallback silhouette (used only when the GLB is missing).
   const group = useRef<THREE.Group>(null);
   const stateRef = useRef(state);
@@ -182,7 +229,9 @@ function FallbackVehicle({ vehicle, state }: { vehicle: VehicleWithState; state:
     const body = g.children[0] as THREE.Mesh | undefined;
     if (body && (body.material as THREE.MeshStandardMaterial).emissive) {
       const charging = s?.chargingState === 'charging';
-      (body.material as THREE.MeshStandardMaterial).emissive = new THREE.Color('#22d3ee').multiplyScalar(charging ? 0.35 + Math.sin(clock.elapsedTime * 4) * 0.2 : 0.08);
+      (body.material as THREE.MeshStandardMaterial).emissive = new THREE.Color(
+        '#22d3ee',
+      ).multiplyScalar(charging ? 0.35 + Math.sin(clock.elapsedTime * 4) * 0.2 : 0.08);
     }
   });
   const color = vehicle.exteriorColor ?? '#8b9bb4';
@@ -269,11 +318,20 @@ export default function VehicleViewer({
   const useGlb = assetOk === true && !missing;
 
   return (
-    <div className={`relative overflow-hidden rounded-xl border border-line bg-canvas ${className}`} style={{ height }} data-testid="vehicle-viewer" data-asset={useGlb && glbLoaded ? 'glb' : 'fallback'}>
+    <div
+      className={`relative overflow-hidden rounded-xl border border-line bg-canvas ${className}`}
+      style={{ height }}
+      data-testid="vehicle-viewer"
+      data-asset={useGlb && glbLoaded ? 'glb' : 'fallback'}
+    >
       <Canvas
         dpr={cfg.pxRatio}
         shadows={cfg.shadows}
-        gl={{ antialias: p !== 'low', powerPreference: 'high-performance', failIfMajorPerformanceCaveat: false }}
+        gl={{
+          antialias: p !== 'low',
+          powerPreference: 'high-performance',
+          failIfMajorPerformanceCaveat: false,
+        }}
         onCreated={({ gl }) => {
           gl.domElement.addEventListener('webglcontextlost', (e) => {
             e.preventDefault();
@@ -282,24 +340,41 @@ export default function VehicleViewer({
         frameloop="always"
       >
         <CanvasBoundary height={height}>
-        <PerspectiveCamera makeDefault position={[5.2, 2.6, 6.2]} fov={40} />
-        <StudioLights />
-        <Suspense fallback={<FallbackVehicle vehicle={vehicle} state={state} />}>
-          {useGlb ? (
-            <ErrorBoundary3D onError={() => setMissing(true)}>
-              <VehicleModel url={asset} vehicle={vehicle} state={state} preset={p} signal={signal.current} onLoaded={() => setGlbLoaded(true)} />
-            </ErrorBoundary3D>
-          ) : (
-            <FallbackVehicle vehicle={vehicle} state={state} />
+          <PerspectiveCamera makeDefault position={[5.2, 2.6, 6.2]} fov={40} />
+          <StudioLights />
+          <Suspense fallback={<FallbackVehicle vehicle={vehicle} state={state} />}>
+            {useGlb ? (
+              <ErrorBoundary3D onError={() => setMissing(true)}>
+                <VehicleModel
+                  url={asset}
+                  vehicle={vehicle}
+                  state={state}
+                  preset={p}
+                  signal={signal.current}
+                  onLoaded={() => setGlbLoaded(true)}
+                />
+              </ErrorBoundary3D>
+            ) : (
+              <FallbackVehicle vehicle={vehicle} state={state} />
+            )}
+          </Suspense>
+          {interactive && (
+            <OrbitControls
+              makeDefault
+              enablePan={false}
+              minDistance={3.2}
+              maxDistance={16}
+              maxPolarAngle={Math.PI * 0.62}
+            />
           )}
-        </Suspense>
-        {interactive && <OrbitControls makeDefault enablePan={false} minDistance={3.2} maxDistance={16} maxPolarAngle={Math.PI * 0.62} />}
         </CanvasBoundary>
       </Canvas>
       {/* State overlays */}
       {state && (
         <div className="pointer-events-none absolute left-2 top-2 flex flex-wrap gap-1.5">
-          {state.chargingState === 'charging' && <StatePill tone="charging" label={`${Math.round(state.chargePowerKw ?? 0)} kW`} />}
+          {state.chargingState === 'charging' && (
+            <StatePill tone="charging" label={`${Math.round(state.chargePowerKw ?? 0)} kW`} />
+          )}
           {state.status === 'asleep' && <StatePill tone="info" label="Asleep" />}
           {state.status === 'offline' && <StatePill tone="danger" label="Offline" />}
           {state.locked === false && <StatePill tone="warn" label="Unlocked" />}
@@ -310,10 +385,15 @@ export default function VehicleViewer({
       )}
       {state?.freshness === 'stale' || state?.freshness === 'last_known' ? (
         <div className="pointer-events-none absolute right-2 top-2">
-          <StatePill tone={state.freshness === 'stale' ? 'warn' : 'danger'} label={state.freshness === 'stale' ? 'Stale data' : 'Last known'} />
+          <StatePill
+            tone={state.freshness === 'stale' ? 'warn' : 'danger'}
+            label={state.freshness === 'stale' ? 'Stale data' : 'Last known'}
+          />
         </div>
       ) : null}
-      <div className="pointer-events-none absolute bottom-2 left-2 text-[10px] text-faint">WebGL · {p}</div>
+      <div className="pointer-events-none absolute bottom-2 left-2 text-[10px] text-faint">
+        WebGL · {p}
+      </div>
     </div>
   );
 }
@@ -325,10 +405,17 @@ function StatePill({ tone, label }: { tone: string; label: string }) {
     danger: 'bg-danger/85 text-black',
     warn: 'bg-warn/85 text-black',
   };
-  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${tones[tone] ?? tones.info}`}>{label}</span>;
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${tones[tone] ?? tones.info}`}>
+      {label}
+    </span>
+  );
 }
 
-class CanvasBoundary extends Component<{ children: ReactNode; height: number }, { failed: boolean }> {
+class CanvasBoundary extends Component<
+  { children: ReactNode; height: number },
+  { failed: boolean }
+> {
   state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
@@ -336,14 +423,21 @@ class CanvasBoundary extends Component<{ children: ReactNode; height: number }, 
   render() {
     if (!this.state.failed) return this.props.children;
     return (
-      <div className="flex h-full w-full items-center justify-center" style={{ height: this.props.height }} data-testid="vehicle-viewer">
+      <div
+        className="flex h-full w-full items-center justify-center"
+        style={{ height: this.props.height }}
+        data-testid="vehicle-viewer"
+      >
         <p className="text-xs text-faint">3D preview unavailable on this device</p>
       </div>
     );
   }
 }
 
-class ErrorBoundary3D extends Component<{ children: ReactNode; onError: () => void }, { failed: boolean }> {
+class ErrorBoundary3D extends Component<
+  { children: ReactNode; onError: () => void },
+  { failed: boolean }
+> {
   state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };

@@ -17,7 +17,11 @@ export const LIMITS = {
   maxRequestBytes: 256 * 1024,
 };
 
-function guardedLookup(policy: OutboundPolicy, scheme: 'http:' | 'https:', port: number): net.LookupFunction {
+function guardedLookup(
+  policy: OutboundPolicy,
+  scheme: 'http:' | 'https:',
+  port: number,
+): net.LookupFunction {
   return (hostname, options, callback) => {
     dns.lookup(hostname, { ...options, all: true }, (err, addresses) => {
       if (err) return callback(err, '', 4);
@@ -26,7 +30,8 @@ function guardedLookup(policy: OutboundPolicy, scheme: 'http:' | 'https:', port:
       } catch (e) {
         return callback(e as NodeJS.ErrnoException, '', 4);
       }
-      if (options.all) return (callback as unknown as (e: null, a: dns.LookupAddress[]) => void)(null, addresses); // autoSelectFamily path
+      if (options.all)
+        return (callback as unknown as (e: null, a: dns.LookupAddress[]) => void)(null, addresses); // autoSelectFamily path
       const first = addresses[0]!;
       return callback(null, first.address, first.family);
     });
@@ -50,7 +55,11 @@ function agentFor(policy: OutboundPolicy, scheme: 'http:' | 'https:', port: numb
   return a;
 }
 
-export interface SafeResponse { status: number; headers: Record<string, string>; bodyText: string }
+export interface SafeResponse {
+  status: number;
+  headers: Record<string, string>;
+  bodyText: string;
+}
 
 export async function safeFetch(
   policy: OutboundPolicy,
@@ -58,17 +67,27 @@ export async function safeFetch(
   init: { method?: string; headers?: Record<string, string>; body?: string | Uint8Array } = {},
 ): Promise<SafeResponse> {
   const url = new URL(rawUrl);
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new OutboundBlockedError('scheme', url.protocol);
-  if (url.username || url.password) throw new OutboundBlockedError('host', 'credentials in URL are not allowed');
+  if (url.protocol !== 'https:' && url.protocol !== 'http:')
+    throw new OutboundBlockedError('scheme', url.protocol);
+  if (url.username || url.password)
+    throw new OutboundBlockedError('host', 'credentials in URL are not allowed');
   const scheme = url.protocol as 'http:' | 'https:';
   const port = url.port ? Number(url.port) : scheme === 'https:' ? 443 : 80;
   const host = url.hostname.replace(/^\[|\]$/g, '');
   if (net.isIP(host)) assertAddressAllowed(policy, host, port, scheme); // literals never reach lookup()
-  const size = init.body === undefined ? 0 : typeof init.body === 'string' ? Buffer.byteLength(init.body) : init.body.byteLength;
+  const size =
+    init.body === undefined
+      ? 0
+      : typeof init.body === 'string'
+        ? Buffer.byteLength(init.body)
+        : init.body.byteLength;
   if (size > LIMITS.maxRequestBytes) throw new Error(`request body too large (${size} bytes)`);
   const res = await fetch(url, {
     method: init.method ?? 'POST',
-    headers: { 'user-agent': 'VoltLink-Notifier/1 (+https://github.com/Atvriders/voltlink)', ...init.headers },
+    headers: {
+      'user-agent': 'VoltLink-Notifier/1 (+https://github.com/Atvriders/voltlink)',
+      ...init.headers,
+    },
     body: init.body,
     redirect: 'manual',
     dispatcher: agentFor(policy, scheme, port),
@@ -78,11 +97,18 @@ export async function safeFetch(
   return { status: res.status, headers: Object.fromEntries(res.headers), bodyText };
 }
 
-export function failureKindOf(err: unknown): 'blocked_by_policy' | 'timeout' | 'dns' | 'network' | 'response_too_large' {
+export function failureKindOf(
+  err: unknown,
+): 'blocked_by_policy' | 'timeout' | 'dns' | 'network' | 'response_too_large' {
   const e = err as { name?: string; code?: string; cause?: { code?: string } };
   const code = e.code ?? e.cause?.code;
-  if (err instanceof OutboundBlockedError || code === 'VL_OUTBOUND_BLOCKED') return 'blocked_by_policy';
-  if (e.name === 'TimeoutError' || ((code ?? '').startsWith('UND_ERR_') && (code ?? '').endsWith('TIMEOUT'))) return 'timeout';
+  if (err instanceof OutboundBlockedError || code === 'VL_OUTBOUND_BLOCKED')
+    return 'blocked_by_policy';
+  if (
+    e.name === 'TimeoutError' ||
+    ((code ?? '').startsWith('UND_ERR_') && (code ?? '').endsWith('TIMEOUT'))
+  )
+    return 'timeout';
   if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') return 'dns';
   if (code === 'UND_ERR_RES_EXCEEDED_MAX_SIZE') return 'response_too_large';
   return 'network';
@@ -92,8 +118,10 @@ export function failureKindOf(err: unknown): 'blocked_by_policy' | 'timeout' | '
  * authoritative because DNS can change. */
 export async function preflightUrl(policy: OutboundPolicy, rawUrl: string): Promise<void> {
   const url = new URL(rawUrl);
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new OutboundBlockedError('scheme', url.protocol);
-  if (url.username || url.password) throw new OutboundBlockedError('host', 'credentials in URL are not allowed');
+  if (url.protocol !== 'https:' && url.protocol !== 'http:')
+    throw new OutboundBlockedError('scheme', url.protocol);
+  if (url.username || url.password)
+    throw new OutboundBlockedError('host', 'credentials in URL are not allowed');
   const scheme = url.protocol as 'http:' | 'https:';
   const port = url.port ? Number(url.port) : scheme === 'https:' ? 443 : 80;
   const host = url.hostname.replace(/^\[|\]$/g, '');

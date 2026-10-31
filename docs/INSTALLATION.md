@@ -20,13 +20,13 @@ docker compose up -d
 
 The stack:
 
-| Service | Purpose | Port |
-| --- | --- | --- |
-| `postgres` | PostgreSQL 17 with the VoltLink database | internal |
-| `redis` | Job queue (telemetry polling, command lifecycle) | internal |
-| `web` | API + SPA + SSE realtime | 3000 → host `${WEB_PORT:-3110}` |
-| `worker` | Telemetry poll jobs + command dispatch/confirm | internal |
-| `scheduler` | Retention jobs, scheduled reports, status checks | internal |
+| Service     | Purpose                                          | Port                            |
+| ----------- | ------------------------------------------------ | ------------------------------- |
+| `postgres`  | PostgreSQL 17 with the VoltLink database         | internal                        |
+| `redis`     | Job queue (telemetry polling, command lifecycle) | internal                        |
+| `web`       | API + SPA + SSE realtime                         | 3000 → host `${WEB_PORT:-3110}` |
+| `worker`    | Telemetry poll jobs + command dispatch/confirm   | internal                        |
+| `scheduler` | Retention jobs, scheduled reports, status checks | internal                        |
 
 Each role runs `migrateLeader` at boot: exactly one instance at a time applies
 migrations under a PostgreSQL advisory lock.

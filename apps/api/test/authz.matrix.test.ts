@@ -21,17 +21,44 @@ let server: Server;
 let base: string;
 
 const ids = {
-  userOwnerA: '', userOwnerB: '', userOutsider: '', userViewerA: '', userDriverA: '', userAdminA: '', userInstanceAdmin: '',
-  orgA: '', orgB: '', orgOperator: '',
-  providerA: '', vehicleA1: '', vehicleA2: '', vehicleB1: '',
-  driveA1: '', chargeA1: '', maintenanceA1: '', automationA: '', placeA: '', passkeyA: '',
-  apiKeyReadA: '', apiKeyCommandsA: '', membershipDriverA: '',
+  userOwnerA: '',
+  userOwnerB: '',
+  userOutsider: '',
+  userViewerA: '',
+  userDriverA: '',
+  userAdminA: '',
+  userInstanceAdmin: '',
+  orgA: '',
+  orgB: '',
+  orgOperator: '',
+  providerA: '',
+  vehicleA1: '',
+  vehicleA2: '',
+  vehicleB1: '',
+  driveA1: '',
+  chargeA1: '',
+  maintenanceA1: '',
+  automationA: '',
+  placeA: '',
+  passkeyA: '',
+  apiKeyReadA: '',
+  apiKeyCommandsA: '',
+  membershipDriverA: '',
 };
 
 async function world() {
   const pw = '$argon2id$v=19$m=19456,t=2,p=1$s$s';
   const mkUser = (email: string, isInstanceAdmin = false) =>
-    prisma.user.create({ data: { email, name: email.split('@')[0]!, passwordHash: pw, webauthnUserId: randomId(), isInstanceAdmin, emailVerifiedAt: new Date() } });
+    prisma.user.create({
+      data: {
+        email,
+        name: email.split('@')[0]!,
+        passwordHash: pw,
+        webauthnUserId: randomId(),
+        isInstanceAdmin,
+        emailVerifiedAt: new Date(),
+      },
+    });
   const uOwnerA = await mkUser(`mx-ownerA-${Date.now()}@example.test`);
   const uOwnerB = await mkUser(`mx-ownerB-${Date.now()}@example.test`);
   const uOutsider = await mkUser(`mx-outsider-${Date.now()}@example.test`);
@@ -42,7 +69,8 @@ async function world() {
 
   const orgA = await prisma.organization.create({
     data: {
-      kind: 'TEAM', name: 'Org A',
+      kind: 'TEAM',
+      name: 'Org A',
       memberships: {
         create: [
           { userId: uOwnerA.id, role: 'OWNER' },
@@ -54,100 +82,363 @@ async function world() {
     },
   });
   const orgB = await prisma.organization.create({
-    data: { kind: 'TEAM', name: 'Org B', memberships: { create: [{ userId: uOwnerB.id, role: 'OWNER' }] } },
+    data: {
+      kind: 'TEAM',
+      name: 'Org B',
+      memberships: { create: [{ userId: uOwnerB.id, role: 'OWNER' }] },
+    },
   });
   const orgOperator = await prisma.organization.create({
     data: {
-      kind: 'OPERATOR', name: 'Operator',
+      kind: 'OPERATOR',
+      name: 'Operator',
       memberships: { create: [{ userId: uInstanceAdmin.id, role: 'OWNER' }] },
     },
   });
-  await prisma.appSetting.upsert({ where: { key: 'instance.operatorOrgId' }, update: { value: orgOperator.id }, create: { key: 'instance.operatorOrgId', value: orgOperator.id } });
-  await prisma.appSetting.upsert({ where: { key: 'instance.bootstrappedAt' }, update: { value: new Date().toISOString() }, create: { key: 'instance.bootstrappedAt', value: new Date().toISOString() } });
+  await prisma.appSetting.upsert({
+    where: { key: 'instance.operatorOrgId' },
+    update: { value: orgOperator.id },
+    create: { key: 'instance.operatorOrgId', value: orgOperator.id },
+  });
+  await prisma.appSetting.upsert({
+    where: { key: 'instance.bootstrappedAt' },
+    update: { value: new Date().toISOString() },
+    create: { key: 'instance.bootstrappedAt', value: new Date().toISOString() },
+  });
 
-  const providerA = await prisma.providerAccount.create({ data: { organizationId: orgA.id, provider: 'demo', label: 'demo', status: 'connected', demo: true } });
-  const providerB = await prisma.providerAccount.create({ data: { organizationId: orgB.id, provider: 'demo', label: 'demo', status: 'connected', demo: true } });
+  const providerA = await prisma.providerAccount.create({
+    data: {
+      organizationId: orgA.id,
+      provider: 'demo',
+      label: 'demo',
+      status: 'connected',
+      demo: true,
+    },
+  });
+  const providerB = await prisma.providerAccount.create({
+    data: {
+      organizationId: orgB.id,
+      provider: 'demo',
+      label: 'demo',
+      status: 'connected',
+      demo: true,
+    },
+  });
   const mkVehicle = (orgId: string, provId: string, name: string) =>
-    prisma.vehicle.create({ data: { organizationId: orgId, providerAccountId: provId, provider: 'demo', providerVehicleId: randomId(), displayName: name, demo: true } });
+    prisma.vehicle.create({
+      data: {
+        organizationId: orgId,
+        providerAccountId: provId,
+        provider: 'demo',
+        providerVehicleId: randomId(),
+        displayName: name,
+        demo: true,
+      },
+    });
   const vehicleA1 = await mkVehicle(orgA.id, providerA.id, 'A1');
   const vehicleA2 = await mkVehicle(orgA.id, providerA.id, 'A2');
   const vehicleB1 = await mkVehicle(orgB.id, providerB.id, 'B1');
-  await prisma.vehicleGrant.create({ data: { vehicleId: vehicleA1.id, userId: uDriverA.id, level: 'DRIVER', grantedById: uOwnerA.id } });
+  await prisma.vehicleGrant.create({
+    data: {
+      vehicleId: vehicleA1.id,
+      userId: uDriverA.id,
+      level: 'DRIVER',
+      grantedById: uOwnerA.id,
+    },
+  });
 
-  const mkDrive = (vId: string) => prisma.drive.create({ data: { vehicleId: vId, startAt: new Date(), endAt: new Date(Date.now() + 1000), distanceKm: 1, durationSec: 60, avgSpeedKmh: 60, maxSpeedKmh: 60, energyKwh: 0.2, efficiencyWhPerKm: 200 } });
+  const mkDrive = (vId: string) =>
+    prisma.drive.create({
+      data: {
+        vehicleId: vId,
+        startAt: new Date(),
+        endAt: new Date(Date.now() + 1000),
+        distanceKm: 1,
+        durationSec: 60,
+        avgSpeedKmh: 60,
+        maxSpeedKmh: 60,
+        energyKwh: 0.2,
+        efficiencyWhPerKm: 200,
+      },
+    });
   const driveA1 = await mkDrive(vehicleA1.id);
   const driveB1 = await mkDrive(vehicleB1.id);
-  const chargeA1 = await prisma.chargingSession.create({ data: { vehicleId: vehicleA1.id, startAt: new Date(), energyAddedKwh: 1 } });
-  const chargeB1 = await prisma.chargingSession.create({ data: { vehicleId: vehicleB1.id, startAt: new Date(), energyAddedKwh: 1 } });
-  const maintenanceA1 = await prisma.maintenanceRecord.create({ data: { vehicleId: vehicleA1.id, title: 'M', kind: 'service' } });
-  const maintenanceB1 = await prisma.maintenanceRecord.create({ data: { vehicleId: vehicleB1.id, title: 'M', kind: 'service' } });
-  const maintenanceA2 = await prisma.maintenanceRecord.create({ data: { vehicleId: vehicleA1.id, title: 'M2', kind: 'service' } });
-  const commandA1 = await prisma.vehicleCommand.create({ data: { organizationId: orgA.id, userId: uOwnerA.id, vehicleId: vehicleA1.id, vehicleName: 'A1', providerAccountId: providerA.id, actorKind: 'session', type: 'lock', params: {}, status: 'confirmed', risk: 'low', idempotencyKey: `mx:${randomId()}` } });
-  const commandB1 = await prisma.vehicleCommand.create({ data: { organizationId: orgB.id, userId: uOwnerB.id, vehicleId: vehicleB1.id, vehicleName: 'B1', providerAccountId: providerB.id, actorKind: 'session', type: 'lock', params: {}, status: 'confirmed', risk: 'low', idempotencyKey: `mx:${randomId()}` } });
-  const fleetGroupA = await prisma.fleetGroup.create({ data: { organizationId: orgA.id, name: 'G' } });
+  const chargeA1 = await prisma.chargingSession.create({
+    data: { vehicleId: vehicleA1.id, startAt: new Date(), energyAddedKwh: 1 },
+  });
+  const chargeB1 = await prisma.chargingSession.create({
+    data: { vehicleId: vehicleB1.id, startAt: new Date(), energyAddedKwh: 1 },
+  });
+  const maintenanceA1 = await prisma.maintenanceRecord.create({
+    data: { vehicleId: vehicleA1.id, title: 'M', kind: 'service' },
+  });
+  const maintenanceB1 = await prisma.maintenanceRecord.create({
+    data: { vehicleId: vehicleB1.id, title: 'M', kind: 'service' },
+  });
+  const maintenanceA2 = await prisma.maintenanceRecord.create({
+    data: { vehicleId: vehicleA1.id, title: 'M2', kind: 'service' },
+  });
+  const commandA1 = await prisma.vehicleCommand.create({
+    data: {
+      organizationId: orgA.id,
+      userId: uOwnerA.id,
+      vehicleId: vehicleA1.id,
+      vehicleName: 'A1',
+      providerAccountId: providerA.id,
+      actorKind: 'session',
+      type: 'lock',
+      params: {},
+      status: 'confirmed',
+      risk: 'low',
+      idempotencyKey: `mx:${randomId()}`,
+    },
+  });
+  const commandB1 = await prisma.vehicleCommand.create({
+    data: {
+      organizationId: orgB.id,
+      userId: uOwnerB.id,
+      vehicleId: vehicleB1.id,
+      vehicleName: 'B1',
+      providerAccountId: providerB.id,
+      actorKind: 'session',
+      type: 'lock',
+      params: {},
+      status: 'confirmed',
+      risk: 'low',
+      idempotencyKey: `mx:${randomId()}`,
+    },
+  });
+  const fleetGroupA = await prisma.fleetGroup.create({
+    data: { organizationId: orgA.id, name: 'G' },
+  });
   const driverA = await prisma.driver.create({ data: { organizationId: orgA.id, name: 'D' } });
-  const departmentA = await prisma.department.create({ data: { organizationId: orgA.id, name: 'Dept' } });
-  const costCenterA = await prisma.costCenter.create({ data: { organizationId: orgA.id, name: 'CC', code: 'CC-1' } });
-  const assignmentA = await prisma.vehicleAssignment.create({ data: { organizationId: orgA.id, vehicleId: vehicleA1.id, driverId: driverA.id } });
+  const departmentA = await prisma.department.create({
+    data: { organizationId: orgA.id, name: 'Dept' },
+  });
+  const costCenterA = await prisma.costCenter.create({
+    data: { organizationId: orgA.id, name: 'CC', code: 'CC-1' },
+  });
+  const assignmentA = await prisma.vehicleAssignment.create({
+    data: { organizationId: orgA.id, vehicleId: vehicleA1.id, driverId: driverA.id },
+  });
   const automationA = await prisma.automation.create({
-    data: { organizationId: orgA.id, userId: uOwnerA.id, name: 'Auto', triggerType: 'scheduled', triggerParams: {}, conditions: [], actions: [] },
+    data: {
+      organizationId: orgA.id,
+      userId: uOwnerA.id,
+      name: 'Auto',
+      triggerType: 'scheduled',
+      triggerParams: {},
+      conditions: [],
+      actions: [],
+    },
   });
   const automationB = await prisma.automation.create({
-    data: { organizationId: orgB.id, userId: uOwnerB.id, name: 'AutoB', triggerType: 'scheduled', triggerParams: {}, conditions: [], actions: [] },
+    data: {
+      organizationId: orgB.id,
+      userId: uOwnerB.id,
+      name: 'AutoB',
+      triggerType: 'scheduled',
+      triggerParams: {},
+      conditions: [],
+      actions: [],
+    },
   });
   await prisma.automation.create({
-    data: { organizationId: orgA.id, userId: uOwnerA.id, name: 'Webhook', triggerType: 'webhook', triggerParams: { token: WEBHOOK_TOKEN }, conditions: [], actions: [] },
+    data: {
+      organizationId: orgA.id,
+      userId: uOwnerA.id,
+      name: 'Webhook',
+      triggerType: 'webhook',
+      triggerParams: { token: WEBHOOK_TOKEN },
+      conditions: [],
+      actions: [],
+    },
   });
-  const placeA = await prisma.place.create({ data: { organizationId: orgA.id, createdById: uOwnerA.id, name: 'Place', lat: 1, lon: 1 } });
-  const placeB = await prisma.place.create({ data: { organizationId: orgB.id, createdById: uOwnerB.id, name: 'PlaceB', lat: 1, lon: 1 } });
-  const privacyZoneA = await prisma.privacyZone.create({ data: { organizationId: orgA.id, createdById: uOwnerA.id, name: 'Z', lat: 1, lon: 1, radiusM: 100 } });
-  const privacyZoneB = await prisma.privacyZone.create({ data: { organizationId: orgB.id, createdById: uOwnerB.id, name: 'ZB', lat: 1, lon: 1, radiusM: 100 } });
-  const geofenceA = await prisma.geofence.create({ data: { organizationId: orgA.id, createdById: uOwnerA.id, name: 'F', lat: 1, lon: 1, radiusM: 100, alertOn: 'both' } });
-  const geofenceB = await prisma.geofence.create({ data: { organizationId: orgB.id, createdById: uOwnerB.id, name: 'FB', lat: 1, lon: 1, radiusM: 100, alertOn: 'both' } });
-  const rateRuleA = await prisma.rateRule.create({ data: { organizationId: orgA.id, createdById: uOwnerA.id, name: 'R', type: 'flat', pricePerKwh: 0.2, currency: 'USD' } });
-  const rateRuleB = await prisma.rateRule.create({ data: { organizationId: orgB.id, createdById: uOwnerB.id, name: 'RB', type: 'flat', pricePerKwh: 0.2, currency: 'USD' } });
-  const fleetGroupB = await prisma.fleetGroup.create({ data: { organizationId: orgB.id, name: 'GB' } });
+  const placeA = await prisma.place.create({
+    data: { organizationId: orgA.id, createdById: uOwnerA.id, name: 'Place', lat: 1, lon: 1 },
+  });
+  const placeB = await prisma.place.create({
+    data: { organizationId: orgB.id, createdById: uOwnerB.id, name: 'PlaceB', lat: 1, lon: 1 },
+  });
+  const privacyZoneA = await prisma.privacyZone.create({
+    data: {
+      organizationId: orgA.id,
+      createdById: uOwnerA.id,
+      name: 'Z',
+      lat: 1,
+      lon: 1,
+      radiusM: 100,
+    },
+  });
+  const privacyZoneB = await prisma.privacyZone.create({
+    data: {
+      organizationId: orgB.id,
+      createdById: uOwnerB.id,
+      name: 'ZB',
+      lat: 1,
+      lon: 1,
+      radiusM: 100,
+    },
+  });
+  const geofenceA = await prisma.geofence.create({
+    data: {
+      organizationId: orgA.id,
+      createdById: uOwnerA.id,
+      name: 'F',
+      lat: 1,
+      lon: 1,
+      radiusM: 100,
+      alertOn: 'both',
+    },
+  });
+  const geofenceB = await prisma.geofence.create({
+    data: {
+      organizationId: orgB.id,
+      createdById: uOwnerB.id,
+      name: 'FB',
+      lat: 1,
+      lon: 1,
+      radiusM: 100,
+      alertOn: 'both',
+    },
+  });
+  const rateRuleA = await prisma.rateRule.create({
+    data: {
+      organizationId: orgA.id,
+      createdById: uOwnerA.id,
+      name: 'R',
+      type: 'flat',
+      pricePerKwh: 0.2,
+      currency: 'USD',
+    },
+  });
+  const rateRuleB = await prisma.rateRule.create({
+    data: {
+      organizationId: orgB.id,
+      createdById: uOwnerB.id,
+      name: 'RB',
+      type: 'flat',
+      pricePerKwh: 0.2,
+      currency: 'USD',
+    },
+  });
+  const fleetGroupB = await prisma.fleetGroup.create({
+    data: { organizationId: orgB.id, name: 'GB' },
+  });
   const passkeyA = await prisma.passkeyCredential.create({
-    data: { userId: uOwnerA.id, credentialId: randomId(), publicKey: Buffer.alloc(65).toString('base64'), counter: 0n, transports: [], name: 'Key' },
+    data: {
+      userId: uOwnerA.id,
+      credentialId: randomId(),
+      publicKey: Buffer.alloc(65).toString('base64'),
+      counter: 0n,
+      transports: [],
+      name: 'Key',
+    },
   });
 
   const keyTokenRead = `vlk_${'c'.repeat(12)}_${'d'.repeat(64)}`;
   const keyTokenCommands = `vlk_${'e'.repeat(12)}_${'f'.repeat(64)}`;
   const apiKeyReadA = await prisma.apiKey.create({
-    data: { userId: uOwnerA.id, organizationId: orgA.id, name: 'read', keyHash: sha256hex(keyTokenRead), prefix: `vlk_${'c'.repeat(12)}`, scopes: ['vehicles:read'], expiresAt: new Date(Date.now() + 86_400_000) },
+    data: {
+      userId: uOwnerA.id,
+      organizationId: orgA.id,
+      name: 'read',
+      keyHash: sha256hex(keyTokenRead),
+      prefix: `vlk_${'c'.repeat(12)}`,
+      scopes: ['vehicles:read'],
+      expiresAt: new Date(Date.now() + 86_400_000),
+    },
   });
   const apiKeyCommandsA = await prisma.apiKey.create({
-    data: { userId: uOwnerA.id, organizationId: orgA.id, name: 'cmds', keyHash: sha256hex(keyTokenCommands), prefix: `vlk_${'e'.repeat(12)}`, scopes: ['commands:write'], expiresAt: new Date(Date.now() + 86_400_000) },
+    data: {
+      userId: uOwnerA.id,
+      organizationId: orgA.id,
+      name: 'cmds',
+      keyHash: sha256hex(keyTokenCommands),
+      prefix: `vlk_${'e'.repeat(12)}`,
+      scopes: ['commands:write'],
+      expiresAt: new Date(Date.now() + 86_400_000),
+    },
   });
 
-  ids.userOwnerA = uOwnerA.id; ids.userOwnerB = uOwnerB.id; ids.userOutsider = uOutsider.id;
-  ids.userViewerA = uViewerA.id; ids.userDriverA = uDriverA.id; ids.userAdminA = uAdminA.id; ids.userInstanceAdmin = uInstanceAdmin.id;
-  ids.orgA = orgA.id; ids.orgB = orgB.id; ids.orgOperator = orgOperator.id;
-  ids.providerA = providerA.id; ids.vehicleA1 = vehicleA1.id; ids.vehicleA2 = vehicleA2.id; ids.vehicleB1 = vehicleB1.id;
-  ids.driveA1 = driveA1.id; ids.chargeA1 = chargeA1.id; ids.maintenanceA1 = maintenanceA1.id;
-  ids.automationA = automationA.id; ids.placeA = placeA.id; ids.passkeyA = passkeyA.id;
-  ids.apiKeyReadA = apiKeyReadA.id; ids.apiKeyCommandsA = apiKeyCommandsA.id;
+  ids.userOwnerA = uOwnerA.id;
+  ids.userOwnerB = uOwnerB.id;
+  ids.userOutsider = uOutsider.id;
+  ids.userViewerA = uViewerA.id;
+  ids.userDriverA = uDriverA.id;
+  ids.userAdminA = uAdminA.id;
+  ids.userInstanceAdmin = uInstanceAdmin.id;
+  ids.orgA = orgA.id;
+  ids.orgB = orgB.id;
+  ids.orgOperator = orgOperator.id;
+  ids.providerA = providerA.id;
+  ids.vehicleA1 = vehicleA1.id;
+  ids.vehicleA2 = vehicleA2.id;
+  ids.vehicleB1 = vehicleB1.id;
+  ids.driveA1 = driveA1.id;
+  ids.chargeA1 = chargeA1.id;
+  ids.maintenanceA1 = maintenanceA1.id;
+  ids.automationA = automationA.id;
+  ids.placeA = placeA.id;
+  ids.passkeyA = passkeyA.id;
+  ids.apiKeyReadA = apiKeyReadA.id;
+  ids.apiKeyCommandsA = apiKeyCommandsA.id;
   Object.assign(ids, {
-    driveB1: driveB1.id, chargeB1: chargeB1.id, maintenanceB1: maintenanceB1.id, maintenanceA2: maintenanceA2.id,
-    automationB: automationB.id, placeB: placeB.id, commandA1: commandA1.id, commandB1: commandB1.id,
-    fleetGroupA: fleetGroupA.id, driverA: driverA.id, departmentA: departmentA.id,
-    costCenterA: costCenterA.id, assignmentA: assignmentA.id,
-    privacyZoneA: privacyZoneA.id, privacyZoneB: privacyZoneB.id,
-    geofenceA: geofenceA.id, geofenceB: geofenceB.id,
-    rateRuleA: rateRuleA.id, rateRuleB: rateRuleB.id, fleetGroupB: fleetGroupB.id,
+    driveB1: driveB1.id,
+    chargeB1: chargeB1.id,
+    maintenanceB1: maintenanceB1.id,
+    maintenanceA2: maintenanceA2.id,
+    automationB: automationB.id,
+    placeB: placeB.id,
+    commandA1: commandA1.id,
+    commandB1: commandB1.id,
+    fleetGroupA: fleetGroupA.id,
+    driverA: driverA.id,
+    departmentA: departmentA.id,
+    costCenterA: costCenterA.id,
+    assignmentA: assignmentA.id,
+    privacyZoneA: privacyZoneA.id,
+    privacyZoneB: privacyZoneB.id,
+    geofenceA: geofenceA.id,
+    geofenceB: geofenceB.id,
+    rateRuleA: rateRuleA.id,
+    rateRuleB: rateRuleB.id,
+    fleetGroupB: fleetGroupB.id,
   });
 
   return {
     tokens: {
-      ownerA: await sessionFor(uOwnerA.id), ownerB: await sessionFor(uOwnerB.id), outsider: await sessionFor(uOutsider.id),
-      viewerA: await sessionFor(uViewerA.id), driverA: await sessionFor(uDriverA.id), adminA: await sessionFor(uAdminA.id),
-      instanceAdmin: await sessionFor(uInstanceAdmin.id), apiKeyRead: keyTokenRead, apiKeyCommands: keyTokenCommands,
+      ownerA: await sessionFor(uOwnerA.id),
+      ownerB: await sessionFor(uOwnerB.id),
+      outsider: await sessionFor(uOutsider.id),
+      viewerA: await sessionFor(uViewerA.id),
+      driverA: await sessionFor(uDriverA.id),
+      adminA: await sessionFor(uAdminA.id),
+      instanceAdmin: await sessionFor(uInstanceAdmin.id),
+      apiKeyRead: keyTokenRead,
+      apiKeyCommands: keyTokenCommands,
       ownerAUnelevated: await sessionFor(uOwnerA.id, { stepped: false }),
     },
     vehicles: { vehicleA1, vehicleA2, vehicleB1 },
     cleanup: async () => {
-      await prisma.organization.deleteMany({ where: { id: { in: [orgA.id, orgB.id, orgOperator.id] } } });
-      await prisma.user.deleteMany({ where: { id: { in: [uOwnerA.id, uOwnerB.id, uOutsider.id, uViewerA.id, uDriverA.id, uAdminA.id, uInstanceAdmin.id] } } });
+      await prisma.organization.deleteMany({
+        where: { id: { in: [orgA.id, orgB.id, orgOperator.id] } },
+      });
+      await prisma.user.deleteMany({
+        where: {
+          id: {
+            in: [
+              uOwnerA.id,
+              uOwnerB.id,
+              uOutsider.id,
+              uViewerA.id,
+              uDriverA.id,
+              uAdminA.id,
+              uInstanceAdmin.id,
+            ],
+          },
+        },
+      });
     },
   };
 }
@@ -158,7 +449,10 @@ async function sessionFor(userId: string, opts: { stepped?: boolean } = {}): Pro
     // Matrix cells are authorization cells; step-up requirements are covered by
     // dedicated tests (security-review.test.ts, auth tests). Pre-step so the
     // step-up gate does not mask the permission answer.
-    await prisma.userSession.update({ where: { id: sessionId }, data: { stepUpAt: new Date(), stepUpMethod: 'totp' } });
+    await prisma.userSession.update({
+      where: { id: sessionId },
+      data: { stepUpAt: new Date(), stepUpMethod: 'totp' },
+    });
   }
   return token;
 }
@@ -178,7 +472,7 @@ afterAll(async () => {
   await prisma.$disconnect();
 }, 60_000);
 
-type Persona = keyof (Awaited<ReturnType<typeof world>>)['tokens'];
+type Persona = keyof Awaited<ReturnType<typeof world>>['tokens'];
 
 // The API issues a CSRF cookie on the first mutating request and expects a
 // matching x-vl-csrf header on the retry (middleware/core.ts csrf()).
@@ -196,7 +490,11 @@ async function csrfRequest(
     : await agent[method](url).send(body);
   if (res.status === 403 && res.body?.error?.code === 'CSRF') {
     const cookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
-    csrf = cookies.map((c) => c.split(';')[0]).find((c) => c.startsWith('vl_csrf='))?.split('=')[1] ?? csrf;
+    csrf =
+      cookies
+        .map((c) => c.split(';')[0])
+        .find((c) => c.startsWith('vl_csrf='))
+        ?.split('=')[1] ?? csrf;
     if (!csrf) throw new Error('CSRF cookie was not issued');
     csrfCache.set(agent, csrf);
     res = await agent[method](url).set('x-vl-csrf', csrf).send(body);
@@ -267,30 +565,49 @@ function personaHas(policy: RoutePolicy, persona: Persona): boolean {
   const t = policy.target;
   if (persona === 'apiKeyRead' || persona === 'apiKeyCommands') {
     if (!policy.apiScope) return false;
-    return (persona === 'apiKeyRead' && policy.apiScope === 'vehicles:read') || (persona === 'apiKeyCommands' && policy.apiScope === 'commands:write');
+    return (
+      (persona === 'apiKeyRead' && policy.apiScope === 'vehicles:read') ||
+      (persona === 'apiKeyCommands' && policy.apiScope === 'commands:write')
+    );
   }
   if (t.kind === 'instanceAdmin') return persona === 'instanceAdmin';
   if (t.kind === 'operator') return persona === 'instanceAdmin';
-  const perm = t.kind === 'vehicle' || t.kind === 'resource' ? (t.perm as Permission) : t.kind === 'org' ? t.perm : null;
+  const perm =
+    t.kind === 'vehicle' || t.kind === 'resource'
+      ? (t.perm as Permission)
+      : t.kind === 'org'
+        ? t.perm
+        : null;
   if (!perm) {
     // none/self: any interactive session (self routes belong to the caller)
     return true;
   }
-  if (t.kind === 'resource' && ['passkey', 'session', 'apiKey', 'webhookEndpoint'].includes(t.resource)) {
+  if (
+    t.kind === 'resource' &&
+    ['passkey', 'session', 'apiKey', 'webhookEndpoint'].includes(t.resource)
+  ) {
     return persona === 'ownerA'; // owner-scoped fixture (passkeyA etc. belong to ownerA)
   }
   if (persona === 'outsider') return false;
   if (persona === 'instanceAdmin' && !(t.kind === 'org' && t.own)) return false; // instance admin grants no org-A data
   const role = (() => {
     switch (persona) {
-      case 'ownerA': return 'OWNER';
-      case 'ownerB': return 'OWNER';
-      case 'adminA': return 'ADMIN';
-      case 'driverA': return 'DRIVER';
-      case 'viewerA': return 'VIEWER';
-      case 'outsider': return 'VIEWER';
-      case 'instanceAdmin': return 'OWNER';
-      default: return 'VIEWER';
+      case 'ownerA':
+        return 'OWNER';
+      case 'ownerB':
+        return 'OWNER';
+      case 'adminA':
+        return 'ADMIN';
+      case 'driverA':
+        return 'DRIVER';
+      case 'viewerA':
+        return 'VIEWER';
+      case 'outsider':
+        return 'VIEWER';
+      case 'instanceAdmin':
+        return 'OWNER';
+      default:
+        return 'VIEWER';
     }
   })();
   const rolePerms = new Set(ROLE_PERMISSIONS[role as keyof typeof ROLE_PERMISSIONS]);
@@ -335,29 +652,89 @@ const DESTRUCTIVE: ReadonlySet<string> = new Set([
 // Hand-pinned golden cells (guide 05 §10 plus the security-review cases).
 describe('authorization golden cells', () => {
   it('hold (ids resolved after the world is built)', async () => {
-    const cases: { method: 'get' | 'post' | 'patch' | 'delete'; path: string; persona: Persona; status: number; code?: string; body?: unknown }[] = [
-      { method: 'get', path: `/api/v1/vehicles/${ids.vehicleA1}`, persona: 'outsider', status: 404 },
+    const cases: {
+      method: 'get' | 'post' | 'patch' | 'delete';
+      path: string;
+      persona: Persona;
+      status: number;
+      code?: string;
+      body?: unknown;
+    }[] = [
+      {
+        method: 'get',
+        path: `/api/v1/vehicles/${ids.vehicleA1}`,
+        persona: 'outsider',
+        status: 404,
+      },
       { method: 'get', path: `/api/v1/vehicles/${ids.vehicleA1}`, persona: 'viewerA', status: 200 },
       { method: 'get', path: `/api/v1/vehicles/${ids.vehicleA1}`, persona: 'ownerB', status: 404 },
-      { method: 'get', path: `/api/v1/vehicles/${ids.vehicleA1}`, persona: 'apiKeyRead', status: 200 },
-      { method: 'get', path: `/api/v1/vehicles/${ids.vehicleA1}`, persona: 'instanceAdmin', status: 404 },
-      { method: 'get', path: `/api/v1/drives?vehicleId=${ids.vehicleA1}`, persona: 'apiKeyRead', status: 200 },
+      {
+        method: 'get',
+        path: `/api/v1/vehicles/${ids.vehicleA1}`,
+        persona: 'apiKeyRead',
+        status: 200,
+      },
+      {
+        method: 'get',
+        path: `/api/v1/vehicles/${ids.vehicleA1}`,
+        persona: 'instanceAdmin',
+        status: 404,
+      },
+      {
+        method: 'get',
+        path: `/api/v1/drives?vehicleId=${ids.vehicleA1}`,
+        persona: 'apiKeyRead',
+        status: 200,
+      },
       { method: 'patch', path: `/api/v1/drives/${ids.driveA1}`, persona: 'viewerA', status: 403 },
-      { method: 'patch', path: `/api/v1/drives/${ids.driveA1}`, persona: 'apiKeyRead', status: 403 },
-      { method: 'post', path: '/api/v1/commands', persona: 'viewerA', status: 403, body: { vehicleId: ids.vehicleA1, type: 'lock', params: {} } },
-      { method: 'delete', path: `/api/v1/fleet/maintenance/${ids.maintenanceA1}`, persona: 'viewerA', status: 403 },
-      { method: 'delete', path: `/api/v1/fleet/maintenance/${ids.maintenanceA2}`, persona: 'adminA', status: 200 },
+      {
+        method: 'patch',
+        path: `/api/v1/drives/${ids.driveA1}`,
+        persona: 'apiKeyRead',
+        status: 403,
+      },
+      {
+        method: 'post',
+        path: '/api/v1/commands',
+        persona: 'viewerA',
+        status: 403,
+        body: { vehicleId: ids.vehicleA1, type: 'lock', params: {} },
+      },
+      {
+        method: 'delete',
+        path: `/api/v1/fleet/maintenance/${ids.maintenanceA1}`,
+        persona: 'viewerA',
+        status: 403,
+      },
+      {
+        method: 'delete',
+        path: `/api/v1/fleet/maintenance/${ids.maintenanceA2}`,
+        persona: 'adminA',
+        status: 200,
+      },
       { method: 'post', path: '/api/v1/status/incidents', persona: 'viewerA', status: 404 },
       // SEC-REVIEW-4: the passkey delete alias requires possession step-up.
-      { method: 'post', path: `/api/v1/auth/passkeys/${ids.passkeyA}/delete`, persona: 'ownerAUnelevated', status: 403, code: 'STEP_UP_REQUIRED' },
+      {
+        method: 'post',
+        path: `/api/v1/auth/passkeys/${ids.passkeyA}/delete`,
+        persona: 'ownerAUnelevated',
+        status: 403,
+        code: 'STEP_UP_REQUIRED',
+      },
       // SEC-REVIEW-1: step-up is session-bound; an API key can never step up.
       { method: 'post', path: '/api/v1/auth/step-up', persona: 'apiKeyRead', status: 403 },
       // SEC-REVIEW-3: a scoped key is limited by its scope.
-      { method: 'get', path: `/api/v1/vehicles/${ids.vehicleA1}`, persona: 'apiKeyCommands', status: 403 },
+      {
+        method: 'get',
+        path: `/api/v1/vehicles/${ids.vehicleA1}`,
+        persona: 'apiKeyCommands',
+        status: 403,
+      },
     ];
     for (const c of cases) {
       const agent = request.agent(base);
-      if (c.persona.startsWith('apiKey')) agent.set('Authorization', `Bearer ${w.tokens[c.persona]}`);
+      if (c.persona.startsWith('apiKey'))
+        agent.set('Authorization', `Bearer ${w.tokens[c.persona]}`);
       else agent.set('Cookie', `vl_session=${w.tokens[c.persona]}`);
       const res = await csrfRequest(agent, c.method, c.path, c.body);
       expect(res.status, `${c.method.toUpperCase()} ${c.path} as ${c.persona}`).toBe(c.status);
@@ -371,29 +748,42 @@ describe('authorization matrix', () => {
     expect(ROUTE_TABLE.length).toBeGreaterThanOrEqual(20);
   });
 
-  describe.each(ROUTE_TABLE.map((r) => [`${r.method} ${r.path}`, r] as const))('%s', (_name, route) => {
-    const personas: Persona[] = ['outsider', 'ownerA', 'ownerB', 'viewerA', 'driverA', 'adminA', 'instanceAdmin', 'apiKeyRead', 'apiKeyCommands'];
-    it.each(personas)('%s', async (persona) => {
-      const expected = personaHas(route.policy, persona);
-      if (SKIP_ROUTES.has(`${route.method} ${route.path}`)) return; // needs ceremony/body fixtures
-      if (expected && DESTRUCTIVE.has(`${route.method} ${route.path}`)) return; // allowed execution would destroy fixtures
-      if (route.policy.target.kind !== 'none' && route.policy.target.from?.startsWith('body:')) return; // body fixtures unavailable
-      const url = fill(route, persona);
-      if (!url) return; // no known fixture for this route kind
-      const agent = request.agent(base);
-      if (persona.startsWith('apiKey')) {
-        agent.set('Authorization', `Bearer ${w.tokens[persona]}`);
-      } else {
-        agent.set('Cookie', `vl_session=${w.tokens[persona]}`);
-      }
-      const method = route.method.toLowerCase() as 'get' | 'post' | 'put' | 'patch' | 'delete';
-      const res = await csrfRequest(agent, method, url);
-      if (expected) {
-        expect([401, 403, 404]).not.toContain(res.status);
-      } else {
-        expect([401, 403, 404]).toContain(res.status);
-      }
-    });
-  });
+  describe.each(ROUTE_TABLE.map((r) => [`${r.method} ${r.path}`, r] as const))(
+    '%s',
+    (_name, route) => {
+      const personas: Persona[] = [
+        'outsider',
+        'ownerA',
+        'ownerB',
+        'viewerA',
+        'driverA',
+        'adminA',
+        'instanceAdmin',
+        'apiKeyRead',
+        'apiKeyCommands',
+      ];
+      it.each(personas)('%s', async (persona) => {
+        const expected = personaHas(route.policy, persona);
+        if (SKIP_ROUTES.has(`${route.method} ${route.path}`)) return; // needs ceremony/body fixtures
+        if (expected && DESTRUCTIVE.has(`${route.method} ${route.path}`)) return; // allowed execution would destroy fixtures
+        if (route.policy.target.kind !== 'none' && route.policy.target.from?.startsWith('body:'))
+          return; // body fixtures unavailable
+        const url = fill(route, persona);
+        if (!url) return; // no known fixture for this route kind
+        const agent = request.agent(base);
+        if (persona.startsWith('apiKey')) {
+          agent.set('Authorization', `Bearer ${w.tokens[persona]}`);
+        } else {
+          agent.set('Cookie', `vl_session=${w.tokens[persona]}`);
+        }
+        const method = route.method.toLowerCase() as 'get' | 'post' | 'put' | 'patch' | 'delete';
+        const res = await csrfRequest(agent, method, url);
+        if (expected) {
+          expect([401, 403, 404]).not.toContain(res.status);
+        } else {
+          expect([401, 403, 404]).toContain(res.status);
+        }
+      });
+    },
+  );
 });
-

@@ -8,14 +8,14 @@ docker compose logs --tail 200 web
 
 Common causes:
 
-| Symptom | Cause & fix |
-| --- | --- |
-| `JWT_SECRET is missing or too short` | Set a real secret, ≥ 32 chars, not a placeholder. |
-| `VL_MASTER_KEY is missing…` | Required in production; `openssl rand -base64 32`. |
-| `PUBLIC_URL must be an https:// URL` | Set the real HTTPS origin (or use development mode for local http). |
-| `Can't reach database` | PostgreSQL healthcheck failed — check `docker compose ps postgres` and the password in `DATABASE_URL`/`POSTGRES_PASSWORD`. |
-| `Prisma CLI not found` | Image layout changed — pull the current image, don't hand-build. |
-| `migration failed` | Read the migration error in the log; restore a backup if the schema is damaged. |
+| Symptom                              | Cause & fix                                                                                                                |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `JWT_SECRET is missing or too short` | Set a real secret, ≥ 32 chars, not a placeholder.                                                                          |
+| `VL_MASTER_KEY is missing…`          | Required in production; `openssl rand -base64 32`.                                                                         |
+| `PUBLIC_URL must be an https:// URL` | Set the real HTTPS origin (or use development mode for local http).                                                        |
+| `Can't reach database`               | PostgreSQL healthcheck failed — check `docker compose ps postgres` and the password in `DATABASE_URL`/`POSTGRES_PASSWORD`. |
+| `Prisma CLI not found`               | Image layout changed — pull the current image, don't hand-build.                                                           |
+| `migration failed`                   | Read the migration error in the log; restore a backup if the schema is damaged.                                            |
 
 ## Healthcheck failing
 

@@ -1,7 +1,15 @@
 // Auth context: loads the current user from the session cookie and exposes
 // login/logout. Also drives the theme attribute.
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import { api } from '../api/client';
 import type { UserPublic } from '@voltlink/shared';
 import { normalizeThemeId } from './themes';
@@ -43,27 +51,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('voltlink:unauthorized', onUnauthorized);
   }, [refresh]);
 
-  const login = useCallback(
-    async (email: string, password: string, totp?: string) => {
-      const res = await api<{ user?: UserPublic; totpRequired?: boolean }>('/api/v1/auth/login', {
-        method: 'POST',
-        body: { email, password, totp },
-      });
-      if (res.totpRequired) return { totpRequired: true };
-      if (res.user) {
-        setUser(res.user);
-        applyTheme(res.user);
-      }
-      return {};
-    },
-    [],
-  );
+  const login = useCallback(async (email: string, password: string, totp?: string) => {
+    const res = await api<{ user?: UserPublic; totpRequired?: boolean }>('/api/v1/auth/login', {
+      method: 'POST',
+      body: { email, password, totp },
+    });
+    if (res.totpRequired) return { totpRequired: true };
+    if (res.user) {
+      setUser(res.user);
+      applyTheme(res.user);
+    }
+    return {};
+  }, []);
 
   const logout = useCallback(async () => {
     try {
       const { unsubscribePush } = await import('../lib/push');
       await unsubscribePush();
-    } catch { /* best-effort */ }
+    } catch {
+      /* best-effort */
+    }
     try {
       await api('/api/v1/auth/logout', { method: 'POST' });
     } finally {
@@ -71,9 +78,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-
-
-  const value = useMemo(() => ({ user, loading, login, logout, refresh }), [user, loading, login, logout, refresh]);
+  const value = useMemo(
+    () => ({ user, loading, login, logout, refresh }),
+    [user, loading, login, logout, refresh],
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

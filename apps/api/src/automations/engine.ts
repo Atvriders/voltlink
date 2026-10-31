@@ -30,16 +30,35 @@ export async function findMatchingAutomations(event: TriggerEvent): Promise<Auto
   for (const row of rows) {
     if (row.triggerType !== event.type) continue;
     if (row.vehicleId && row.vehicleId !== event.vehicleId) continue;
-    if (!row.vehicleId && !event.vehicleId && row.triggerType !== 'scheduled' && row.triggerType !== 'webhook') continue;
+    if (
+      !row.vehicleId &&
+      !event.vehicleId &&
+      row.triggerType !== 'scheduled' &&
+      row.triggerType !== 'webhook'
+    )
+      continue;
     out.push(toAutomation(row));
   }
   return out;
 }
 
 function toAutomation(row: {
-  id: string; name: string; description: string | null; enabled: boolean; vehicleId: string | null;
-  triggerType: string; triggerParams: unknown; conditions: unknown; actions: unknown; cooldownSec: number;
-  maxRetries: number; lastRunAt: Date | null; lastResult: string | null; runCount: number; failureCount: number; createdAt: Date;
+  id: string;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  vehicleId: string | null;
+  triggerType: string;
+  triggerParams: unknown;
+  conditions: unknown;
+  actions: unknown;
+  cooldownSec: number;
+  maxRetries: number;
+  lastRunAt: Date | null;
+  lastResult: string | null;
+  runCount: number;
+  failureCount: number;
+  createdAt: Date;
 }): Automation {
   return {
     id: row.id,
@@ -47,8 +66,14 @@ function toAutomation(row: {
     description: row.description ?? undefined,
     enabled: row.enabled,
     vehicleId: row.vehicleId,
-    trigger: { type: row.triggerType as TriggerType, params: (row.triggerParams ?? {}) as Record<string, unknown> },
-    conditions: (row.conditions ?? []) as { type: ConditionType; params: Record<string, unknown> }[],
+    trigger: {
+      type: row.triggerType as TriggerType,
+      params: (row.triggerParams ?? {}) as Record<string, unknown>,
+    },
+    conditions: (row.conditions ?? []) as {
+      type: ConditionType;
+      params: Record<string, unknown>;
+    }[],
     actions: (row.actions ?? []) as { type: ActionType; params: Record<string, unknown> }[],
     cooldownSec: row.cooldownSec,
     maxRetries: row.maxRetries,
@@ -135,7 +160,13 @@ async function evaluateCondition(
 export async function executeActions(
   userId: string,
   actions: { type: ActionType; params: Record<string, unknown> }[],
-  ctx: { vehicleId?: string; vehicleName?: string; dryRun: boolean; automationId?: string; organizationId?: string },
+  ctx: {
+    vehicleId?: string;
+    vehicleName?: string;
+    dryRun: boolean;
+    automationId?: string;
+    organizationId?: string;
+  },
 ): Promise<{ action: ActionType; ok: boolean; detail: string }[]> {
   const results: { action: ActionType; ok: boolean; detail: string }[] = [];
   for (const a of actions) {
@@ -152,21 +183,55 @@ export async function executeActions(
 async function executeAction(
   userId: string,
   action: { type: ActionType; params: Record<string, unknown> },
-  ctx: { vehicleId?: string; vehicleName?: string; dryRun: boolean; automationId?: string; organizationId?: string },
+  ctx: {
+    vehicleId?: string;
+    vehicleName?: string;
+    dryRun: boolean;
+    automationId?: string;
+    organizationId?: string;
+  },
 ): Promise<string> {
   const dry = ctx.dryRun ? ' [dry run]' : '';
   switch (action.type) {
     case 'notify_app':
-      await notify({ userId, event: 'automation_fired', title: 'Automation', body: String(action.params.message ?? 'Automation triggered.'), vehicleId: ctx.vehicleId, vehicleName: ctx.vehicleName });
+      await notify({
+        userId,
+        event: 'automation_fired',
+        title: 'Automation',
+        body: String(action.params.message ?? 'Automation triggered.'),
+        vehicleId: ctx.vehicleId,
+        vehicleName: ctx.vehicleName,
+      });
       return `In-app notification queued${dry}`;
     case 'notify_email':
-      await notify({ userId, event: 'automation_fired', channels: ['email'], title: 'VoltLink automation', body: String(action.params.message ?? ''), vehicleId: ctx.vehicleId });
+      await notify({
+        userId,
+        event: 'automation_fired',
+        channels: ['email'],
+        title: 'VoltLink automation',
+        body: String(action.params.message ?? ''),
+        vehicleId: ctx.vehicleId,
+      });
       return `Email queued${dry}`;
     case 'notify_push':
-      await notify({ userId, event: 'automation_fired', channels: ['push'], title: 'VoltLink', body: String(action.params.message ?? ''), vehicleId: ctx.vehicleId });
+      await notify({
+        userId,
+        event: 'automation_fired',
+        channels: ['push'],
+        title: 'VoltLink',
+        body: String(action.params.message ?? ''),
+        vehicleId: ctx.vehicleId,
+      });
       return `Push queued${dry}`;
     case 'webhook': {
-      await notify({ userId, event: 'automation_fired', channels: ['webhook'], title: 'Automation webhook', body: JSON.stringify(action.params), vehicleId: ctx.vehicleId });
+      await notify({
+        userId,
+        event: 'automation_fired',
+        channels: ['webhook'],
+        title: 'Automation webhook',
+        body: JSON.stringify(action.params),
+        vehicleId: ctx.vehicleId,
+      });
       return `Webhook delivered${dry}`;
     }
     case 'create_incident': {
@@ -175,7 +240,14 @@ async function executeAction(
           title: String(action.params.title ?? 'Automation-created incident'),
           severity: String(action.params.severity ?? 'minor'),
           status: 'investigating',
-          phases: JSON.parse(JSON.stringify({ investigating: new Date().toISOString(), identified: null, monitoring: null, resolved: null })),
+          phases: JSON.parse(
+            JSON.stringify({
+              investigating: new Date().toISOString(),
+              identified: null,
+              monitoring: null,
+              resolved: null,
+            }),
+          ),
           components: JSON.parse(JSON.stringify(['telemetry'])),
           public: action.params.public === true,
         },
@@ -183,7 +255,11 @@ async function executeAction(
       return `Incident created${dry}`;
     }
     case 'generate_report': {
-      await getQueue().enqueue('reports', { userId, kind: 'automation_report', params: action.params }, { dedupeKey: `auto-report:${userId}:${ctx.vehicleId ?? 'all'}` });
+      await getQueue().enqueue(
+        'reports',
+        { userId, kind: 'automation_report', params: action.params },
+        { dedupeKey: `auto-report:${userId}:${ctx.vehicleId ?? 'all'}` },
+      );
       return `Report job queued${dry}`;
     }
     default: {
@@ -191,7 +267,12 @@ async function executeAction(
       if (ctx.dryRun || !ctx.vehicleId) return `Vehicle action skipped${dry}`;
       const { issueCommand } = await import('../commands/service');
       const { command } = await issueCommand(
-        { kind: 'automation', userId, automationId: ctx.automationId ?? '', organizationId: ctx.organizationId ?? '' },
+        {
+          kind: 'automation',
+          userId,
+          automationId: ctx.automationId ?? '',
+          organizationId: ctx.organizationId ?? '',
+        },
         ctx.vehicleId,
         action.type as never,
         action.params as never,
@@ -205,38 +286,78 @@ async function executeAction(
 // Running an automation
 // ---------------------------------------------------------------------------
 
-export async function runAutomation(automationId: string, event: TriggerEvent, opts: { dryRun?: boolean } = {}): Promise<{ result: string; actionResults: { action: ActionType; ok: boolean; detail: string }[] }> {
-  const row = await prisma.automation.findUnique({ where: { id: automationId }, include: { user: true } });
+export async function runAutomation(
+  automationId: string,
+  event: TriggerEvent,
+  opts: { dryRun?: boolean } = {},
+): Promise<{
+  result: string;
+  actionResults: { action: ActionType; ok: boolean; detail: string }[];
+}> {
+  const row = await prisma.automation.findUnique({
+    where: { id: automationId },
+    include: { user: true },
+  });
   if (!row || !row.enabled) return { result: 'skipped', actionResults: [] };
 
-  if (!opts.dryRun && row.cooldownSec > 0 && row.lastRunAt && Date.now() - row.lastRunAt.getTime() < row.cooldownSec * SECONDS) {
+  if (
+    !opts.dryRun &&
+    row.cooldownSec > 0 &&
+    row.lastRunAt &&
+    Date.now() - row.lastRunAt.getTime() < row.cooldownSec * SECONDS
+  ) {
     await prisma.automationExecution.create({
-      data: { automationId: row.id, triggeredAt: new Date(), triggerEvent: event.type, result: 'cooldown', actionResults: JSON.parse('[]') },
+      data: {
+        automationId: row.id,
+        triggeredAt: new Date(),
+        triggerEvent: event.type,
+        result: 'cooldown',
+        actionResults: JSON.parse('[]'),
+      },
     });
     return { result: 'cooldown', actionResults: [] };
   }
 
-  const vehicle = event.vehicleId ? await prisma.vehicle.findUnique({ where: { id: event.vehicleId }, include: { snapshot: true } }) : null;
+  const vehicle = event.vehicleId
+    ? await prisma.vehicle.findUnique({
+        where: { id: event.vehicleId },
+        include: { snapshot: true },
+      })
+    : null;
   const state = (vehicle?.snapshot?.state ?? null) as Record<string, unknown> | null;
-  const conditionsMet = await evaluateConditions((row.conditions ?? []) as { type: ConditionType; params: Record<string, unknown> }[], {
-    vehicleId: event.vehicleId,
-    state,
-    now: new Date(),
-  });
+  const conditionsMet = await evaluateConditions(
+    (row.conditions ?? []) as { type: ConditionType; params: Record<string, unknown> }[],
+    {
+      vehicleId: event.vehicleId,
+      state,
+      now: new Date(),
+    },
+  );
   if (!conditionsMet) {
     await prisma.automationExecution.create({
-      data: { automationId: row.id, triggeredAt: new Date(), triggerEvent: event.type, conditionsMet: false, result: 'skipped', actionResults: JSON.parse('[]') },
+      data: {
+        automationId: row.id,
+        triggeredAt: new Date(),
+        triggerEvent: event.type,
+        conditionsMet: false,
+        result: 'skipped',
+        actionResults: JSON.parse('[]'),
+      },
     });
     return { result: 'skipped', actionResults: [] };
   }
 
-  const actionResults = await executeActions(row.userId, (row.actions ?? []) as { type: ActionType; params: Record<string, unknown> }[], {
-    vehicleId: event.vehicleId ?? undefined,
-    vehicleName: vehicle?.displayName,
-    dryRun: !!opts.dryRun,
-    automationId: row.id,
-    organizationId: row.organizationId,
-  });
+  const actionResults = await executeActions(
+    row.userId,
+    (row.actions ?? []) as { type: ActionType; params: Record<string, unknown> }[],
+    {
+      vehicleId: event.vehicleId ?? undefined,
+      vehicleName: vehicle?.displayName,
+      dryRun: !!opts.dryRun,
+      automationId: row.id,
+      organizationId: row.organizationId,
+    },
+  );
   const ok = actionResults.every((r) => r.ok);
   const result = opts.dryRun ? 'dry_run' : ok ? 'success' : 'failed';
   await prisma.automationExecution.create({
@@ -261,7 +382,13 @@ export async function runAutomation(automationId: string, event: TriggerEvent, o
       },
     });
   }
-  await audit({ actorId: null, action: 'automation.run', entityType: 'automation', entityId: row.id, details: { result, trigger: event.type, vehicleId: event.vehicleId ?? null } });
+  await audit({
+    actorId: null,
+    action: 'automation.run',
+    entityType: 'automation',
+    entityId: row.id,
+    details: { result, trigger: event.type, vehicleId: event.vehicleId ?? null },
+  });
   return { result, actionResults };
 }
 
@@ -279,6 +406,8 @@ export async function dispatchTrigger(event: TriggerEvent): Promise<number> {
 /** Loop-prevention guard: max automation runs per automation per hour. */
 export async function automationRunBudget(automationId: string, maxPerHour = 60): Promise<boolean> {
   const hourAgo = new Date(Date.now() - 3600_000);
-  const count = await prisma.automationExecution.count({ where: { automationId, triggeredAt: { gt: hourAgo } } });
+  const count = await prisma.automationExecution.count({
+    where: { automationId, triggeredAt: { gt: hourAgo } },
+  });
   return count < maxPerHour;
 }

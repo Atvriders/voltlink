@@ -71,7 +71,9 @@ test('fleet page', async ({ page }) => {
 
 test('public status page', async ({ page }) => {
   await page.goto('/status');
-  await expect(page.getByText(/operational|degraded|outage|maintenance/i).first()).toBeVisible({ timeout: 20000 });
+  await expect(page.getByText(/operational|degraded|outage|maintenance/i).first()).toBeVisible({
+    timeout: 20000,
+  });
   await page.waitForTimeout(1500);
   await expect(page).toHaveScreenshot('public-status.png', T);
 });
@@ -87,7 +89,9 @@ test('settings security tab', async ({ page }) => {
 test('admin page', async ({ page }) => {
   await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await page.goto('/admin');
-  await expect(page.getByText(/Command safety|Platform health|Users/i).first()).toBeVisible({ timeout: 20000 });
+  await expect(page.getByText(/Command safety|Platform health|Users/i).first()).toBeVisible({
+    timeout: 20000,
+  });
   await page.waitForTimeout(1200);
   await expect(page).toHaveScreenshot('admin.png', T);
 });

@@ -10,7 +10,8 @@ export const generateWebhookSecret = () => `whsec_${crypto.randomBytes(32).toStr
 
 function keyBytes(secret: string): Buffer {
   const key = Buffer.from(secret.startsWith('whsec_') ? secret.slice(6) : secret, 'base64');
-  if (key.length < 24 || key.length > 64) throw new Error('webhook secret must decode to 24-64 bytes');
+  if (key.length < 24 || key.length > 64)
+    throw new Error('webhook secret must decode to 24-64 bytes');
   return key;
 }
 
@@ -18,7 +19,12 @@ export function signV1(secret: string, msgId: string, ts: number, body: string |
   return `v1,${crypto.createHmac('sha256', keyBytes(secret)).update(`${msgId}.${ts}.`).update(body).digest('base64')}`;
 }
 
-export function outgoingHeaders(secrets: string[], msgId: string, body: string, now = new Date()): Record<string, string> {
+export function outgoingHeaders(
+  secrets: string[],
+  msgId: string,
+  body: string,
+  now = new Date(),
+): Record<string, string> {
   const ts = Math.floor(now.getTime() / 1000);
   return {
     'content-type': 'application/json',
@@ -28,7 +34,9 @@ export function outgoingHeaders(secrets: string[], msgId: string, body: string, 
   };
 }
 
-export type VerifyResult = { ok: true; msgId: string } | { ok: false; reason: 'missing_headers' | 'bad_timestamp' | 'stale' | 'bad_signature' };
+export type VerifyResult =
+  | { ok: true; msgId: string }
+  | { ok: false; reason: 'missing_headers' | 'bad_timestamp' | 'stale' | 'bad_signature' };
 
 export function verifyIncoming(
   secrets: string[],
@@ -43,10 +51,14 @@ export function verifyIncoming(
   const msgId = one('webhook-id');
   const ts = one('webhook-timestamp');
   const sig = one('webhook-signature');
-  if (!msgId || !ts || !sig || msgId.length > 256 || sig.length > 4096) return { ok: false, reason: 'missing_headers' };
+  if (!msgId || !ts || !sig || msgId.length > 256 || sig.length > 4096)
+    return { ok: false, reason: 'missing_headers' };
   if (!/^\d{1,12}$/.test(ts)) return { ok: false, reason: 'bad_timestamp' };
   if (Math.abs(nowSec - Number(ts)) > TOLERANCE_SEC) return { ok: false, reason: 'stale' };
-  const presented = sig.split(' ').filter((p) => p.startsWith('v1,')).map((p) => Buffer.from(p.slice(3), 'base64'));
+  const presented = sig
+    .split(' ')
+    .filter((p) => p.startsWith('v1,'))
+    .map((p) => Buffer.from(p.slice(3), 'base64'));
   for (const s of secrets) {
     let expected: Buffer;
     try {
@@ -54,7 +66,8 @@ export function verifyIncoming(
     } catch {
       continue; // malformed stored secret: treat as non-matching
     }
-    if (presented.some((p) => p.length === expected.length && crypto.timingSafeEqual(p, expected))) return { ok: true, msgId };
+    if (presented.some((p) => p.length === expected.length && crypto.timingSafeEqual(p, expected)))
+      return { ok: true, msgId };
   }
   return { ok: false, reason: 'bad_signature' };
 }

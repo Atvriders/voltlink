@@ -48,7 +48,10 @@ export class PollingScheduler {
     const accounts = await prisma.providerAccount.findMany({
       where: { status: { not: 'revoked' } },
       include: {
-        vehicles: { where: { active: true }, select: { id: true, providerVehicleId: true, snapshot: true, demo: true } },
+        vehicles: {
+          where: { active: true },
+          select: { id: true, providerVehicleId: true, snapshot: true, demo: true },
+        },
       },
     });
     let planned = 0;
@@ -64,11 +67,18 @@ export class PollingScheduler {
       const vehicles = account.vehicles.filter((v) => this.needsPolling(v, now));
       if (vehicles.length === 0) continue;
 
-      const chosen = vehicles.slice(0, Math.max(1, MAX_FETCHES_PER_ACCOUNT_PER_MINUTE - bucket.length));
+      const chosen = vehicles.slice(
+        0,
+        Math.max(1, MAX_FETCHES_PER_ACCOUNT_PER_MINUTE - bucket.length),
+      );
       for (const v of chosen) {
         planned++;
         bucket.push(now);
-        await getQueue().enqueue('telemetry', { accountId: account.id, vehicleId: v.id, providerVehicleId: v.providerVehicleId }, { dedupeKey: `poll:${v.id}:${Math.floor(now / 30_000)}` });
+        await getQueue().enqueue(
+          'telemetry',
+          { accountId: account.id, vehicleId: v.id, providerVehicleId: v.providerVehicleId },
+          { dedupeKey: `poll:${v.id}:${Math.floor(now / 30_000)}` },
+        );
       }
       this.lastFetches.set(account.id, bucket);
     }
@@ -76,7 +86,14 @@ export class PollingScheduler {
   }
 
   /** Sleep-aware polling decisions. */
-  private needsPolling(vehicle: { id: string; snapshot: { fetchedAt: Date; state: unknown; freshness: string } | null; demo: boolean }, now: number): boolean {
+  private needsPolling(
+    vehicle: {
+      id: string;
+      snapshot: { fetchedAt: Date; state: unknown; freshness: string } | null;
+      demo: boolean;
+    },
+    now: number,
+  ): boolean {
     // Always poll when a command is pending for this vehicle.
     if ((this.pendingCommands.get(vehicle.id) ?? 0) > 0) return true;
 
@@ -100,7 +117,9 @@ export class PollingScheduler {
     f.count += 1;
     f.until = Date.now() + Math.min(2 ** f.count, 30) * 60_000;
     this.failures.set(accountId, f);
-    void prisma.providerAccount.update({ where: { id: accountId }, data: { lastError: message.slice(0, 500) } }).catch(() => undefined);
+    void prisma.providerAccount
+      .update({ where: { id: accountId }, data: { lastError: message.slice(0, 500) } })
+      .catch(() => undefined);
   }
 
   recordSuccess(accountId: string): void {
@@ -116,8 +135,15 @@ function jitterMs(): number {
 }
 
 /** Process a queued telemetry job: fetch one vehicle's state and ingest. */
-export async function processTelemetryJob(payload: { accountId: string; vehicleId: string; providerVehicleId: string }): Promise<void> {
-  const vehicle = await prisma.vehicle.findUnique({ where: { id: payload.vehicleId }, include: { providerAccount: true, snapshot: true } });
+export async function processTelemetryJob(payload: {
+  accountId: string;
+  vehicleId: string;
+  providerVehicleId: string;
+}): Promise<void> {
+  const vehicle = await prisma.vehicle.findUnique({
+    where: { id: payload.vehicleId },
+    include: { providerAccount: true, snapshot: true },
+  });
   if (!vehicle) return;
   const account = vehicle.providerAccount;
   if (account.status === 'revoked') return;
@@ -128,11 +154,20 @@ export async function processTelemetryJob(payload: { accountId: string; vehicleI
     const { ingestVehicleState } = await import('./ingest');
     await ingestVehicleState(
       vehicle,
-      { ...(result.state as Record<string, unknown>), vehicleId: vehicle.id, provider: account.provider, providerVehicleId: payload.providerVehicleId, fetchedAt: new Date().toISOString() } as never,
+      {
+        ...(result.state as Record<string, unknown>),
+        vehicleId: vehicle.id,
+        provider: account.provider,
+        providerVehicleId: payload.providerVehicleId,
+        fetchedAt: new Date().toISOString(),
+      } as never,
       { live: result.live },
     );
     poller.recordSuccess(account.id);
-    await prisma.providerAccount.update({ where: { id: account.id }, data: { lastSyncAt: new Date(), lastError: null } });
+    await prisma.providerAccount.update({
+      where: { id: account.id },
+      data: { lastSyncAt: new Date(), lastError: null },
+    });
   } catch (err) {
     const msg = (err as Error).message;
     if (msg === 'vehicle_asleep') {

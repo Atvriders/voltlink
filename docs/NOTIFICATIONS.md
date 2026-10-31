@@ -4,16 +4,16 @@ Eight channels, per-channel preferences, per-notification filtering.
 
 ## Channels
 
-| Channel | Setup |
-| --- | --- |
-| In-app | Always available (Notifications page inbox) |
-| Email | `SMTP_URL` (or console logging in development) |
-| Web push | VAPID keypair + browser permission |
-| Custom webhook | Any HTTP endpoint (JSON POST) |
-| ntfy | Self-hosted or ntfy.sh topic |
-| Gotify | Gotify server URL + app token |
-| Discord | Webhook URL |
-| Teams | Microsoft Teams incoming webhook URL |
+| Channel        | Setup                                          |
+| -------------- | ---------------------------------------------- |
+| In-app         | Always available (Notifications page inbox)    |
+| Email          | `SMTP_URL` (or console logging in development) |
+| Web push       | VAPID keypair + browser permission             |
+| Custom webhook | Any HTTP endpoint (JSON POST)                  |
+| ntfy           | Self-hosted or ntfy.sh topic                   |
+| Gotify         | Gotify server URL + app token                  |
+| Discord        | Webhook URL                                    |
+| Teams          | Microsoft Teams incoming webhook URL           |
 
 ## Preferences
 

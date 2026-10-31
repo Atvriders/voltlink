@@ -8,7 +8,10 @@ import { AuthError } from '../authz/errors';
 import type { ApiScope } from '@voltlink/shared';
 
 export function mintApiKey() {
-  const publicId = Array.from({ length: 12 }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[crypto.randomInt(36)]).join('');
+  const publicId = Array.from(
+    { length: 12 },
+    () => 'abcdefghijklmnopqrstuvwxyz0123456789'[crypto.randomInt(36)],
+  ).join('');
   const token = `vlk_${publicId}_${crypto.randomBytes(32).toString('hex')}`;
   return { token, prefix: `vlk_${publicId}`, keyHash: sha256hex(token) };
 }
@@ -19,7 +22,14 @@ export async function createApiKey(input: {
   name: string;
   scopes: ApiScope[];
   expiresInDays: number;
-}): Promise<{ id: string; name: string; prefix: string; scopes: ApiScope[]; expiresAt: string; token: string }> {
+}): Promise<{
+  id: string;
+  name: string;
+  prefix: string;
+  scopes: ApiScope[];
+  expiresAt: string;
+  token: string;
+}> {
   const days = Math.min(365, Math.max(1, Math.round(input.expiresInDays)));
   const { token, prefix, keyHash } = mintApiKey();
   const row = await prisma.apiKey.create({
@@ -33,7 +43,14 @@ export async function createApiKey(input: {
       expiresAt: new Date(Date.now() + days * 86_400_000),
     },
   });
-  return { id: row.id, name: row.name, prefix: row.prefix, scopes: input.scopes, expiresAt: row.expiresAt.toISOString(), token };
+  return {
+    id: row.id,
+    name: row.name,
+    prefix: row.prefix,
+    scopes: input.scopes,
+    expiresAt: row.expiresAt.toISOString(),
+    token,
+  };
 }
 
 export async function revokeApiKey(userId: string, apiKeyId: string): Promise<void> {

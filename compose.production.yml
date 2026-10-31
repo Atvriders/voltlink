@@ -20,41 +20,41 @@ x-voltlink-common: &voltlink
   networks: [internal]
   environment: &app_env
     NODE_ENV: production
-    PORT: "3000"
+    PORT: '3000'
     HOST: 0.0.0.0
-    DATABASE_URL: "postgresql://voltlink:${POSTGRES_PASSWORD}@postgres:5432/voltlink"
-    REDIS_URL: "redis://redis:6379"
-    PUBLIC_URL: "${PUBLIC_URL:-https://voltlink.example.com}"
-    VL_ALLOW_INSECURE_HTTP: "${VL_ALLOW_INSECURE_HTTP:-false}"
-    TRUST_PROXY: "${TRUST_PROXY:-false}"
-    VL_WEBAUTHN_RP_ID: "${VL_WEBAUTHN_RP_ID:-}"
-    VL_CSP_CONNECT_ORIGINS: "${VL_CSP_CONNECT_ORIGINS:-}"
-    STATUS_PORT: "3001"
-    JWT_SECRET: "${JWT_SECRET:-}"
-    JWT_EXPIRES_SEC: "${JWT_EXPIRES_SEC:-1209600}"
-    VL_MASTER_KEY: "${VL_MASTER_KEY:-}"
-    VL_MASTER_KEYS: "${VL_MASTER_KEYS:-}"
-    VL_RATE_LIMIT_PER_MIN: "${VL_RATE_LIMIT_PER_MIN:-900}"
-    VL_STEPUP_WINDOW_SEC: "${VL_STEPUP_WINDOW_SEC:-300}"
-    VL_SETUP_TOKEN: "${VL_SETUP_TOKEN:-}"
-    SMTP_URL: "${SMTP_URL:-}"
-    MAIL_FROM: "${MAIL_FROM:-VoltLink <no-reply@voltlink.local>}"
-    MAIL_TO_CONSOLE: "${MAIL_TO_CONSOLE:-true}"
-    VL_TOTP_ISSUER: "${VL_TOTP_ISSUER:-VoltLink}"
-    VL_WEBAUTHN_RP_NAME: "${VL_WEBAUTHN_RP_NAME:-VoltLink}"
-    TESLA_CLIENT_ID: "${TESLA_CLIENT_ID:-}"
-    TESLA_CLIENT_SECRET: "${TESLA_CLIENT_SECRET:-}"
-    TESLA_REDIRECT_URI: "${TESLA_REDIRECT_URI:-}"
-    TESLA_BASE_URL: "${TESLA_BASE_URL:-https://fleet-api.prd.na.vn.cloud.tesla.com}"
-    TESSIE_BASE_URL: "${TESSIE_BASE_URL:-https://api.tessie.com}"
-    VAPID_PUBLIC_KEY: "${VAPID_PUBLIC_KEY:-}"
-    VAPID_PRIVATE_KEY: "${VAPID_PRIVATE_KEY:-}"
-    VAPID_SUBJECT: "${VAPID_SUBJECT:-}"
-    VL_DEMO_DEFAULT_ENABLED: "${VL_DEMO_DEFAULT_ENABLED:-false}"
-    VL_OUTBOUND_ALLOW: "${VL_OUTBOUND_ALLOW:-}"
-    VL_PUSH_SERVICE_HOSTS: "${VL_PUSH_SERVICE_HOSTS:-}"
-    VL_DEV_ECHO_TOKENS: "false"
-    LOG_LEVEL: "${LOG_LEVEL:-info}"
+    DATABASE_URL: 'postgresql://voltlink:${POSTGRES_PASSWORD}@postgres:5432/voltlink'
+    REDIS_URL: 'redis://redis:6379'
+    PUBLIC_URL: '${PUBLIC_URL:-https://voltlink.example.com}'
+    VL_ALLOW_INSECURE_HTTP: '${VL_ALLOW_INSECURE_HTTP:-false}'
+    TRUST_PROXY: '${TRUST_PROXY:-false}'
+    VL_WEBAUTHN_RP_ID: '${VL_WEBAUTHN_RP_ID:-}'
+    VL_CSP_CONNECT_ORIGINS: '${VL_CSP_CONNECT_ORIGINS:-}'
+    STATUS_PORT: '3001'
+    JWT_SECRET: '${JWT_SECRET:-}'
+    JWT_EXPIRES_SEC: '${JWT_EXPIRES_SEC:-1209600}'
+    VL_MASTER_KEY: '${VL_MASTER_KEY:-}'
+    VL_MASTER_KEYS: '${VL_MASTER_KEYS:-}'
+    VL_RATE_LIMIT_PER_MIN: '${VL_RATE_LIMIT_PER_MIN:-900}'
+    VL_STEPUP_WINDOW_SEC: '${VL_STEPUP_WINDOW_SEC:-300}'
+    VL_SETUP_TOKEN: '${VL_SETUP_TOKEN:-}'
+    SMTP_URL: '${SMTP_URL:-}'
+    MAIL_FROM: '${MAIL_FROM:-VoltLink <no-reply@voltlink.local>}'
+    MAIL_TO_CONSOLE: '${MAIL_TO_CONSOLE:-true}'
+    VL_TOTP_ISSUER: '${VL_TOTP_ISSUER:-VoltLink}'
+    VL_WEBAUTHN_RP_NAME: '${VL_WEBAUTHN_RP_NAME:-VoltLink}'
+    TESLA_CLIENT_ID: '${TESLA_CLIENT_ID:-}'
+    TESLA_CLIENT_SECRET: '${TESLA_CLIENT_SECRET:-}'
+    TESLA_REDIRECT_URI: '${TESLA_REDIRECT_URI:-}'
+    TESLA_BASE_URL: '${TESLA_BASE_URL:-https://fleet-api.prd.na.vn.cloud.tesla.com}'
+    TESSIE_BASE_URL: '${TESSIE_BASE_URL:-https://api.tessie.com}'
+    VAPID_PUBLIC_KEY: '${VAPID_PUBLIC_KEY:-}'
+    VAPID_PRIVATE_KEY: '${VAPID_PRIVATE_KEY:-}'
+    VAPID_SUBJECT: '${VAPID_SUBJECT:-}'
+    VL_DEMO_DEFAULT_ENABLED: '${VL_DEMO_DEFAULT_ENABLED:-false}'
+    VL_OUTBOUND_ALLOW: '${VL_OUTBOUND_ALLOW:-}'
+    VL_PUSH_SERVICE_HOSTS: '${VL_PUSH_SERVICE_HOSTS:-}'
+    VL_DEV_ECHO_TOKENS: 'false'
+    LOG_LEVEL: '${LOG_LEVEL:-info}'
 
 services:
   postgres:
@@ -62,13 +62,13 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: voltlink
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-}"
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD:-}'
       POSTGRES_DB: voltlink
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks: [internal]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U voltlink -d voltlink"]
+      test: ['CMD-SHELL', 'pg_isready -U voltlink -d voltlink']
       interval: 10s
       timeout: 5s
       retries: 10
@@ -78,7 +78,7 @@ services:
     restart: unless-stopped
     networks: [internal]
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 10
@@ -89,7 +89,7 @@ services:
       <<: *app_env
       VL_ROLE: migrate
     healthcheck:
-      test: ["CMD", "/usr/local/bin/voltlink-healthcheck"]
+      test: ['CMD', '/usr/local/bin/voltlink-healthcheck']
       interval: 30s
       timeout: 5s
       start_period: 10s
@@ -97,7 +97,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    restart: "no"
+    restart: 'no'
 
   web:
     <<: *voltlink
@@ -112,9 +112,9 @@ services:
       migrate:
         condition: service_completed_successfully
     ports:
-      - "127.0.0.1:${WEB_PORT:-3110}:3000"
+      - '127.0.0.1:${WEB_PORT:-3110}:3000'
     healthcheck:
-      test: ["CMD", "/usr/local/bin/voltlink-healthcheck"]
+      test: ['CMD', '/usr/local/bin/voltlink-healthcheck']
       interval: 30s
       timeout: 5s
       start_period: 60s
@@ -133,7 +133,7 @@ services:
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "/usr/local/bin/voltlink-healthcheck"]
+      test: ['CMD', '/usr/local/bin/voltlink-healthcheck']
       interval: 30s
       timeout: 5s
       start_period: 30s
@@ -152,7 +152,7 @@ services:
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "/usr/local/bin/voltlink-healthcheck"]
+      test: ['CMD', '/usr/local/bin/voltlink-healthcheck']
       interval: 30s
       timeout: 5s
       start_period: 30s
@@ -161,7 +161,7 @@ services:
   # Optional: an independent public status role on a separate port.
   status:
     <<: *voltlink
-    profiles: ["status"]
+    profiles: ['status']
     environment:
       <<: *app_env
       VL_ROLE: status
@@ -171,9 +171,9 @@ services:
       migrate:
         condition: service_completed_successfully
     ports:
-      - "127.0.0.1:${STATUS_PORT:-3001}:3001"
+      - '127.0.0.1:${STATUS_PORT:-3001}:3001'
     healthcheck:
-      test: ["CMD", "/usr/local/bin/voltlink-healthcheck"]
+      test: ['CMD', '/usr/local/bin/voltlink-healthcheck']
       interval: 30s
       timeout: 5s
       start_period: 60s

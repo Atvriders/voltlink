@@ -19,7 +19,8 @@ import type { Actor } from './types';
 let operatorOrgIdCache: { value: string; at: number } | null = null;
 
 export async function getOperatorOrgId(db = prisma): Promise<string | null> {
-  if (operatorOrgIdCache && Date.now() - operatorOrgIdCache.at < 60_000) return operatorOrgIdCache.value;
+  if (operatorOrgIdCache && Date.now() - operatorOrgIdCache.at < 60_000)
+    return operatorOrgIdCache.value;
   const row = await db.appSetting.findUnique({ where: { key: 'instance.operatorOrgId' } });
   const value = row?.value ?? null;
   operatorOrgIdCache = { value: value ?? '', at: Date.now() };
@@ -36,7 +37,9 @@ export async function effectiveVehiclePermissions(
     db.membership.findUnique({
       where: { organizationId_userId: { organizationId: v.organizationId, userId: actor.userId } },
     }),
-    db.vehicleGrant.findUnique({ where: { vehicleId_userId: { vehicleId: v.id, userId: actor.userId } } }),
+    db.vehicleGrant.findUnique({
+      where: { vehicleId_userId: { vehicleId: v.id, userId: actor.userId } },
+    }),
   ]);
   const perms = new Set<VehiclePermission>();
   if (m?.status === 'ACTIVE' && m.vehicleScope === 'ALL') {
@@ -52,7 +55,8 @@ export async function effectiveVehiclePermissions(
     if (actor.organizationId !== v.organizationId) return new Set<VehiclePermission>();
     return new Set([...perms].filter((p) => scopeAllows(actor.scopes, p)));
   }
-  if (actor.kind === 'automation' && actor.organizationId !== v.organizationId) return new Set<VehiclePermission>();
+  if (actor.kind === 'automation' && actor.organizationId !== v.organizationId)
+    return new Set<VehiclePermission>();
   return perms;
 }
 
@@ -78,9 +82,15 @@ export async function assertProviderAccountAccess(
   if (actor.kind === 'apiKey' && !actor.scopes.includes('commands:write')) {
     throw new AccessDenied('API_KEY_SCOPE', 'This API key cannot issue commands.', 403);
   }
-  if (actor.kind !== 'session' && actor.kind !== 'apiKey') throw new AccessDenied('FORBIDDEN', 'This endpoint requires an interactive session.', 403);
+  if (actor.kind !== 'session' && actor.kind !== 'apiKey')
+    throw new AccessDenied('FORBIDDEN', 'This endpoint requires an interactive session.', 403);
   const m = await prisma.membership.findUnique({
-    where: { organizationId_userId: { organizationId: providerAccount.organizationId, userId: actor.userId } },
+    where: {
+      organizationId_userId: {
+        organizationId: providerAccount.organizationId,
+        userId: actor.userId,
+      },
+    },
   });
   if (m?.status === 'ACTIVE' && m.providerScope === 'ALL') {
     if (need === 'manage') {
@@ -98,7 +108,8 @@ export async function assertProviderAccountAccess(
   });
   if (need === 'manage' && grant?.canManage) return;
   if (need === 'command' && (grant?.canCommand ?? false)) return;
-  if (need === 'manage') throw new AccessDenied('FORBIDDEN', 'Missing providers.manage on this provider account.');
+  if (need === 'manage')
+    throw new AccessDenied('FORBIDDEN', 'Missing providers.manage on this provider account.');
   throw new AccessDenied('FORBIDDEN', 'Missing command access on this provider account.');
 }
 
@@ -106,7 +117,16 @@ export async function assertVehicleAccess(
   actor: Actor,
   vehicleId: string,
   perm: VehiclePermission,
-): Promise<{ vehicle: { id: string; organizationId: string; providerAccountId: string; providerAccount: { id: string; organizationId: string } | null; [key: string]: unknown }; permissions: Set<VehiclePermission> }> {
+): Promise<{
+  vehicle: {
+    id: string;
+    organizationId: string;
+    providerAccountId: string;
+    providerAccount: { id: string; organizationId: string } | null;
+    [key: string]: unknown;
+  };
+  permissions: Set<VehiclePermission>;
+}> {
   const vehicle = await prisma.vehicle.findUnique({
     where: { id: vehicleId },
     include: { snapshot: true, providerAccount: true },
@@ -114,7 +134,8 @@ export async function assertVehicleAccess(
   if (!vehicle) throw notFound('Vehicle not found.');
   const permissions = await effectiveVehiclePermissions(actor, vehicle);
   if (!permissions.has('vehicles.read')) throw notFound('Vehicle not found.'); // existence is never disclosed
-  if (!permissions.has(perm)) throw new AccessDenied('FORBIDDEN', `Missing ${perm} on this vehicle.`, 403);
+  if (!permissions.has(perm))
+    throw new AccessDenied('FORBIDDEN', `Missing ${perm} on this vehicle.`, 403);
   if (perm === 'vehicles.command' || perm === 'vehicles.command_high_risk') {
     await assertProviderAccountAccess(actor, vehicle.providerAccount, 'command');
   }
@@ -130,8 +151,13 @@ export async function assertVehicleAccess(
   };
 }
 
-export async function orgPermissions(actor: Actor, organizationId: string, db = prisma): Promise<Set<Permission>> {
-  if (actor.kind === 'system') return new Set<Permission>([...ORG_PERMISSIONS, ...VEHICLE_PERMISSIONS]);
+export async function orgPermissions(
+  actor: Actor,
+  organizationId: string,
+  db = prisma,
+): Promise<Set<Permission>> {
+  if (actor.kind === 'system')
+    return new Set<Permission>([...ORG_PERMISSIONS, ...VEHICLE_PERMISSIONS]);
   const m = await db.membership.findUnique({
     where: { organizationId_userId: { organizationId, userId: actor.userId } },
   });
@@ -144,14 +170,23 @@ export async function orgPermissions(actor: Actor, organizationId: string, db = 
     if (actor.organizationId !== organizationId) return new Set<Permission>();
     return new Set([...perms].filter((p) => scopeAllowsOrg(actor.scopes, p)));
   }
-  if (actor.kind === 'automation' && actor.organizationId !== organizationId) return new Set<Permission>();
+  if (actor.kind === 'automation' && actor.organizationId !== organizationId)
+    return new Set<Permission>();
   return perms;
 }
 
 function scopeAllowsOrg(scopes: readonly string[], perm: Permission): boolean {
   const s = new Set(scopes);
   const map: Record<string, readonly string[]> = {
-    'org.read': ['vehicles:read', 'fleet:write', 'automations:write', 'commands:write', 'history:write', 'exports:read', 'status:write'],
+    'org.read': [
+      'vehicles:read',
+      'fleet:write',
+      'automations:write',
+      'commands:write',
+      'history:write',
+      'exports:read',
+      'status:write',
+    ],
     'fleet.read': ['vehicles:read', 'fleet:write', 'automations:write'],
     'fleet.manage': ['fleet:write'],
     'automations.read': ['vehicles:read', 'automations:write'],
@@ -172,7 +207,8 @@ export async function assertOrgPermission(
 ): Promise<Set<Permission>> {
   const perms = await orgPermissions(actor, organizationId);
   if (!perms.has('org.read')) throw notFound('Organization not found.');
-  if (!perms.has(perm)) throw new AccessDenied('FORBIDDEN', `Missing ${perm} in this organization.`, 403);
+  if (!perms.has(perm))
+    throw new AccessDenied('FORBIDDEN', `Missing ${perm} in this organization.`, 403);
   return perms;
 }
 
@@ -182,7 +218,12 @@ export async function accessibleVehicleIds(
   opts: { organizationId?: string } = {},
 ): Promise<string[]> {
   if (actor.kind === 'system') {
-    const rows = await prisma.vehicle.findMany({ where: opts.organizationId ? { organizationId: opts.organizationId, active: true } : { active: true }, select: { id: true } });
+    const rows = await prisma.vehicle.findMany({
+      where: opts.organizationId
+        ? { organizationId: opts.organizationId, active: true }
+        : { active: true },
+      select: { id: true },
+    });
     return rows.map((r) => r.id);
   }
   if (actor.kind === 'apiKey' || actor.kind === 'automation') {
@@ -208,11 +249,15 @@ export async function accessibleVehicleIds(
   });
   const rolePermitted: string[] = [];
   for (const m of orgMemberships) {
-    if (m.vehicleScope === 'ALL' && (ROLE_PERMISSIONS[m.role] as readonly string[]).includes(perm)) rolePermitted.push(m.organizationId);
+    if (m.vehicleScope === 'ALL' && (ROLE_PERMISSIONS[m.role] as readonly string[]).includes(perm))
+      rolePermitted.push(m.organizationId);
   }
   const [byRole, byGrant] = await Promise.all([
     rolePermitted.length
-      ? prisma.vehicle.findMany({ where: { organizationId: { in: rolePermitted }, active: true }, select: { id: true } })
+      ? prisma.vehicle.findMany({
+          where: { organizationId: { in: rolePermitted }, active: true },
+          select: { id: true },
+        })
       : Promise.resolve([] as { id: string }[]),
     prisma.vehicleGrant.findMany({
       where: {
@@ -229,13 +274,19 @@ export async function accessibleVehicleIds(
     if (granted.has(perm)) ids.add(g.vehicleId);
   }
   if (opts.organizationId) {
-    const rows = await prisma.vehicle.findMany({ where: { id: { in: [...ids] }, organizationId: opts.organizationId, active: true }, select: { id: true } });
+    const rows = await prisma.vehicle.findMany({
+      where: { id: { in: [...ids] }, organizationId: opts.organizationId, active: true },
+      select: { id: true },
+    });
     return rows.map((r) => r.id);
   }
   return [...ids];
 }
 
-export async function assertOperator(actor: Actor, perm: 'status.manage' | 'incidents.manage' | 'instance.support_read'): Promise<void> {
+export async function assertOperator(
+  actor: Actor,
+  perm: 'status.manage' | 'incidents.manage' | 'instance.support_read',
+): Promise<void> {
   if (actor.kind === 'session' && actor.isInstanceAdmin) return;
   if (actor.kind === 'system') return;
   const operatorId = await getOperatorOrgId();
@@ -250,14 +301,19 @@ export function assertInstanceAdmin(actor: Actor): void {
 
 /** Users allowed to read a vehicle (for SSE audiences, notifications, …). */
 export async function vehicleReaderIds(vehicleId: string): Promise<string[]> {
-  const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId }, select: { organizationId: true } });
+  const vehicle = await prisma.vehicle.findUnique({
+    where: { id: vehicleId },
+    select: { organizationId: true },
+  });
   if (!vehicle) return [];
   const members = await prisma.membership.findMany({
     where: { organizationId: vehicle.organizationId, status: 'ACTIVE', vehicleScope: 'ALL' },
     select: { userId: true, role: true },
   });
   const ids = new Set<string>(
-    members.filter((m) => (ROLE_PERMISSIONS[m.role] as readonly string[]).includes('vehicles.read')).map((m) => m.userId),
+    members
+      .filter((m) => (ROLE_PERMISSIONS[m.role] as readonly string[]).includes('vehicles.read'))
+      .map((m) => m.userId),
   );
   const grants = await prisma.vehicleGrant.findMany({
     where: { vehicleId, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },

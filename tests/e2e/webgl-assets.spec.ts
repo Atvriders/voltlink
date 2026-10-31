@@ -18,9 +18,14 @@ test('showroom renders GLB assets for all demo vehicle classes', async ({ page }
   await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
 
   for (const name of demoVehicles) {
-    await page.getByRole('button', { name: new RegExp(name) }).first().click();
+    await page
+      .getByRole('button', { name: new RegExp(name) })
+      .first()
+      .click();
     await expect(page.locator('[data-testid="vehicle-viewer"]')).toBeVisible({ timeout: 20000 });
-    await expect(page.locator('[data-testid="vehicle-viewer"][data-asset="glb"]')).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('[data-testid="vehicle-viewer"][data-asset="glb"]')).toBeVisible({
+      timeout: 30000,
+    });
     console.log(`glb asset rendered for ${name}`);
   }
 });

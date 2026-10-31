@@ -1,6 +1,13 @@
 // Provider framework: the interface every vehicle provider implements.
 
-import type { Capability, CommandParams, CommandType, ProviderId, VehicleClass, VehicleState } from '@voltlink/shared';
+import type {
+  Capability,
+  CommandParams,
+  CommandType,
+  ProviderId,
+  VehicleClass,
+  VehicleState,
+} from '@voltlink/shared';
 
 export interface ProviderContext {
   accountId: string;
@@ -44,11 +51,18 @@ export interface CommandDispatchResult {
 export interface VehicleProvider {
   id: ProviderId;
   /** Human-readable readiness checks for the diagnostics page. */
-  readiness(ctx: ProviderContext): Promise<{ ok: boolean; checks: { name: string; ok: boolean; detail: string }[] }>;
+  readiness(
+    ctx: ProviderContext,
+  ): Promise<{ ok: boolean; checks: { name: string; ok: boolean; detail: string }[] }>;
   listVehicles(ctx: ProviderContext): Promise<ProviderVehicleDescriptor[]>;
   fetchState(ctx: ProviderContext, providerVehicleId: string): Promise<FetchStateResult>;
   /** Dispatch a command to the provider. Never throws for provider-level rejections. */
-  sendCommand(ctx: ProviderContext, providerVehicleId: string, type: CommandType, params: CommandParams): Promise<CommandDispatchResult>;
+  sendCommand(
+    ctx: ProviderContext,
+    providerVehicleId: string,
+    type: CommandType,
+    params: CommandParams,
+  ): Promise<CommandDispatchResult>;
   health(ctx: ProviderContext): Promise<{ ok: boolean; detail: string }>;
 }
 
@@ -76,7 +90,8 @@ export function hashString(s: string): number {
 /** Sleep-aware freshness window (seconds) per provider. */
 export function freshFor(provider: string, stateStatus: string | undefined): number {
   if (provider === 'demo') return 120;
-  if (stateStatus === 'online' || stateStatus === 'charging' || stateStatus === 'driving') return 60;
+  if (stateStatus === 'online' || stateStatus === 'charging' || stateStatus === 'driving')
+    return 60;
   if (stateStatus === 'asleep') return 15 * 60;
   return 10 * 60;
 }

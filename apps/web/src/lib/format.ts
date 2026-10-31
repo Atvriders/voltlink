@@ -44,7 +44,11 @@ export function fmtDuration(sec: number): string {
 export function fmtClock(iso: string | undefined, tz?: string): string {
   if (!iso) return '—';
   try {
-    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: tz });
+    return new Date(iso).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: tz,
+    });
   } catch {
     return '—';
   }
@@ -70,14 +74,20 @@ export function timeAgo(iso: string | undefined): string {
   return `${Math.round(sec / 86400)}d ago`;
 }
 
-export const FRESHNESS_LABEL: Record<string, { label: string; tone: 'ok' | 'warn' | 'danger' | 'info' }> = {
+export const FRESHNESS_LABEL: Record<
+  string,
+  { label: string; tone: 'ok' | 'warn' | 'danger' | 'info' }
+> = {
   live: { label: 'Live', tone: 'ok' },
   recent: { label: 'Recently updated', tone: 'info' },
   stale: { label: 'Stale', tone: 'warn' },
   last_known: { label: 'Last known', tone: 'danger' },
 };
 
-export const STATUS_LABEL: Record<string, { label: string; tone: 'ok' | 'warn' | 'danger' | 'info' }> = {
+export const STATUS_LABEL: Record<
+  string,
+  { label: string; tone: 'ok' | 'warn' | 'danger' | 'info' }
+> = {
   online: { label: 'Online', tone: 'ok' },
   asleep: { label: 'Asleep', tone: 'info' },
   offline: { label: 'Offline', tone: 'danger' },
@@ -87,7 +97,10 @@ export const STATUS_LABEL: Record<string, { label: string; tone: 'ok' | 'warn' |
   unknown: { label: 'Unknown', tone: 'warn' },
 };
 
-export const COMMAND_STATUS_LABEL: Record<string, { label: string; tone: 'ok' | 'warn' | 'danger' | 'info' }> = {
+export const COMMAND_STATUS_LABEL: Record<
+  string,
+  { label: string; tone: 'ok' | 'warn' | 'danger' | 'info' }
+> = {
   queued: { label: 'Queued', tone: 'info' },
   submitted: { label: 'Submitted', tone: 'info' },
   accepted: { label: 'Provider accepted', tone: 'info' },

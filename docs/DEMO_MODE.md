@@ -10,13 +10,13 @@ vehicles and a month of realistic data, seeded from a fixed random seed.
 
 ## The demo fleet
 
-| Vehicle | Class | Notes |
-| --- | --- | --- |
-| Aurora | Compact sedan | Commuter schedule |
-| Comet | Sport sedan | Rejects `remote_start` (as scripted) |
-| Terra | Compact crossover | Night-time charging |
-| Atlas | SUV | The family hauler |
-| Bison | Pickup | Rejects `open_trunk` (as scripted); a `wake` times out |
+| Vehicle | Class             | Notes                                                  |
+| ------- | ----------------- | ------------------------------------------------------ |
+| Aurora  | Compact sedan     | Commuter schedule                                      |
+| Comet   | Sport sedan       | Rejects `remote_start` (as scripted)                   |
+| Terra   | Compact crossover | Night-time charging                                    |
+| Atlas   | SUV               | The family hauler                                      |
+| Bison   | Pickup            | Rejects `open_trunk` (as scripted); a `wake` times out |
 
 The fleet uses fictional makes (Halcyon, Cascade, Northline) and a fictional
 region (the in-app map is a deterministic fictional city — no external tiles).

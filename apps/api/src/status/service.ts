@@ -23,7 +23,12 @@ export async function ensureComponents(): Promise<void> {
   const existing = await prisma.statusComponent.count();
   if (existing > 0) return;
   const components = [
-    { key: 'web', name: 'Web application', group: 'Core', description: 'The VoltLink web application and API.' },
+    {
+      key: 'web',
+      name: 'Web application',
+      group: 'Core',
+      description: 'The VoltLink web application and API.',
+    },
     { key: 'api', name: 'Public API', group: 'Core' },
     { key: 'auth', name: 'Authentication', group: 'Core' },
     { key: 'postgres', name: 'PostgreSQL', group: 'Data' },
@@ -40,7 +45,9 @@ export async function ensureComponents(): Promise<void> {
     { key: 'tessie', name: 'Tessie provider (optional)', group: 'Providers' },
     { key: 'demo', name: 'Demo provider', group: 'Providers' },
   ];
-  await prisma.statusComponent.createMany({ data: components.map((c) => ({ ...c, status: 'operational' })) });
+  await prisma.statusComponent.createMany({
+    data: components.map((c) => ({ ...c, status: 'operational' })),
+  });
 }
 
 interface CheckResult {
@@ -74,7 +81,8 @@ async function checkComponent(key: string): Promise<CheckResult> {
     }
     case 'redis': {
       const q = getQueue();
-      if (!env.REDIS_URL) return { ok: true, detail: 'Redis not configured — Postgres queue in use.' };
+      if (!env.REDIS_URL)
+        return { ok: true, detail: 'Redis not configured — Postgres queue in use.' };
       const ok = await q.ping();
       return { ok, latencyMs: latency(), detail: ok ? 'Redis reachable.' : 'Redis unreachable.' };
     }
@@ -82,45 +90,101 @@ async function checkComponent(key: string): Promise<CheckResult> {
       const q = getQueue();
       const dead = await prisma.backgroundJob.count({ where: { status: 'dead' } });
       const depth = env.REDIS_URL ? await q.depth('default') : 0;
-      return { ok: dead < 50, latencyMs: latency(), detail: `${dead} dead jobs, queue depth ${depth}.` };
+      return {
+        ok: dead < 50,
+        latencyMs: latency(),
+        detail: `${dead} dead jobs, queue depth ${depth}.`,
+      };
     }
     case 'scheduler':
-      return { ok: poller.isRunning() || env.NODE_ENV === 'test', latencyMs: latency(), detail: poller.isRunning() ? 'Scheduler loop active.' : 'Scheduler not running in this process.' };
+      return {
+        ok: poller.isRunning() || env.NODE_ENV === 'test',
+        latencyMs: latency(),
+        detail: poller.isRunning()
+          ? 'Scheduler loop active.'
+          : 'Scheduler not running in this process.',
+      };
     case 'telemetry': {
-      const fresh = await prisma.vehicleSnapshot.findFirst({ where: { fetchedAt: { gt: new Date(Date.now() - 15 * 60000) } } });
-      return { ok: !!fresh, latencyMs: latency(), detail: fresh ? 'Telemetry current.' : 'No snapshot younger than 15 minutes.' };
+      const fresh = await prisma.vehicleSnapshot.findFirst({
+        where: { fetchedAt: { gt: new Date(Date.now() - 15 * 60000) } },
+      });
+      return {
+        ok: !!fresh,
+        latencyMs: latency(),
+        detail: fresh ? 'Telemetry current.' : 'No snapshot younger than 15 minutes.',
+      };
     }
     case 'commands': {
-      const pending = await prisma.vehicleCommand.count({ where: { status: { in: ['queued', 'submitted', 'accepted'] }, createdAt: { gt: new Date(Date.now() - 300_000) } } });
+      const pending = await prisma.vehicleCommand.count({
+        where: {
+          status: { in: ['queued', 'submitted', 'accepted'] },
+          createdAt: { gt: new Date(Date.now() - 300_000) },
+        },
+      });
       return { ok: pending < 200, latencyMs: latency(), detail: `${pending} commands in flight.` };
     }
     case 'automations': {
-      const failed = await prisma.automationExecution.count({ where: { result: 'failed', triggeredAt: { gt: new Date(Date.now() - 3600_000) } } });
-      return { ok: failed < 20, latencyMs: latency(), detail: `${failed} automation failures in the last hour.` };
+      const failed = await prisma.automationExecution.count({
+        where: { result: 'failed', triggeredAt: { gt: new Date(Date.now() - 3600_000) } },
+      });
+      return {
+        ok: failed < 20,
+        latencyMs: latency(),
+        detail: `${failed} automation failures in the last hour.`,
+      };
     }
     case 'notifications': {
       const count = await prisma.webhookEndpoint.count({ where: { enabled: true, lastStatus: 0 } });
-      return { ok: count < 50, latencyMs: latency(), detail: `${count} endpoints with recent failures.` };
+      return {
+        ok: count < 50,
+        latencyMs: latency(),
+        detail: `${count} endpoints with recent failures.`,
+      };
     }
     case 'realtime':
       return { ok: true, latencyMs: latency(), detail: `${sseCount()} connected clients.` };
     case 'maps':
-      return { ok: true, latencyMs: latency(), detail: 'Map rendering is client-side (offline demo or configured tile source).' };
+      return {
+        ok: true,
+        latencyMs: latency(),
+        detail: 'Map rendering is client-side (offline demo or configured tile source).',
+      };
     case 'tesla': {
-      const accounts = await prisma.providerAccount.findMany({ where: { provider: 'tesla', status: { not: 'revoked' } } });
-      const withErrors = accounts.filter((a) => a.lastError && a.lastSyncAt && a.lastSyncAt > new Date(Date.now() - 3600_000));
+      const accounts = await prisma.providerAccount.findMany({
+        where: { provider: 'tesla', status: { not: 'revoked' } },
+      });
+      const withErrors = accounts.filter(
+        (a) => a.lastError && a.lastSyncAt && a.lastSyncAt > new Date(Date.now() - 3600_000),
+      );
       if (accounts.length === 0) return { ok: true, detail: 'No Tesla accounts connected.' };
-      return { ok: withErrors.length === 0, latencyMs: latency(), detail: `${accounts.length} accounts, ${withErrors.length} with recent errors.` };
+      return {
+        ok: withErrors.length === 0,
+        latencyMs: latency(),
+        detail: `${accounts.length} accounts, ${withErrors.length} with recent errors.`,
+      };
     }
     case 'tessie': {
-      const accounts = await prisma.providerAccount.count({ where: { provider: 'tessie', status: { not: 'revoked' } } });
-      return { ok: true, detail: accounts === 0 ? 'No Tessie accounts connected.' : `${accounts} accounts connected.` };
+      const accounts = await prisma.providerAccount.count({
+        where: { provider: 'tessie', status: { not: 'revoked' } },
+      });
+      return {
+        ok: true,
+        detail:
+          accounts === 0 ? 'No Tessie accounts connected.' : `${accounts} accounts connected.`,
+      };
     }
     case 'demo': {
       // Z-DEMOSCOPE: degradation is per organization; report any degraded demo
       // organization as a degraded demo provider check.
       const degraded = await prisma.organization.count({ where: { demoDegraded: true } });
-      return { ok: degraded === 0, latencyMs: latency(), detail: degraded === 0 ? 'Demo provider healthy.' : `${degraded} organization(s) simulate demo-provider degradation.` };
+      return {
+        ok: degraded === 0,
+        latencyMs: latency(),
+        detail:
+          degraded === 0
+            ? 'Demo provider healthy.'
+            : `${degraded} organization(s) simulate demo-provider degradation.`,
+      };
     }
     default:
       return { ok: true, detail: 'No check defined.' };
@@ -133,13 +197,26 @@ export async function runStatusChecks(): Promise<void> {
   const components = await prisma.statusComponent.findMany();
   for (const c of components) {
     if (c.manualOverride) continue;
-    const result = await checkComponent(c.key).catch(() => ({ ok: false, latencyMs: undefined as number | undefined, detail: 'check error' }));
+    const result = await checkComponent(c.key).catch(() => ({
+      ok: false,
+      latencyMs: undefined as number | undefined,
+      detail: 'check error',
+    }));
     const newStatus: ComponentStatus = result.ok ? 'operational' : 'major_outage';
     if (newStatus !== c.status) {
-      await prisma.statusComponent.update({ where: { key: c.key }, data: { status: newStatus, updatedAt: new Date() } });
+      await prisma.statusComponent.update({
+        where: { key: c.key },
+        data: { status: newStatus, updatedAt: new Date() },
+      });
     }
     await prisma.statusCheck.create({
-      data: { componentKey: c.key, ok: result.ok, latencyMs: result.latencyMs ?? null, detail: result.detail?.slice(0, 400), at: new Date() },
+      data: {
+        componentKey: c.key,
+        ok: result.ok,
+        latencyMs: result.latencyMs ?? null,
+        detail: result.detail?.slice(0, 400),
+        at: new Date(),
+      },
     });
   }
   // prune old checks beyond 90d happens in retention
@@ -149,15 +226,24 @@ export function overallStatus(statuses: ComponentStatus[]): ComponentStatus {
   if (statuses.length === 0) return 'unknown';
   const rank = statuses.map((s) => STATUS_ORDER[s] ?? 5);
   const worst = Math.max(...rank);
-  const entry = (Object.entries(STATUS_ORDER) as [ComponentStatus, number][]).find(([, v]) => v === worst);
+  const entry = (Object.entries(STATUS_ORDER) as [ComponentStatus, number][]).find(
+    ([, v]) => v === worst,
+  );
   return entry?.[0] ?? 'unknown';
 }
 
 export async function publicStatusBundle(): Promise<unknown> {
   const [components, incidents, maintenance, updated] = await Promise.all([
     prisma.statusComponent.findMany({ orderBy: { group: 'asc' } }),
-    prisma.incident.findMany({ where: { public: true }, include: { updates: { orderBy: { createdAt: 'asc' } } }, orderBy: { createdAt: 'desc' } }),
-    prisma.maintenanceWindow.findMany({ where: { endsAt: { gt: new Date() } }, orderBy: { startsAt: 'asc' } }),
+    prisma.incident.findMany({
+      where: { public: true },
+      include: { updates: { orderBy: { createdAt: 'asc' } } },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.maintenanceWindow.findMany({
+      where: { endsAt: { gt: new Date() } },
+      orderBy: { startsAt: 'asc' },
+    }),
     prisma.statusComponent.aggregate({ _max: { updatedAt: true } }),
   ]);
   const statuses = components.map((c) => c.status as ComponentStatus);
@@ -176,15 +262,28 @@ export async function publicStatusBundle(): Promise<unknown> {
       uptime90dPct: uptime.get(c.key) ?? 100,
     })),
     incidents: incidents.map(toIncidentDto),
-    maintenance: maintenance.map((m) => ({ id: m.id, title: m.title, description: m.description ?? undefined, startsAt: m.startsAt.toISOString(), endsAt: m.endsAt.toISOString(), components: (m.components ?? []) as string[], status: m.status })),
+    maintenance: maintenance.map((m) => ({
+      id: m.id,
+      title: m.title,
+      description: m.description ?? undefined,
+      startsAt: m.startsAt.toISOString(),
+      endsAt: m.endsAt.toISOString(),
+      components: (m.components ?? []) as string[],
+      status: m.status,
+    })),
     updatedAt: (updated._max.updatedAt ?? new Date()).toISOString(),
-    uptime30dPct: Math.round([...uptime.values()].reduce((a, b) => a + b, 0) / Math.max(1, uptime.size)),
+    uptime30dPct: Math.round(
+      [...uptime.values()].reduce((a, b) => a + b, 0) / Math.max(1, uptime.size),
+    ),
   };
 }
 
 async function uptimePct(days: number): Promise<Map<string, number>> {
   const from = new Date(Date.now() - days * 86400000);
-  const rows = await prisma.statusCheck.findMany({ where: { at: { gte: from } }, select: { componentKey: true, ok: true } });
+  const rows = await prisma.statusCheck.findMany({
+    where: { at: { gte: from } },
+    select: { componentKey: true, ok: true },
+  });
   const totals = new Map<string, number>();
   const oks = new Map<string, number>();
   for (const r of rows) {
@@ -197,8 +296,14 @@ async function uptimePct(days: number): Promise<Map<string, number>> {
 }
 
 export function toIncidentDto(i: {
-  id: string; title: string; severity: string; status: string; phases: unknown; components: unknown;
-  public: boolean; createdAt: Date;
+  id: string;
+  title: string;
+  severity: string;
+  status: string;
+  phases: unknown;
+  components: unknown;
+  public: boolean;
+  createdAt: Date;
   updates: { id: string; phase: string; message: string; createdAt: Date; author: string }[];
 }) {
   return {
@@ -210,6 +315,12 @@ export function toIncidentDto(i: {
     components: (i.components ?? []) as string[],
     public: i.public,
     createdAt: i.createdAt.toISOString(),
-    updates: (i.updates ?? []).map((u) => ({ id: u.id, phase: u.phase, message: u.message, createdAt: u.createdAt.toISOString(), author: u.author })),
+    updates: (i.updates ?? []).map((u) => ({
+      id: u.id,
+      phase: u.phase,
+      message: u.message,
+      createdAt: u.createdAt.toISOString(),
+      author: u.author,
+    })),
   };
 }

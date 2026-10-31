@@ -32,7 +32,10 @@ export function ForgotPasswordPage() {
     setBusy(true);
     setError('');
     try {
-      const res = await api<{ ok: boolean; token?: string; link?: string }>('/api/v1/auth/forgot-password', { method: 'POST', body: { email } });
+      const res = await api<{ ok: boolean; token?: string; link?: string }>(
+        '/api/v1/auth/forgot-password',
+        { method: 'POST', body: { email } },
+      );
       if (res.token) setDevToken(res.token);
       setDone(true);
     } catch (err) {
@@ -48,22 +51,39 @@ export function ForgotPasswordPage() {
         <div className="card space-y-3 p-5 text-center">
           <MailCheck className="mx-auto text-ok" size={34} />
           <h2 className="font-bold">Check your inbox</h2>
-          <p className="text-sm text-subtle">If an account exists for {email}, a reset link is on its way. It expires in one hour.</p>
+          <p className="text-sm text-subtle">
+            If an account exists for {email}, a reset link is on its way. It expires in one hour.
+          </p>
           {devToken && (
             <p className="text-xs text-warn">
-              Development mode: <Link className="underline" to={`/reset-password?token=${devToken}`}>open the reset link</Link>
+              Development mode:{' '}
+              <Link className="underline" to={`/reset-password?token=${devToken}`}>
+                open the reset link
+              </Link>
             </p>
           )}
-          <Link className="text-sm text-accent hover:underline" to="/login">Back to sign in</Link>
+          <Link className="text-sm text-accent hover:underline" to="/login">
+            Back to sign in
+          </Link>
         </div>
       ) : (
         <form onSubmit={submit} className="card space-y-4 p-5">
-          {error && <div className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+          {error && (
+            <div className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
+              {error}
+            </div>
+          )}
           <Field label="Account email">
             <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           </Field>
-          <Button type="submit" loading={busy} className="w-full"><Mail size={15} /> Send reset link</Button>
-          <p className="text-center text-xs"><Link className="text-accent hover:underline" to="/login">Back to sign in</Link></p>
+          <Button type="submit" loading={busy} className="w-full">
+            <Mail size={15} /> Send reset link
+          </Button>
+          <p className="text-center text-xs">
+            <Link className="text-accent hover:underline" to="/login">
+              Back to sign in
+            </Link>
+          </p>
         </form>
       )}
     </AuthCard>
@@ -97,16 +117,32 @@ export function ResetPasswordPage() {
         <div className="card space-y-3 p-5 text-center">
           <CheckCircle2 className="mx-auto text-ok" size={34} />
           <h2 className="font-bold">Password updated</h2>
-          <p className="text-sm text-subtle">All other sessions were signed out. Sign in with your new password.</p>
-          <Link className="text-accent hover:underline" to="/login">Sign in</Link>
+          <p className="text-sm text-subtle">
+            All other sessions were signed out. Sign in with your new password.
+          </p>
+          <Link className="text-accent hover:underline" to="/login">
+            Sign in
+          </Link>
         </div>
       ) : (
         <form onSubmit={submit} className="card space-y-4 p-5">
-          {error && <div className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+          {error && (
+            <div className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
+              {error}
+            </div>
+          )}
           <Field label="New password" hint="At least 10 characters.">
-            <Input type="password" required minLength={10} value={password} onChange={(e) => setPassword(e.target.value)} />
+            <Input
+              type="password"
+              required
+              minLength={10}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
           </Field>
-          <Button type="submit" loading={busy} className="w-full"><KeyRound size={15} /> Set new password</Button>
+          <Button type="submit" loading={busy} className="w-full">
+            <KeyRound size={15} /> Set new password
+          </Button>
         </form>
       )}
     </AuthCard>
@@ -152,7 +188,9 @@ export function VerifyEmailPage() {
         {state === 'error' && (
           <>
             <p className="text-danger">{message}</p>
-            <Link className="text-accent hover:underline" to="/login">Back to sign in</Link>
+            <Link className="text-accent hover:underline" to="/login">
+              Back to sign in
+            </Link>
           </>
         )}
       </div>

@@ -26,7 +26,10 @@ interface ApiResult<T> {
   data: T;
 }
 
-export async function api<T>(path: string, opts: { method?: string; body?: unknown; raw?: boolean } = {}): Promise<T> {
+export async function api<T>(
+  path: string,
+  opts: { method?: string; body?: unknown; raw?: boolean } = {},
+): Promise<T> {
   const method = opts.method ?? 'GET';
   const headers: Record<string, string> = {};
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';

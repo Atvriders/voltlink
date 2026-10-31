@@ -2,7 +2,7 @@
 
 Two things must be backed up together:
 
-1. **PostgreSQL data** — everything except provider credentials' *plaintext*.
+1. **PostgreSQL data** — everything except provider credentials' _plaintext_.
 2. **`VL_MASTER_KEY`** — decrypts provider credentials and other sealed
    envelopes. Without it a restored database still works, but providers must
    be reconnected.

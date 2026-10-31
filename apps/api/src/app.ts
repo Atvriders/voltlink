@@ -38,7 +38,11 @@ const OPENAPI_SPEC: string = (() => {
   } catch {
     // fall through to the minimal stub
   }
-  return JSON.stringify({ openapi: '3.1.0', info: { title: 'VoltLink API', version: APP_VERSION }, paths: {} });
+  return JSON.stringify({
+    openapi: '3.1.0',
+    info: { title: 'VoltLink API', version: APP_VERSION },
+    paths: {},
+  });
 })();
 
 export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
@@ -69,19 +73,29 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
     res.type('application/json').send(OPENAPI_SPEC);
   });
 
-  app.get('/healthz', (_req, res) => res.json({ ok: true, version: APP_VERSION, uptimeSec: Math.round(process.uptime()) }));
+  app.get('/healthz', (_req, res) =>
+    res.json({ ok: true, version: APP_VERSION, uptimeSec: Math.round(process.uptime()) }),
+  );
   // Readiness: the container healthcheck probes this after the DB is
   // reachable and every shipped migration is applied.
   app.get('/readyz', async (_req, res) => {
     try {
       await prisma.$queryRawUnsafe('SELECT 1');
       const { pendingMigrations } = await import('./cli/migrate');
-      const queueOk = await getQueue().ping().catch(() => false);
+      const queueOk = await getQueue()
+        .ping()
+        .catch(() => false);
       if ((await pendingMigrations()).length > 0) {
         res.status(503).json({ ready: false, reason: 'migrations_pending', version: APP_VERSION });
         return;
       }
-      res.status(queueOk ? 200 : 503).json({ ready: queueOk, reason: queueOk ? undefined : 'queue_unavailable', version: APP_VERSION });
+      res
+        .status(queueOk ? 200 : 503)
+        .json({
+          ready: queueOk,
+          reason: queueOk ? undefined : 'queue_unavailable',
+          version: APP_VERSION,
+        });
     } catch {
       res.status(503).json({ ready: false, reason: 'database_unavailable', version: APP_VERSION });
     }
@@ -119,7 +133,12 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
   // Real-time events (SSE).
   app.get('/api/v1/realtime', async (req, res) => {
     const actor = await authenticate(req, 'session');
-    if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
+    if (actor.kind !== 'session')
+      throw new AccessDenied(
+        'API_KEY_NOT_ALLOWED',
+        'This endpoint requires an interactive session.',
+        403,
+      );
     sseAddClient(actor.userId, res);
   });
 

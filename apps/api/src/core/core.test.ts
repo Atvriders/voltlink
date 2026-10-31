@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fToC, haversineKm, kmToMi, miToKm } from './geo';
-import { openEnvelope, openJson, sealEnvelope, sealJson, sha256hex, verifyPassword, hashPassword } from './crypto';
+import {
+  openEnvelope,
+  openJson,
+  sealEnvelope,
+  sealJson,
+  sha256hex,
+  verifyPassword,
+  hashPassword,
+} from './crypto';
 import { csv, clamp, parseJson } from './util';
 
 beforeEach(() => {
@@ -16,7 +24,10 @@ describe('envelope encryption', () => {
 
   it('round-trips JSON objects', () => {
     const e = sealJson({ tokens: ['a'], ts: 123 });
-    expect(openJson<{ tokens: string[]; ts: number }>(e.ciphertext)).toEqual({ tokens: ['a'], ts: 123 });
+    expect(openJson<{ tokens: string[]; ts: number }>(e.ciphertext)).toEqual({
+      tokens: ['a'],
+      ts: 123,
+    });
   });
 
   it('produces different ciphertext each time (random DEK/IV)', () => {
@@ -81,7 +92,11 @@ describe('csv & util', () => {
   });
 
   it('builds rows with header', () => {
-    const out = csv([['name', 'km'], ['A', '1'], ['B, Inc', '2']]);
+    const out = csv([
+      ['name', 'km'],
+      ['A', '1'],
+      ['B, Inc', '2'],
+    ]);
     const lines = out.trim().split('\n');
     expect(lines[0]).toBe('name,km');
     expect(lines[1]).toBe('A,1');

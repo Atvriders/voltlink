@@ -5,13 +5,40 @@
 
 import { env } from '../core/env';
 import type { Capability, CommandParams, CommandType, VehicleState } from '@voltlink/shared';
-import type { CommandDispatchResult, FetchStateResult, ProviderContext, ProviderVehicleDescriptor, VehicleProvider } from './types';
+import type {
+  CommandDispatchResult,
+  FetchStateResult,
+  ProviderContext,
+  ProviderVehicleDescriptor,
+  VehicleProvider,
+} from './types';
 
 const TESSIE_CAPABILITIES: Capability[] = [
-  'wake', 'lock', 'unlock', 'climate_start', 'climate_stop', 'set_temperature', 'defrost',
-  'charge_start', 'charge_stop', 'set_charge_limit', 'set_charging_amps', 'charge_port_open',
-  'charge_port_close', 'open_trunk', 'open_frunk', 'window_vent', 'window_close', 'sentry_mode',
-  'flash_lights', 'honk_horn', 'homelink', 'valet_mode', 'speed_limit', 'send_navigation', 'location',
+  'wake',
+  'lock',
+  'unlock',
+  'climate_start',
+  'climate_stop',
+  'set_temperature',
+  'defrost',
+  'charge_start',
+  'charge_stop',
+  'set_charge_limit',
+  'set_charging_amps',
+  'charge_port_open',
+  'charge_port_close',
+  'open_trunk',
+  'open_frunk',
+  'window_vent',
+  'window_close',
+  'sentry_mode',
+  'flash_lights',
+  'honk_horn',
+  'homelink',
+  'valet_mode',
+  'speed_limit',
+  'send_navigation',
+  'location',
 ];
 
 const TESSIE_COMMANDS: Record<string, string> = {
@@ -41,10 +68,21 @@ const TESSIE_COMMANDS: Record<string, string> = {
   send_navigation: 'navigation',
 };
 
-function mapTessieState(raw: Record<string, unknown>): Omit<VehicleState, 'vehicleId' | 'provider' | 'providerVehicleId'> {
+function mapTessieState(
+  raw: Record<string, unknown>,
+): Omit<VehicleState, 'vehicleId' | 'provider' | 'providerVehicleId'> {
   const batteryPct = typeof raw.battery === 'number' ? raw.battery : undefined;
   const chargingStateRaw = String(raw.charging_state ?? 'unknown');
-  const chargingState = chargingStateRaw === 'Complete' ? 'complete' : chargingStateRaw === 'Charging' ? 'charging' : chargingStateRaw === 'Disconnected' ? 'disconnected' : chargingStateRaw === 'Stopped' ? 'stopped' : 'unknown';
+  const chargingState =
+    chargingStateRaw === 'Complete'
+      ? 'complete'
+      : chargingStateRaw === 'Charging'
+        ? 'charging'
+        : chargingStateRaw === 'Disconnected'
+          ? 'disconnected'
+          : chargingStateRaw === 'Stopped'
+            ? 'stopped'
+            : 'unknown';
   return {
     fetchedAt: new Date().toISOString(),
     freshness: 'live',
@@ -57,7 +95,8 @@ function mapTessieState(raw: Record<string, unknown>): Omit<VehicleState, 'vehic
     chargePowerKw: typeof raw.charge_power === 'number' ? raw.charge_power : undefined,
     chargeCurrentA: typeof raw.charge_current === 'number' ? raw.charge_current : undefined,
     chargeVoltageV: typeof raw.charge_voltage === 'number' ? raw.charge_voltage : undefined,
-    timeToFullChargeMin: typeof raw.minutes_to_full_charge === 'number' ? raw.minutes_to_full_charge : undefined,
+    timeToFullChargeMin:
+      typeof raw.minutes_to_full_charge === 'number' ? raw.minutes_to_full_charge : undefined,
     climateOn: raw.climate_active === true,
     insideTempC: typeof raw.inside_temp === 'number' ? raw.inside_temp : undefined,
     outsideTempC: typeof raw.outside_temp === 'number' ? raw.outside_temp : undefined,
@@ -79,13 +118,28 @@ function mapTessieState(raw: Record<string, unknown>): Omit<VehicleState, 'vehic
 class TessieProviderImpl implements VehicleProvider {
   id = 'tessie' as const;
 
-  async readiness(): Promise<{ ok: boolean; checks: { name: string; ok: boolean; detail: string }[] }> {
+  async readiness(): Promise<{
+    ok: boolean;
+    checks: { name: string; ok: boolean; detail: string }[];
+  }> {
     return {
       ok: true,
       checks: [
-        { name: 'User credentials', ok: true, detail: 'Requires the user\u2019s own valid Tessie API token (stored encrypted).' },
-        { name: 'Optional adapter', ok: true, detail: 'Tessie support is optional and independent of the Tesla adapter.' },
-        { name: 'Base URL', ok: true, detail: `TESSIE_BASE_URL=${env.TESSIE_BASE_URL} (configurable).` },
+        {
+          name: 'User credentials',
+          ok: true,
+          detail: 'Requires the user\u2019s own valid Tessie API token (stored encrypted).',
+        },
+        {
+          name: 'Optional adapter',
+          ok: true,
+          detail: 'Tessie support is optional and independent of the Tesla adapter.',
+        },
+        {
+          name: 'Base URL',
+          ok: true,
+          detail: `TESSIE_BASE_URL=${env.TESSIE_BASE_URL} (configurable).`,
+        },
       ],
     };
   }
@@ -109,22 +163,40 @@ class TessieProviderImpl implements VehicleProvider {
     const res = await this.request(ctx, 'GET', `/${encodeURIComponent(providerVehicleId)}/state`);
     if (!res.ok) throw new Error(`Tessie state fetch failed (${res.status}).`);
     const body = (await res.json()) as Record<string, unknown>;
-    return { state: { ...mapTessieState(body), vehicleId: undefined } as never, live: true, freshForSec: 60 };
+    return {
+      state: { ...mapTessieState(body), vehicleId: undefined } as never,
+      live: true,
+      freshForSec: 60,
+    };
   }
 
-  async sendCommand(ctx: ProviderContext, providerVehicleId: string, type: CommandType, params: CommandParams): Promise<CommandDispatchResult> {
+  async sendCommand(
+    ctx: ProviderContext,
+    providerVehicleId: string,
+    type: CommandType,
+    params: CommandParams,
+  ): Promise<CommandDispatchResult> {
     const cmd = TESSIE_COMMANDS[type];
-    if (!cmd) return { kind: 'unsupported', errorMessage: `Command ${type} is not mapped for Tessie.` };
+    if (!cmd)
+      return { kind: 'unsupported', errorMessage: `Command ${type} is not mapped for Tessie.` };
     const qs = new URLSearchParams({ retry_duration: '40', wait_for_completion: 'true' });
     if (type === 'set_charge_limit') qs.set('percent', String(params.chargeLimitPct ?? 80));
     if (type === 'set_temperature') qs.set('temperature', String(params.temperatureC ?? 21));
     if (type === 'set_charging_amps') qs.set('amps', String(params.chargingAmps ?? 32));
     if (type === 'valet_mode') qs.set('enable', String(params.valetOn ?? true));
-    if (type === 'speed_limit') qs.set('mph', String(Math.round((params.speedLimitKmh ?? 110) / 1.60934)));
-    const res = await this.request(ctx, 'POST', `/${encodeURIComponent(providerVehicleId)}/command/${cmd}?${qs.toString()}`);
+    if (type === 'speed_limit')
+      qs.set('mph', String(Math.round((params.speedLimitKmh ?? 110) / 1.60934)));
+    const res = await this.request(
+      ctx,
+      'POST',
+      `/${encodeURIComponent(providerVehicleId)}/command/${cmd}?${qs.toString()}`,
+    );
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      return { kind: 'rejected', errorMessage: `Tessie rejected ${type} (${res.status}): ${text.slice(0, 200)}` };
+      return {
+        kind: 'rejected',
+        errorMessage: `Tessie rejected ${type} (${res.status}): ${text.slice(0, 200)}`,
+      };
     }
     return { kind: 'accepted', response: 'Command accepted by Tessie API.' };
   }

@@ -6,16 +6,21 @@ import { haversineKm } from '../core/geo';
 
 export type ZoneLite = { id: string; name: string; lat: number; lon: number; radiusM: number };
 
-export const zoneAt = (zones: readonly ZoneLite[], lat?: number | null, lon?: number | null): ZoneLite | null =>
+export const zoneAt = (
+  zones: readonly ZoneLite[],
+  lat?: number | null,
+  lon?: number | null,
+): ZoneLite | null =>
   typeof lat === 'number' && typeof lon === 'number'
-    ? zones.find((z) => haversineKm(lat, lon, z.lat, z.lon) * 1000 <= z.radiusM) ?? null
+    ? (zones.find((z) => haversineKm(lat, lon, z.lat, z.lon) * 1000 <= z.radiusM) ?? null)
     : null;
 
-export function redactState<T extends { lat?: number | null; lon?: number | null; address?: string | null }>(
-  s: T,
-  z: ZoneLite | null,
-) {
-  return z ? { ...s, lat: null, lon: null, address: null, privacyZoneId: z.id, privacyZoneName: z.name } : s;
+export function redactState<
+  T extends { lat?: number | null; lon?: number | null; address?: string | null },
+>(s: T, z: ZoneLite | null) {
+  return z
+    ? { ...s, lat: null, lon: null, address: null, privacyZoneId: z.id, privacyZoneName: z.name }
+    : s;
 }
 
 // 30 s in-process TTL cache, invalidated on every zone write. The retroactive

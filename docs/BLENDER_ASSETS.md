@@ -21,13 +21,13 @@ apps/web/public/assets/models/
 
 Five visibly distinct silhouettes, all Y-up glTF with named parts:
 
-| Class | Character |
-| --- | --- |
-| `compact_sedan` | rounded hatch, low roof |
-| `sport_sedan` | low stance, swept nose, ducktail spoiler |
-| `compact_crossover` | raised ride height, roof rails |
-| `suv` | tall box, long roof, rails |
-| `pickup` | cab + open bed, high clearance, chunky fenders |
+| Class               | Character                                      |
+| ------------------- | ---------------------------------------------- |
+| `compact_sedan`     | rounded hatch, low roof                        |
+| `sport_sedan`       | low stance, swept nose, ducktail spoiler       |
+| `compact_crossover` | raised ride height, roof rails                 |
+| `suv`               | tall box, long roof, rails                     |
+| `pickup`            | cab + open bed, high clearance, chunky fenders |
 
 ## Rebuild
 

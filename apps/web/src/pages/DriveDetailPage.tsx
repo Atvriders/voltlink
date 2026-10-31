@@ -35,12 +35,16 @@ export default function DriveDetailPage() {
   }, [drive]);
 
   const saveMutation = useMutation({
-    mutationFn: () => api(`/api/v1/drives/${id}`, { method: 'PATCH', body: { classification, notes } }),
+    mutationFn: () =>
+      api(`/api/v1/drives/${id}`, { method: 'PATCH', body: { classification, notes } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['drive', id] }),
   });
 
   const route = useMemo(() => drive?.route ?? [], [drive?.route]);
-  const replayPoints = useMemo(() => route.slice(0, Math.max(1, Math.floor((progress / 100) * route.length))), [route, progress]);
+  const replayPoints = useMemo(
+    () => route.slice(0, Math.max(1, Math.floor((progress / 100) * route.length))),
+    [route, progress],
+  );
 
   useEffect(() => {
     if (!playing || route.length === 0) return;
@@ -58,32 +62,71 @@ export default function DriveDetailPage() {
     };
   }, [playing, route.length]);
 
-  if (isLoading) return <div className="flex h-64 items-center justify-center"><Spinner size={22} /></div>;
+  if (isLoading)
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Spinner size={22} />
+      </div>
+    );
   if (!drive) return <p className="text-sm text-subtle">Drive not found.</p>;
 
   const layers = [
     { id: 'route', kind: 'route' as const, color: '#0ea5e9', feature: routeGeoJson(route) },
-    ...(replayPoints.length > 1 ? [{ id: 'replay', kind: 'replay' as const, color: '#fbbf24', feature: routeGeoJson(replayPoints) }] : []),
+    ...(replayPoints.length > 1
+      ? [
+          {
+            id: 'replay',
+            kind: 'replay' as const,
+            color: '#fbbf24',
+            feature: routeGeoJson(replayPoints),
+          },
+        ]
+      : []),
   ];
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Link to="/drives" className="flex items-center gap-1 text-sm text-subtle hover:text-accent"><ArrowLeft size={14} /> Drives</Link>
+        <Link
+          to="/drives"
+          className="flex items-center gap-1 text-sm text-subtle hover:text-accent"
+        >
+          <ArrowLeft size={14} /> Drives
+        </Link>
         <h1 className="text-lg font-extrabold">{drive.vehicleName} — drive</h1>
-        <Badge tone={drive.classification === 'business' ? 'info' : 'neutral'}>{drive.classification}</Badge>
+        <Badge tone={drive.classification === 'business' ? 'info' : 'neutral'}>
+          {drive.classification}
+        </Badge>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
-          <Card title="Route replay" actions={
-            <div className="flex items-center gap-1">
-              <Button variant="secondary" onClick={() => { setProgress(0); setPlaying(false); }}><RotateCcw size={14} /></Button>
-              <Button variant={playing ? 'secondary' : 'primary'} onClick={() => { if (progress >= 100) setProgress(0); setPlaying((p) => !p); }}>
-                {playing ? <Pause size={14} /> : <Play size={14} />} {playing ? 'Pause' : 'Replay'}
-              </Button>
-            </div>
-          }>
+          <Card
+            title="Route replay"
+            actions={
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setProgress(0);
+                    setPlaying(false);
+                  }}
+                >
+                  <RotateCcw size={14} />
+                </Button>
+                <Button
+                  variant={playing ? 'secondary' : 'primary'}
+                  onClick={() => {
+                    if (progress >= 100) setProgress(0);
+                    setPlaying((p) => !p);
+                  }}
+                >
+                  {playing ? <Pause size={14} /> : <Play size={14} />}{' '}
+                  {playing ? 'Pause' : 'Replay'}
+                </Button>
+              </div>
+            }
+          >
             <MapView layers={layers} height={380} />
             <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-panel2">
               <div className="h-full bg-warn transition-all" style={{ width: `${progress}%` }} />
@@ -100,11 +143,17 @@ export default function DriveDetailPage() {
                 </Select>
               </Field>
               <Field label="Notes">
-                <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Add notes…" />
+                <Input
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Add notes…"
+                />
               </Field>
             </div>
             <div className="mt-3 flex justify-end">
-              <Button loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}><Tag size={14} /> Save</Button>
+              <Button loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+                <Tag size={14} /> Save
+              </Button>
             </div>
           </Card>
         </div>
@@ -120,10 +169,20 @@ export default function DriveDetailPage() {
               <Stat label="Efficiency" value={`${Math.round(drive.efficiencyWhPerKm)} Wh/km`} />
             </div>
             <dl className="mt-3 space-y-1.5 text-sm">
-              <SummaryRow k="Started" v={`${drive.startAddress ?? '—'} · ${new Date(drive.startAt).toLocaleString()}`} />
-              <SummaryRow k="Ended" v={`${drive.endAddress ?? '—'} · ${new Date(drive.endAt).toLocaleString()}`} />
-              {drive.elevationGainM !== undefined && <SummaryRow k="Elevation gain" v={`${Math.round(drive.elevationGainM)} m`} />}
-              {drive.avgOutsideTempC !== undefined && <SummaryRow k="Avg outside temp" v={fmtTemp(drive.avgOutsideTempC, units)} />}
+              <SummaryRow
+                k="Started"
+                v={`${drive.startAddress ?? '—'} · ${new Date(drive.startAt).toLocaleString()}`}
+              />
+              <SummaryRow
+                k="Ended"
+                v={`${drive.endAddress ?? '—'} · ${new Date(drive.endAt).toLocaleString()}`}
+              />
+              {drive.elevationGainM !== undefined && (
+                <SummaryRow k="Elevation gain" v={`${Math.round(drive.elevationGainM)} m`} />
+              )}
+              {drive.avgOutsideTempC !== undefined && (
+                <SummaryRow k="Avg outside temp" v={fmtTemp(drive.avgOutsideTempC, units)} />
+              )}
               {drive.driverName && <SummaryRow k="Driver" v={drive.driverName} />}
             </dl>
           </Card>

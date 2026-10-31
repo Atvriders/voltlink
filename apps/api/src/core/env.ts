@@ -50,7 +50,10 @@ try {
 export const env = {
   NODE_ENV: optional('NODE_ENV', 'production'),
   PORT: numberOpt('PORT', 3000),
-  RATE_LIMIT_PER_MIN: numberOpt('VL_RATE_LIMIT_PER_MIN', process.env.NODE_ENV === 'test' ? 100_000 : 900),
+  RATE_LIMIT_PER_MIN: numberOpt(
+    'VL_RATE_LIMIT_PER_MIN',
+    process.env.NODE_ENV === 'test' ? 100_000 : 900,
+  ),
   HOST: optional('HOST', '0.0.0.0'),
   PUBLIC_URL,
   STEPUP_WINDOW_SEC: Math.min(900, Math.max(60, numberOpt('VL_STEPUP_WINDOW_SEC', 300))),
@@ -81,7 +84,10 @@ export const env = {
   // Tesla official API (https://developer.tesla.com) OAuth app credentials.
   TESLA_CLIENT_ID: process.env.TESLA_CLIENT_ID || '',
   TESLA_CLIENT_SECRET: process.env.TESLA_CLIENT_SECRET || '',
-  TESLA_REDIRECT_URI: optional('TESLA_REDIRECT_URI', 'http://localhost:3000/api/v1/providers/tesla/callback'),
+  TESLA_REDIRECT_URI: optional(
+    'TESLA_REDIRECT_URI',
+    'http://localhost:3000/api/v1/providers/tesla/callback',
+  ),
   TESLA_BASE_URL: optional('TESLA_BASE_URL', 'https://fleet-api.prd.na.vn.cloud.tesla.com'),
 
   TESSIE_BASE_URL: optional('TESSIE_BASE_URL', 'https://api.tessie.com'),
@@ -109,14 +115,25 @@ export function parseTrustProxy(value: string): number | string[] | false {
   const v = value.trim();
   if (v === '' || v === '0' || v === 'false') return false;
   if (v === 'true') {
-    throw new Error("TRUST_PROXY=true is unsafe (client-spoofable X-Forwarded-For); use a hop count or an address/CIDR list, or false.");
+    throw new Error(
+      'TRUST_PROXY=true is unsafe (client-spoofable X-Forwarded-For); use a hop count or an address/CIDR list, or false.',
+    );
   }
   if (/^\d+$/.test(v)) return Number(v);
-  const entries = v.split(',').map((e) => e.trim()).filter(Boolean);
+  const entries = v
+    .split(',')
+    .map((e) => e.trim())
+    .filter(Boolean);
   if (entries.length === 0) return false;
   for (const e of entries) {
-    if (!/^(loopback|linklocal|uniquelocal|\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?|[0-9a-f:]+(\/\d{1,3})?)$/i.test(e)) {
-      throw new Error(`TRUST_PROXY entry ${JSON.stringify(e)} is not a hop count, address or CIDR.`);
+    if (
+      !/^(loopback|linklocal|uniquelocal|\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?|[0-9a-f:]+(\/\d{1,3})?)$/i.test(
+        e,
+      )
+    ) {
+      throw new Error(
+        `TRUST_PROXY entry ${JSON.stringify(e)} is not a hop count, address or CIDR.`,
+      );
     }
   }
   return entries;
@@ -135,20 +152,32 @@ export function validateEnv() {
   }
   parseTrustProxy(env.TRUST_PROXY); // throws on the unsafe `true` value
   // A bad VL_OUTBOUND_ALLOW entry must fail boot, not weaken the SSRF policy.
-  import('../net/outboundPolicy').then(({ parseAllowlist }) => parseAllowlist(process.env.VL_OUTBOUND_ALLOW));
+  import('../net/outboundPolicy').then(({ parseAllowlist }) =>
+    parseAllowlist(process.env.VL_OUTBOUND_ALLOW),
+  );
   if (env.NODE_ENV === 'production') {
     env.MASTER_KEY();
-    const httpInsecure = !/^https:\/\//.test(env.PUBLIC_URL) && !env.PUBLIC_URL.startsWith('http://localhost');
+    const httpInsecure =
+      !/^https:\/\//.test(env.PUBLIC_URL) && !env.PUBLIC_URL.startsWith('http://localhost');
     if (httpInsecure && process.env.VL_ALLOW_INSECURE_HTTP !== 'true') {
-      throw new Error('PUBLIC_URL must be an https:// URL in production, or set VL_ALLOW_INSECURE_HTTP=true for a plain-HTTP LAN deployment (passkeys and web push stay unavailable there).');
+      throw new Error(
+        'PUBLIC_URL must be an https:// URL in production, or set VL_ALLOW_INSECURE_HTTP=true for a plain-HTTP LAN deployment (passkeys and web push stay unavailable there).',
+      );
     }
   }
   const host = publicHost;
   const rpId = env.WEBAUTHN_RP_ID;
   if (rpId && host !== rpId && !host.endsWith('.' + rpId) && host !== 'localhost') {
-    throw new Error(`VL_WEBAUTHN_RP_ID (${rpId}) must equal the PUBLIC_URL host (${host}) or be a parent domain of it.`);
+    throw new Error(
+      `VL_WEBAUTHN_RP_ID (${rpId}) must equal the PUBLIC_URL host (${host}) or be a parent domain of it.`,
+    );
   }
-  if (env.DEV_ECHO_TOKENS && !(env.NODE_ENV === 'development' && ['localhost', '127.0.0.1'].includes(host))) {
-    throw new Error('VL_DEV_ECHO_TOKENS=1 is only allowed in development with a localhost PUBLIC_URL.');
+  if (
+    env.DEV_ECHO_TOKENS &&
+    !(env.NODE_ENV === 'development' && ['localhost', '127.0.0.1'].includes(host))
+  ) {
+    throw new Error(
+      'VL_DEV_ECHO_TOKENS=1 is only allowed in development with a localhost PUBLIC_URL.',
+    );
   }
 }

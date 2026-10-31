@@ -30,7 +30,8 @@ function deploy(schemaPath: string, databaseUrl: string): void {
   const bin = prismaBin();
   const args = ['migrate', 'deploy', '--schema', schemaPath];
   const env = { ...process.env, DATABASE_URL: databaseUrl, CHECKPOINT_DISABLE: '1' };
-  if (bin.endsWith('.js')) execFileSync(process.execPath, [bin, ...args], { cwd: API_ROOT, stdio: 'pipe', env });
+  if (bin.endsWith('.js'))
+    execFileSync(process.execPath, [bin, ...args], { cwd: API_ROOT, stdio: 'pipe', env });
   else execFileSync(bin, args, { cwd: API_ROOT, stdio: 'pipe', env });
 }
 
@@ -57,7 +58,11 @@ beforeAll(async () => {
   const legacyDir = path.join(tmp, 'migrations');
   fs.cpSync(MIGRATIONS_DIR, legacyDir, { recursive: true });
   for (const name of fs.readdirSync(legacyDir)) {
-    if (name.startsWith('20261030213636') || name.startsWith('20261030213700') || name.startsWith('20261030214947')) {
+    if (
+      name.startsWith('20261030213636') ||
+      name.startsWith('20261030213700') ||
+      name.startsWith('20261030214947')
+    ) {
       fs.rmSync(path.join(legacyDir, name), { recursive: true, force: true });
     }
   }
@@ -89,7 +94,9 @@ describe('tenancy migration (legacy data conversion)', () => {
     const c = client();
     await c.connect();
     try {
-      const { rows } = await c.query(`SELECT count(*)::int AS n FROM "Vehicle" WHERE "organizationId" IS NULL`);
+      const { rows } = await c.query(
+        `SELECT count(*)::int AS n FROM "Vehicle" WHERE "organizationId" IS NULL`,
+      );
       expect(rows[0].n).toBe(0);
     } finally {
       await c.end();
@@ -114,7 +121,9 @@ describe('tenancy migration (legacy data conversion)', () => {
     const c = client();
     await c.connect();
     try {
-      const { rows } = await c.query(`SELECT count(*)::int AS n FROM "User" WHERE "isInstanceAdmin"`);
+      const { rows } = await c.query(
+        `SELECT count(*)::int AS n FROM "User" WHERE "isInstanceAdmin"`,
+      );
       expect(rows[0].n).toBe(1);
     } finally {
       await c.end();
@@ -125,7 +134,9 @@ describe('tenancy migration (legacy data conversion)', () => {
     const c = client();
     await c.connect();
     try {
-      const { rows } = await c.query(`SELECT count(*)::int AS n FROM "UserSession" WHERE "revokedAt" IS NULL`);
+      const { rows } = await c.query(
+        `SELECT count(*)::int AS n FROM "UserSession" WHERE "revokedAt" IS NULL`,
+      );
       expect(rows[0].n).toBe(0);
     } finally {
       await c.end();
@@ -168,7 +179,9 @@ describe('tenancy migration (legacy data conversion)', () => {
       expect(rows[0].level).toBe('DRIVER');
       expect(rows[0].allowHighRisk).toBe(false);
       expect(rows[0].grantedById).toBe('u1');
-      const leftovers = await c.query(`SELECT to_regclass('public."VehiclePermission"') IS NOT NULL AS still_there`);
+      const leftovers = await c.query(
+        `SELECT to_regclass('public."VehiclePermission"') IS NOT NULL AS still_there`,
+      );
       expect(leftovers.rows[0].still_there).toBe(false);
     } finally {
       await c.end();
@@ -198,7 +211,9 @@ describe('tenancy migration (legacy data conversion)', () => {
     const c = client();
     await c.connect();
     try {
-      const { rows } = await c.query(`SELECT count(*)::int AS n FROM "User" WHERE "webauthnUserId" IS NULL`);
+      const { rows } = await c.query(
+        `SELECT count(*)::int AS n FROM "User" WHERE "webauthnUserId" IS NULL`,
+      );
       expect(rows[0].n).toBe(0);
     } finally {
       await c.end();

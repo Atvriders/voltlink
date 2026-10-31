@@ -60,7 +60,8 @@ export default function MapView({
       for (const ly of srcs ?? []) {
         if (!known.has(ly.id.replace('lyr-', ''))) {
           map.removeLayer(ly.id);
-          if (map.getSource(`src-${ly.id.replace('lyr-', '')}`)) map.removeSource(`src-${ly.id.replace('lyr-', '')}`);
+          if (map.getSource(`src-${ly.id.replace('lyr-', '')}`))
+            map.removeSource(`src-${ly.id.replace('lyr-', '')}`);
         }
       }
     };
@@ -84,7 +85,14 @@ export default function MapView({
     };
   }, [onReady, onPointPick]);
 
-  return <div ref={container} className={`rounded-xl border border-line ${className}`} style={{ height }} aria-label="Map" />;
+  return (
+    <div
+      ref={container}
+      className={`rounded-xl border border-line ${className}`}
+      style={{ height }}
+      aria-label="Map"
+    />
+  );
 }
 
 function buildLayer(l: MapLayer, sourceId: string): maplibregl.LayerSpecification {
@@ -96,7 +104,11 @@ function buildLayer(l: MapLayer, sourceId: string): maplibregl.LayerSpecificatio
         id: `lyr-${l.id}`,
         type: 'line',
         source: sourceId,
-        paint: { 'line-color': l.kind === 'replay' ? '#fbbf24' : color, 'line-width': l.kind === 'replay' ? 4 : 3, 'line-opacity': 0.9 },
+        paint: {
+          'line-color': l.kind === 'replay' ? '#fbbf24' : color,
+          'line-width': l.kind === 'replay' ? 4 : 3,
+          'line-opacity': 0.9,
+        },
       };
     case 'geofence':
     case 'privacy':
@@ -110,13 +122,48 @@ function buildLayer(l: MapLayer, sourceId: string): maplibregl.LayerSpecificatio
         },
       };
     case 'vehicle':
-      return { id: `lyr-${l.id}`, type: 'circle', source: sourceId, paint: { 'circle-color': color, 'circle-radius': 8, 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } };
+      return {
+        id: `lyr-${l.id}`,
+        type: 'circle',
+        source: sourceId,
+        paint: {
+          'circle-color': color,
+          'circle-radius': 8,
+          'circle-stroke-color': '#fff',
+          'circle-stroke-width': 2,
+        },
+      };
     case 'place':
-      return { id: `lyr-${l.id}`, type: 'circle', source: sourceId, paint: { 'circle-color': color, 'circle-radius': 6, 'circle-stroke-color': '#0b1017', 'circle-stroke-width': 1.5 } };
+      return {
+        id: `lyr-${l.id}`,
+        type: 'circle',
+        source: sourceId,
+        paint: {
+          'circle-color': color,
+          'circle-radius': 6,
+          'circle-stroke-color': '#0b1017',
+          'circle-stroke-width': 1.5,
+        },
+      };
     case 'charger':
-      return { id: `lyr-${l.id}`, type: 'circle', source: sourceId, paint: { 'circle-color': '#4ade80', 'circle-radius': 7, 'circle-stroke-color': '#0b1017', 'circle-stroke-width': 2 } };
+      return {
+        id: `lyr-${l.id}`,
+        type: 'circle',
+        source: sourceId,
+        paint: {
+          'circle-color': '#4ade80',
+          'circle-radius': 7,
+          'circle-stroke-color': '#0b1017',
+          'circle-stroke-width': 2,
+        },
+      };
     default:
-      return { id: `lyr-${l.id}`, type: 'circle', source: sourceId, paint: { 'circle-color': color, 'circle-radius': 5 } };
+      return {
+        id: `lyr-${l.id}`,
+        type: 'circle',
+        source: sourceId,
+        paint: { 'circle-color': color, 'circle-radius': 5 },
+      };
   }
 }
 

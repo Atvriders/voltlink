@@ -15,7 +15,9 @@ function prismaCli(): string {
   if (fs.existsSync(local)) return local;
   const root = path.join(PATHS.root, '..', '..', 'node_modules', '.bin', 'prisma');
   if (fs.existsSync(root)) return root;
-  const prismaRoot = path.dirname(createRequire(path.join(PATHS.root, 'package.json')).resolve('prisma/package.json'));
+  const prismaRoot = path.dirname(
+    createRequire(path.join(PATHS.root, 'package.json')).resolve('prisma/package.json'),
+  );
   return path.join(prismaRoot, 'build', 'index.js');
 }
 
@@ -71,7 +73,9 @@ export async function waitForMigrations(timeoutMs = 120_000): Promise<void> {
     }
     if (pending.length === 0) return;
     if (Date.now() >= deadline) {
-      console.error(`[voltlink] migrations not current after ${timeoutMs / 1000}s: ${pending.join(', ')} — run the migrate role first.`);
+      console.error(
+        `[voltlink] migrations not current after ${timeoutMs / 1000}s: ${pending.join(', ')} — run the migrate role first.`,
+      );
       process.exit(1);
     }
     await new Promise((r) => setTimeout(r, 2000));

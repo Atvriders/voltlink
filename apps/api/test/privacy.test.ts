@@ -31,16 +31,49 @@ const OUT_POINT = { lat: 35.5, lon: -90.5 }; // outside
 async function makeOrgWithVehicle(prefix: string) {
   const stamp = Date.now();
   const user = await prisma.user.create({
-    data: { email: `${prefix}-${stamp}@example.test`, name: 'P', passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s', webauthnUserId: randomId() },
+    data: {
+      email: `${prefix}-${stamp}@example.test`,
+      name: 'P',
+      passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
+      webauthnUserId: randomId(),
+    },
   });
   const org = await prisma.organization.create({
-    data: { kind: 'PERSONAL', name: 'P', createdById: user.id, memberships: { create: { userId: user.id, role: 'OWNER' } } },
+    data: {
+      kind: 'PERSONAL',
+      name: 'P',
+      createdById: user.id,
+      memberships: { create: { userId: user.id, role: 'OWNER' } },
+    },
   });
-  const provider = await prisma.providerAccount.create({ data: { organizationId: org.id, provider: 'mock', label: 'm', status: 'connected', demo: false } });
+  const provider = await prisma.providerAccount.create({
+    data: {
+      organizationId: org.id,
+      provider: 'mock',
+      label: 'm',
+      status: 'connected',
+      demo: false,
+    },
+  });
   const vehicle = await prisma.vehicle.create({
-    data: { organizationId: org.id, providerAccountId: provider.id, provider: 'mock', providerVehicleId: randomId(), displayName: 'V', demo: false },
+    data: {
+      organizationId: org.id,
+      providerAccountId: provider.id,
+      provider: 'mock',
+      providerVehicleId: randomId(),
+      displayName: 'V',
+      demo: false,
+    },
   });
-  return { user, org, vehicle, cleanup: async () => { await prisma.organization.deleteMany({ where: { id: org.id } }).catch(() => undefined); await prisma.user.deleteMany({ where: { id: user.id } }).catch(() => undefined); } };
+  return {
+    user,
+    org,
+    vehicle,
+    cleanup: async () => {
+      await prisma.organization.deleteMany({ where: { id: org.id } }).catch(() => undefined);
+      await prisma.user.deleteMany({ where: { id: user.id } }).catch(() => undefined);
+    },
+  };
 }
 
 function state(lat: number, lon: number) {
@@ -62,13 +95,32 @@ describe('Z-PRIVZONE: redaction at ingest', () => {
   it('nulls in-zone coordinates in snapshot, telemetry and location', async () => {
     const { vehicle, cleanup } = await makeOrgWithVehicle('priv-ingest');
     const zone = await prisma.privacyZone.create({
-      data: { organizationId: vehicle.organizationId, name: 'Home', lat: 35.0, lon: -90.0, radiusM: 500, enabled: true },
+      data: {
+        organizationId: vehicle.organizationId,
+        name: 'Home',
+        lat: 35.0,
+        lon: -90.0,
+        radiusM: 500,
+        enabled: true,
+      },
     });
     invalidateZonesForOrg(vehicle.organizationId);
 
-    await ingestVehicleState({ id: vehicle.id, organizationId: vehicle.organizationId, displayName: 'V', demo: false, addedById: null }, state(ZONE_POINT.lat, ZONE_POINT.lon) as never, { live: true });
+    await ingestVehicleState(
+      {
+        id: vehicle.id,
+        organizationId: vehicle.organizationId,
+        displayName: 'V',
+        demo: false,
+        addedById: null,
+      },
+      state(ZONE_POINT.lat, ZONE_POINT.lon) as never,
+      { live: true },
+    );
 
-    const snap = await prisma.vehicleSnapshot.findUniqueOrThrow({ where: { vehicleId: vehicle.id } });
+    const snap = await prisma.vehicleSnapshot.findUniqueOrThrow({
+      where: { vehicleId: vehicle.id },
+    });
     const sState = snap.state as Record<string, unknown>;
     expect(sState.lat).toBeNull();
     expect(sState.lon).toBeNull();
@@ -83,14 +135,28 @@ describe('Z-PRIVZONE: redaction at ingest', () => {
     expect(telemetry[0]!.data.ln).toBeNull();
     expect(telemetry[0]!.data.pz).toBe(zone.id);
 
-    const location = await prisma.vehicleLocation.findUniqueOrThrow({ where: { vehicleId: vehicle.id } });
+    const location = await prisma.vehicleLocation.findUniqueOrThrow({
+      where: { vehicleId: vehicle.id },
+    });
     expect(location.lat).toBeNull();
     expect(location.lon).toBeNull();
     expect(location.privacyZoneId).toBe(zone.id);
 
     // Outside the zone, raw coordinates are stored.
-    await ingestVehicleState({ id: vehicle.id, organizationId: vehicle.organizationId, displayName: 'V', demo: false, addedById: null }, state(OUT_POINT.lat, OUT_POINT.lon) as never, { live: true });
-    const outside = await prisma.vehicleLocation.findUniqueOrThrow({ where: { vehicleId: vehicle.id } });
+    await ingestVehicleState(
+      {
+        id: vehicle.id,
+        organizationId: vehicle.organizationId,
+        displayName: 'V',
+        demo: false,
+        addedById: null,
+      },
+      state(OUT_POINT.lat, OUT_POINT.lon) as never,
+      { live: true },
+    );
+    const outside = await prisma.vehicleLocation.findUniqueOrThrow({
+      where: { vehicleId: vehicle.id },
+    });
     expect(outside.lat).toBe(OUT_POINT.lat);
     expect(outside.lon).toBe(OUT_POINT.lon);
     expect(outside.privacyZoneId).toBeNull();
@@ -103,25 +169,84 @@ describe('Z-PRIVZONE: retroactive redaction job', () => {
   it('redacts drives, route points, charging, location, telemetry and snapshots', async () => {
     const { vehicle, cleanup } = await makeOrgWithVehicle('priv-retro');
     const zone = await prisma.privacyZone.create({
-      data: { organizationId: vehicle.organizationId, name: 'Retro', lat: 35.0, lon: -90.0, radiusM: 500, enabled: true },
+      data: {
+        organizationId: vehicle.organizationId,
+        name: 'Retro',
+        lat: 35.0,
+        lon: -90.0,
+        radiusM: 500,
+        enabled: true,
+      },
     });
 
     const drive = await prisma.drive.create({
-      data: { vehicleId: vehicle.id, startAt: new Date(), endAt: new Date(Date.now() + 1000), startLat: 35.0, startLon: -90.0, endLat: 35.5, endLon: -90.5, distanceKm: 60, durationSec: 3600, avgSpeedKmh: 60, maxSpeedKmh: 90, energyKwh: 10, efficiencyWhPerKm: 166 },
+      data: {
+        vehicleId: vehicle.id,
+        startAt: new Date(),
+        endAt: new Date(Date.now() + 1000),
+        startLat: 35.0,
+        startLon: -90.0,
+        endLat: 35.5,
+        endLon: -90.5,
+        distanceKm: 60,
+        durationSec: 3600,
+        avgSpeedKmh: 60,
+        maxSpeedKmh: 90,
+        energyKwh: 10,
+        efficiencyWhPerKm: 166,
+      },
     });
-    await prisma.driveRoutePoint.createMany({ data: [
-      { driveId: drive.id, seq: 0, ts: new Date(), lat: 35.0, lon: -90.0, speedKmh: 50, headingDeg: 0 },
-      { driveId: drive.id, seq: 1, ts: new Date(Date.now() + 1000), lat: 35.5, lon: -90.5, speedKmh: 60, headingDeg: 90 },
-    ] });
-    await prisma.chargingSession.create({ data: { vehicleId: vehicle.id, startAt: new Date(), lat: 35.0, lon: -90.0, locationName: 'Home', energyAddedKwh: 1 } });
-    await prisma.vehicleLocation.create({ data: { vehicleId: vehicle.id, ts: new Date(), lat: 35.0, lon: -90.0, address: 'Secret' } });
+    await prisma.driveRoutePoint.createMany({
+      data: [
+        {
+          driveId: drive.id,
+          seq: 0,
+          ts: new Date(),
+          lat: 35.0,
+          lon: -90.0,
+          speedKmh: 50,
+          headingDeg: 0,
+        },
+        {
+          driveId: drive.id,
+          seq: 1,
+          ts: new Date(Date.now() + 1000),
+          lat: 35.5,
+          lon: -90.5,
+          speedKmh: 60,
+          headingDeg: 90,
+        },
+      ],
+    });
+    await prisma.chargingSession.create({
+      data: {
+        vehicleId: vehicle.id,
+        startAt: new Date(),
+        lat: 35.0,
+        lon: -90.0,
+        locationName: 'Home',
+        energyAddedKwh: 1,
+      },
+    });
+    await prisma.vehicleLocation.create({
+      data: { vehicleId: vehicle.id, ts: new Date(), lat: 35.0, lon: -90.0, address: 'Secret' },
+    });
     const ts = new Date();
     await ensureTelemetryPartition(ts);
     await prisma.$executeRawUnsafe(
       `INSERT INTO telemetry.telemetry_reading (vehicle_id, ts, data) VALUES ($1, $2, $3::jsonb)`,
-      vehicle.id, ts, JSON.stringify({ lt: 35.0, ln: -90.0, b: 60 }),
+      vehicle.id,
+      ts,
+      JSON.stringify({ lt: 35.0, ln: -90.0, b: 60 }),
     );
-    await prisma.vehicleSnapshot.create({ data: { vehicleId: vehicle.id, state: { lat: 35.0, lon: -90.0, address: 'Secret' } as unknown as object, fetchedAt: new Date(), freshness: 'live' } });
+    await prisma.vehicleSnapshot.create({
+      data: {
+        vehicleId: vehicle.id,
+        state: { lat: 35.0, lon: -90.0, address: 'Secret' } as unknown as object,
+        fetchedAt: new Date(),
+        freshness: 'live',
+      },
+    });
 
     const counts = await runPrivacyRedaction(zone.id);
 
@@ -142,13 +267,20 @@ describe('Z-PRIVZONE: retroactive redaction job', () => {
     const cs = await prisma.chargingSession.findFirstOrThrow({ where: { vehicleId: vehicle.id } });
     expect(cs.lat).toBeNull();
     expect(cs.privacyZoneId).toBe(zone.id);
-    const loc = await prisma.vehicleLocation.findUniqueOrThrow({ where: { vehicleId: vehicle.id } });
+    const loc = await prisma.vehicleLocation.findUniqueOrThrow({
+      where: { vehicleId: vehicle.id },
+    });
     expect(loc.lat).toBeNull();
     expect(loc.privacyZoneId).toBe(zone.id);
-    const tel = await prisma.$queryRawUnsafe<{ data: Record<string, unknown> }[]>(`SELECT data FROM telemetry.telemetry_reading WHERE vehicle_id = $1`, vehicle.id);
+    const tel = await prisma.$queryRawUnsafe<{ data: Record<string, unknown> }[]>(
+      `SELECT data FROM telemetry.telemetry_reading WHERE vehicle_id = $1`,
+      vehicle.id,
+    );
     expect(tel[0]!.data.lt).toBeNull();
     expect(tel[0]!.data.pz).toBe(zone.id);
-    const snap = await prisma.vehicleSnapshot.findUniqueOrThrow({ where: { vehicleId: vehicle.id } });
+    const snap = await prisma.vehicleSnapshot.findUniqueOrThrow({
+      where: { vehicleId: vehicle.id },
+    });
     expect((snap.state as Record<string, unknown>).lat).toBeNull();
 
     const after = await prisma.privacyZone.findUniqueOrThrow({ where: { id: zone.id } });
@@ -168,7 +300,16 @@ describe('Z-PRIVZONE: zone cache', () => {
     const { vehicle, cleanup } = await makeOrgWithVehicle('priv-cache');
     const zonesBefore = await zonesForOrg(vehicle.organizationId);
     expect(zonesBefore).toHaveLength(0);
-    const zone = await prisma.privacyZone.create({ data: { organizationId: vehicle.organizationId, name: 'C', lat: 1, lon: 1, radiusM: 100, enabled: true } });
+    const zone = await prisma.privacyZone.create({
+      data: {
+        organizationId: vehicle.organizationId,
+        name: 'C',
+        lat: 1,
+        lon: 1,
+        radiusM: 100,
+        enabled: true,
+      },
+    });
     invalidateZonesForOrg(vehicle.organizationId);
     const zonesAfter = await zonesForOrg(vehicle.organizationId);
     expect(zonesAfter.map((z) => z.id)).toContain(zone.id);
@@ -180,15 +321,72 @@ describe('Z-DELETE: account-deletion job', () => {
   it('deletes sole-member organizations and pseudonymizes commands elsewhere', async () => {
     const { user, org, vehicle, cleanup } = await makeOrgWithVehicle('deletion');
     // Second org where the user is NOT the only member.
-    const other = await prisma.user.create({ data: { email: `deletion-other-${Date.now()}@example.test`, name: 'O', passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s', webauthnUserId: randomId() } });
-    const sharedOrg = await prisma.organization.create({ data: { kind: 'TEAM', name: 'S', createdById: user.id, memberships: { create: [{ userId: user.id, role: 'OWNER' }, { userId: other.id, role: 'VIEWER' }] } } });
-    const sharedProvider = await prisma.providerAccount.create({ data: { organizationId: sharedOrg.id, provider: 'mock', label: 'm', status: 'connected', demo: false } });
-    const sharedVehicle = await prisma.vehicle.create({ data: { organizationId: sharedOrg.id, providerAccountId: sharedProvider.id, provider: 'mock', providerVehicleId: randomId(), displayName: 'S', demo: false } });
-    const command = await prisma.vehicleCommand.create({ data: { organizationId: sharedOrg.id, userId: user.id, vehicleId: sharedVehicle.id, vehicleName: 'S', providerAccountId: sharedProvider.id, actorKind: 'session', type: 'lock', params: {}, status: 'confirmed', risk: 'low', idempotencyKey: randomId() } });
-    await prisma.auditLog.create({ data: { actorId: user.id, ip: '1.2.3.4', action: 'x', organizationId: sharedOrg.id } });
+    const other = await prisma.user.create({
+      data: {
+        email: `deletion-other-${Date.now()}@example.test`,
+        name: 'O',
+        passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
+        webauthnUserId: randomId(),
+      },
+    });
+    const sharedOrg = await prisma.organization.create({
+      data: {
+        kind: 'TEAM',
+        name: 'S',
+        createdById: user.id,
+        memberships: {
+          create: [
+            { userId: user.id, role: 'OWNER' },
+            { userId: other.id, role: 'VIEWER' },
+          ],
+        },
+      },
+    });
+    const sharedProvider = await prisma.providerAccount.create({
+      data: {
+        organizationId: sharedOrg.id,
+        provider: 'mock',
+        label: 'm',
+        status: 'connected',
+        demo: false,
+      },
+    });
+    const sharedVehicle = await prisma.vehicle.create({
+      data: {
+        organizationId: sharedOrg.id,
+        providerAccountId: sharedProvider.id,
+        provider: 'mock',
+        providerVehicleId: randomId(),
+        displayName: 'S',
+        demo: false,
+      },
+    });
+    const command = await prisma.vehicleCommand.create({
+      data: {
+        organizationId: sharedOrg.id,
+        userId: user.id,
+        vehicleId: sharedVehicle.id,
+        vehicleName: 'S',
+        providerAccountId: sharedProvider.id,
+        actorKind: 'session',
+        type: 'lock',
+        params: {},
+        status: 'confirmed',
+        risk: 'low',
+        idempotencyKey: randomId(),
+      },
+    });
+    await prisma.auditLog.create({
+      data: { actorId: user.id, ip: '1.2.3.4', action: 'x', organizationId: sharedOrg.id },
+    });
     const ts = new Date();
     await ensureTelemetryPartition(ts);
-    await prisma.$executeRawUnsafe(`INSERT INTO telemetry.telemetry_reading (vehicle_id, ts, data) VALUES ($1, $2, $3::jsonb)`, vehicle.id, ts, JSON.stringify({ b: 1 }));
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO telemetry.telemetry_reading (vehicle_id, ts, data) VALUES ($1, $2, $3::jsonb)`,
+      vehicle.id,
+      ts,
+      JSON.stringify({ b: 1 }),
+    );
     await prisma.user.update({ where: { id: user.id }, data: { deletionRequestedAt: new Date() } });
 
     const result = await runAccountDeletion(user.id);
@@ -201,10 +399,15 @@ describe('Z-DELETE: account-deletion job', () => {
     const cmd = await prisma.vehicleCommand.findUniqueOrThrow({ where: { id: command.id } });
     expect(cmd.userId).toBe('deleted-user');
     // User deletion sets audit actorId to NULL (SetNull) and nulls the IP.
-    const log = await prisma.auditLog.findFirstOrThrow({ where: { organizationId: sharedOrg.id, action: 'x' } });
+    const log = await prisma.auditLog.findFirstOrThrow({
+      where: { organizationId: sharedOrg.id, action: 'x' },
+    });
     expect(log.actorId).toBeNull();
     expect(log.ip).toBeNull();
-    const tel = await prisma.$queryRawUnsafe<{ n: number }[]>(`SELECT count(*)::int AS n FROM telemetry.telemetry_reading WHERE vehicle_id = $1`, vehicle.id);
+    const tel = await prisma.$queryRawUnsafe<{ n: number }[]>(
+      `SELECT count(*)::int AS n FROM telemetry.telemetry_reading WHERE vehicle_id = $1`,
+      vehicle.id,
+    );
     expect(tel[0]!.n).toBe(0);
 
     await prisma.organization.deleteMany({ where: { id: sharedOrg.id } }).catch(() => undefined);

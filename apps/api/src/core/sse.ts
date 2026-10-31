@@ -58,7 +58,12 @@ export function sseAddClient(userId: string, res: Response): void {
 }
 
 /** Publish to everyone, a single user, or a vehicle channel. */
-export function ssePublish(event: { type: string; data: unknown; userId?: string; vehicleId?: string }): void {
+export function ssePublish(event: {
+  type: string;
+  data: unknown;
+  userId?: string;
+  vehicleId?: string;
+}): void {
   const at = new Date().toISOString();
   const frame = `event: ${event.type}\ndata: ${JSON.stringify({ ...(event.data as object), at })}\n\n`;
   for (const c of clients) {

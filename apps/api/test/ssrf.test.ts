@@ -67,7 +67,9 @@ describe('safeFetch', () => {
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
     const port = (server.address() as AddressInfo).port;
     try {
-      await expect(safeFetch(getOutboundPolicy(), `http://127.0.0.1:${port}/`, { method: 'POST' })).rejects.toMatchObject({ code: 'VL_OUTBOUND_BLOCKED' });
+      await expect(
+        safeFetch(getOutboundPolicy(), `http://127.0.0.1:${port}/`, { method: 'POST' }),
+      ).rejects.toMatchObject({ code: 'VL_OUTBOUND_BLOCKED' });
     } finally {
       server.close();
     }
@@ -90,10 +92,15 @@ describe('safeFetch', () => {
     resetOutboundPolicy();
     await buildOutboundPolicy();
     try {
-      const ok = await safeFetch(getOutboundPolicy(), `http://127.0.0.1:${port}/`, { method: 'POST', body: 'x' });
+      const ok = await safeFetch(getOutboundPolicy(), `http://127.0.0.1:${port}/`, {
+        method: 'POST',
+        body: 'x',
+      });
       expect(ok.status).toBe(200);
       expect(ok.bodyText).toBe('landed');
-      const redir = await safeFetch(getOutboundPolicy(), `http://127.0.0.1:${port}/r`, { method: 'POST' });
+      const redir = await safeFetch(getOutboundPolicy(), `http://127.0.0.1:${port}/r`, {
+        method: 'POST',
+      });
       expect(redir.status).toBe(302); // never followed
       expect(failureKindOf(new OutboundBlockedError('loopback', 'x'))).toBe('blocked_by_policy');
     } finally {
@@ -115,8 +122,12 @@ describe('safeFetch', () => {
     await buildOutboundPolicy();
     try {
       const policy = { ...getOutboundPolicy(), infrastructure: new Set([`127.0.0.1:${port}`]) };
-      await expect(safeFetch(policy, `http://127.0.0.1:${port}/`, {})).rejects.toMatchObject({ reason: 'infrastructure' });
-      await expect(preflightUrl(policy, `http://127.0.0.1:${port}/`)).rejects.toMatchObject({ reason: 'infrastructure' });
+      await expect(safeFetch(policy, `http://127.0.0.1:${port}/`, {})).rejects.toMatchObject({
+        reason: 'infrastructure',
+      });
+      await expect(preflightUrl(policy, `http://127.0.0.1:${port}/`)).rejects.toMatchObject({
+        reason: 'infrastructure',
+      });
     } finally {
       server.close();
       if (old === undefined) delete process.env.VL_OUTBOUND_ALLOW;
@@ -127,25 +138,42 @@ describe('safeFetch', () => {
   });
 
   it('rejects non-http schemes and URL credentials', async () => {
-    await expect(safeFetch(getOutboundPolicy(), 'file:///etc/passwd')).rejects.toMatchObject({ reason: 'scheme' });
-    await expect(safeFetch(getOutboundPolicy(), 'ftp://example.com/x')).rejects.toMatchObject({ reason: 'scheme' });
-    await expect(preflightUrl(getOutboundPolicy(), 'https://user:pass@example.com/')).rejects.toMatchObject({ reason: 'host' });
+    await expect(safeFetch(getOutboundPolicy(), 'file:///etc/passwd')).rejects.toMatchObject({
+      reason: 'scheme',
+    });
+    await expect(safeFetch(getOutboundPolicy(), 'ftp://example.com/x')).rejects.toMatchObject({
+      reason: 'scheme',
+    });
+    await expect(
+      preflightUrl(getOutboundPolicy(), 'https://user:pass@example.com/'),
+    ).rejects.toMatchObject({ reason: 'host' });
   });
 });
 
 describe('save-time preflight on webhook URLs', () => {
   it('returns 422 URL_BLOCKED for a loopback webhook URL', async () => {
     const user = await prisma.user.create({
-      data: { email: `ssrf-${Date.now()}@example.test`, name: 'S', passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s', webauthnUserId: randomId(), emailVerifiedAt: new Date() },
+      data: {
+        email: `ssrf-${Date.now()}@example.test`,
+        name: 'S',
+        passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
+        webauthnUserId: randomId(),
+        emailVerifiedAt: new Date(),
+      },
     });
     const { token } = await createSession(user.id);
     const agent = request.agent(base).set('Cookie', `vl_session=${token}`);
-    let res = await agent.post('/api/v1/notifications/webhooks').send({ name: 'x', url: 'https://10.0.0.1:8443/hook' });
+    let res = await agent
+      .post('/api/v1/notifications/webhooks')
+      .send({ name: 'x', url: 'https://10.0.0.1:8443/hook' });
     if (res.status === 403 && res.body?.error?.code === 'CSRF') {
       const cookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
       const csrfPair = cookies.map((c) => c.split(';')[0]).find((c) => c.startsWith('vl_csrf='));
       const csrf = csrfPair ? csrfPair.split('=')[1]! : '';
-      res = await agent.post('/api/v1/notifications/webhooks').set('x-vl-csrf', csrf).send({ name: 'x', url: 'https://10.0.0.1:8443/hook' });
+      res = await agent
+        .post('/api/v1/notifications/webhooks')
+        .set('x-vl-csrf', csrf)
+        .send({ name: 'x', url: 'https://10.0.0.1:8443/hook' });
     }
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe('URL_BLOCKED');

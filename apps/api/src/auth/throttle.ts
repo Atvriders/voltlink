@@ -20,10 +20,15 @@ export async function recordFailure(key: string): Promise<void> {
   });
   if (row.failures >= 5) {
     const sec = Math.min(3600, 30 * 2 ** Math.min(row.failures - 5, 7));
-    await prisma.authThrottle.update({ where: { key }, data: { lockedUntil: new Date(Date.now() + sec * 1000) } });
+    await prisma.authThrottle.update({
+      where: { key },
+      data: { lockedUntil: new Date(Date.now() + sec * 1000) },
+    });
   }
   if (row.failures >= 100 && key.startsWith('user:')) {
-    await prisma.user.update({ where: { id: key.slice(5) }, data: { lockedAt: new Date() } }).catch(() => undefined);
+    await prisma.user
+      .update({ where: { id: key.slice(5) }, data: { lockedAt: new Date() } })
+      .catch(() => undefined);
   }
 }
 

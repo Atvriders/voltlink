@@ -9,7 +9,12 @@ import { sha256hex } from '../core/crypto';
 import { AuthError } from '../authz/errors';
 
 export const CEREMONY_COOKIE = 'vl_ceremony';
-export const PURPOSES = ['mfa_login', 'passkey_login', 'passkey_register', 'stepup_passkey'] as const;
+export const PURPOSES = [
+  'mfa_login',
+  'passkey_login',
+  'passkey_register',
+  'stepup_passkey',
+] as const;
 export type CeremonyPurpose = (typeof PURPOSES)[number];
 
 export async function createCeremony(
@@ -39,7 +44,8 @@ export async function createCeremony(
 
 export async function readCeremony(req: Request, purpose: CeremonyPurpose) {
   const handle = req.cookies?.[CEREMONY_COOKIE] as string | undefined;
-  if (typeof handle !== 'string' || !handle) throw new AuthError('MFA_EXPIRED', 'Start the sign-in again.', 401);
+  if (typeof handle !== 'string' || !handle)
+    throw new AuthError('MFA_EXPIRED', 'Start the sign-in again.', 401);
   const row = await prisma.authChallenge.findUnique({ where: { handleHash: sha256hex(handle) } });
   if (!row || row.consumedAt || row.expiresAt < new Date() || row.purpose !== purpose) {
     throw new AuthError('MFA_EXPIRED', 'Start the sign-in again.', 401);
@@ -54,6 +60,7 @@ export async function consumeCeremony(req: Request, purpose: CeremonyPurpose) {
     where: { id: row.id, consumedAt: null, expiresAt: { gt: new Date() } },
     data: { consumedAt: new Date() },
   });
-  if (winner.count !== 1) throw new AuthError('MFA_EXPIRED', 'This step was already used; start again.', 401);
+  if (winner.count !== 1)
+    throw new AuthError('MFA_EXPIRED', 'This step was already used; start again.', 401);
   return row;
 }

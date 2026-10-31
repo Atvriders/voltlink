@@ -31,50 +31,89 @@ async function listTelemetryPartitions(): Promise<string[]> {
 
 export async function runPrivacyRedaction(zoneId: string): Promise<RedactionCounts> {
   const zone = await prisma.privacyZone.findUnique({ where: { id: zoneId } });
-  const counts: RedactionCounts = { drives: 0, routePoints: 0, chargingSessions: 0, locations: 0, telemetry: 0, snapshots: 0 };
+  const counts: RedactionCounts = {
+    drives: 0,
+    routePoints: 0,
+    chargingSessions: 0,
+    locations: 0,
+    telemetry: 0,
+    snapshots: 0,
+  };
   if (!zone || !zone.enabled) return counts;
 
-  const vehicles = await prisma.vehicle.findMany({ where: { organizationId: zone.organizationId }, select: { id: true } });
+  const vehicles = await prisma.vehicle.findMany({
+    where: { organizationId: zone.organizationId },
+    select: { id: true },
+  });
   const ids = vehicles.map((v) => v.id);
   if (ids.length === 0) {
-    await prisma.privacyZone.update({ where: { id: zoneId }, data: { redactedThrough: new Date() } });
+    await prisma.privacyZone.update({
+      where: { id: zoneId },
+      data: { redactedThrough: new Date() },
+    });
     return counts;
   }
 
   // Drives: null redacted endpoints (start and end separately).
-  const driveUpdate = (col: string, zoneCol: string) => prisma.$executeRawUnsafe(
-    `UPDATE "Drive" SET "${col}Lat"=NULL, "${col}Lon"=NULL, "${col}Address"=NULL, "${zoneCol}"=$5
+  const driveUpdate = (col: string, zoneCol: string) =>
+    prisma.$executeRawUnsafe(
+      `UPDATE "Drive" SET "${col}Lat"=NULL, "${col}Lon"=NULL, "${col}Address"=NULL, "${zoneCol}"=$5
       WHERE "vehicleId" = ANY($1) AND "${col}Lat" IS NOT NULL AND ${H.replaceAll('lat', `"${col}Lat"`).replaceAll('lon', `"${col}Lon"`)} <= $4`,
-    ids, zone.lat, zone.lon, zone.radiusM, zoneId,
-  );
-  const [start, end] = await Promise.all([driveUpdate('start', 'startPrivacyZoneId'), driveUpdate('end', 'endPrivacyZoneId')]);
+      ids,
+      zone.lat,
+      zone.lon,
+      zone.radiusM,
+      zoneId,
+    );
+  const [start, end] = await Promise.all([
+    driveUpdate('start', 'startPrivacyZoneId'),
+    driveUpdate('end', 'endPrivacyZoneId'),
+  ]);
   counts.drives = start + end;
 
   counts.routePoints = await prisma.$executeRawUnsafe(
     `DELETE FROM "DriveRoutePoint" rp USING "Drive" d
       WHERE rp."driveId" = d.id AND d."vehicleId" = ANY($1) AND ${H} <= $4`,
-    ids, zone.lat, zone.lon, zone.radiusM,
+    ids,
+    zone.lat,
+    zone.lon,
+    zone.radiusM,
   );
 
   counts.chargingSessions = await prisma.$executeRawUnsafe(
     `UPDATE "ChargingSession" SET lat=NULL, lon=NULL, "locationName"=NULL, "privacyZoneId"=$5
       WHERE "vehicleId" = ANY($1) AND lat IS NOT NULL AND ${H} <= $4`,
-    ids, zone.lat, zone.lon, zone.radiusM, zoneId,
+    ids,
+    zone.lat,
+    zone.lon,
+    zone.radiusM,
+    zoneId,
   );
 
   counts.locations = await prisma.$executeRawUnsafe(
     `UPDATE "VehicleLocation" SET lat=NULL, lon=NULL, address=NULL, "privacyZoneId"=$5
       WHERE "vehicleId" = ANY($1) AND lat IS NOT NULL AND ${H} <= $4`,
-    ids, zone.lat, zone.lon, zone.radiusM, zoneId,
+    ids,
+    zone.lat,
+    zone.lon,
+    zone.radiusM,
+    zoneId,
   );
 
   // Telemetry: one UPDATE per partition (short locks; names validated).
-  const telemetryExpr = H.replaceAll('lat', `(data->>'lt')::float8`).replaceAll('lon', `(data->>'ln')::float8`);
+  const telemetryExpr = H.replaceAll('lat', `(data->>'lt')::float8`).replaceAll(
+    'lon',
+    `(data->>'ln')::float8`,
+  );
   for (const part of await listTelemetryPartitions()) {
     counts.telemetry += await prisma.$executeRawUnsafe(
       `UPDATE telemetry."${part}" SET data = data || jsonb_build_object('lt', NULL, 'ln', NULL, 'pz', $5::text)
         WHERE vehicle_id = ANY($1) AND jsonb_typeof(data->'lt') = 'number' AND ${telemetryExpr} <= $4`,
-      ids, zone.lat, zone.lon, zone.radiusM, zoneId,
+      ids,
+      zone.lat,
+      zone.lon,
+      zone.radiusM,
+      zoneId,
     );
   }
 
@@ -85,12 +124,29 @@ export async function runPrivacyRedaction(zoneId: string): Promise<RedactionCoun
     const lat = typeof state.lat === 'number' ? state.lat : null;
     const lon = typeof state.lon === 'number' ? state.lon : null;
     if (lat === null || lon === null) continue;
-    const km = 2 * 6371 * Math.asin(Math.sqrt(Math.sin(((lat - zone.lat) * Math.PI) / 360) ** 2 + Math.cos((zone.lat * Math.PI) / 180) * Math.cos((lat * Math.PI) / 180) * Math.sin(((lon - zone.lon) * Math.PI) / 360) ** 2));
+    const km =
+      2 *
+      6371 *
+      Math.asin(
+        Math.sqrt(
+          Math.sin(((lat - zone.lat) * Math.PI) / 360) ** 2 +
+            Math.cos((zone.lat * Math.PI) / 180) *
+              Math.cos((lat * Math.PI) / 180) *
+              Math.sin(((lon - zone.lon) * Math.PI) / 360) ** 2,
+        ),
+      );
     if (km * 1000 > zone.radiusM) continue;
     await prisma.vehicleSnapshot.update({
       where: { vehicleId: snap.vehicleId },
       data: {
-        state: { ...state, lat: null, lon: null, address: null, privacyZoneId: zone.id, privacyZoneName: zone.name } as unknown as object,
+        state: {
+          ...state,
+          lat: null,
+          lon: null,
+          address: null,
+          privacyZoneId: zone.id,
+          privacyZoneName: zone.name,
+        } as unknown as object,
       },
     });
     counts.snapshots += 1;

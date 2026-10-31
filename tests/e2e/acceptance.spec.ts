@@ -19,7 +19,6 @@ test.beforeEach(async ({ page }) => {
   page.on('pageerror', (err) => consoleErrors.push(`pageerror: ${err.message}`));
 });
 
-
 test('full demo acceptance flow', async ({ page }) => {
   const email = `e2e-${Date.now()}@voltlink.test`;
   await register(page, email);
@@ -65,7 +64,9 @@ test('full demo acceptance flow', async ({ page }) => {
 
   // Public status page
   await page.goto('/status');
-  await expect(page.getByText(/operational|degraded|outage|maintenance/i).first()).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText(/operational|degraded|outage|maintenance/i).first()).toBeVisible({
+    timeout: 15000,
+  });
 
   // Notifications & settings
   await page.goto('/notifications');

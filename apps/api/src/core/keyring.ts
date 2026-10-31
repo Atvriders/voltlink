@@ -22,20 +22,24 @@ function parseRing(): { active: number; keys: Map<number, Buffer> } {
   const buf = Buffer.from(raw, 'base64');
   if (buf.length !== 32) throw new Error('VL_MASTER_KEY must be 32 bytes when base64-decoded.');
   const active = Number(process.env.VL_MASTER_KEY_VERSION ?? '1');
-  if (!Number.isInteger(active) || active < 1) throw new Error('VL_MASTER_KEY_VERSION must be a positive integer.');
+  if (!Number.isInteger(active) || active < 1)
+    throw new Error('VL_MASTER_KEY_VERSION must be a positive integer.');
   keys.set(active, buf);
   const list = process.env.VL_MASTER_KEYS ?? '';
   if (list) {
     for (const part of list.split(',')) {
       const m = part.trim().match(/^v(\d+):(.+)$/);
-      if (!m) throw new Error(`VL_MASTER_KEYS entry ${JSON.stringify(part)} must look like v1:<base64>.`);
+      if (!m)
+        throw new Error(`VL_MASTER_KEYS entry ${JSON.stringify(part)} must look like v1:<base64>.`);
       const kid = Number(m[1]);
       const kb = Buffer.from(m[2] ?? '', 'base64');
-      if (kb.length !== 32) throw new Error(`VL_MASTER_KEYS v${kid} must be 32 bytes when base64-decoded.`);
+      if (kb.length !== 32)
+        throw new Error(`VL_MASTER_KEYS v${kid} must be 32 bytes when base64-decoded.`);
       keys.set(kid, kb);
     }
   }
-  if (!keys.has(active)) throw new Error(`VL_MASTER_KEY_VERSION=${active} is not present in the key ring.`);
+  if (!keys.has(active))
+    throw new Error(`VL_MASTER_KEY_VERSION=${active} is not present in the key ring.`);
   return { active, keys };
 }
 
@@ -48,7 +52,10 @@ function ring() {
 const contextAad = (context: string) => Buffer.from(`voltlink:v2:${context}`);
 
 /** Encrypt `plaintext` into an envelope v2 with bound AAD context. */
-export function seal(plaintext: string, context: string): { keyVersion: number; algorithm: string; ciphertext: string } {
+export function seal(
+  plaintext: string,
+  context: string,
+): { keyVersion: number; algorithm: string; ciphertext: string } {
   const r = ring();
   const kid = r.active;
   const dek = crypto.randomBytes(32);
@@ -56,7 +63,9 @@ export function seal(plaintext: string, context: string): { keyVersion: number; 
   const c = crypto.createCipheriv('aes-256-gcm', dek, iv).setAAD(contextAad(context));
   const body = Buffer.concat([c.update(plaintext, 'utf8'), c.final()]);
   const wiv = crypto.randomBytes(12);
-  const w = crypto.createCipheriv('aes-256-gcm', r.keys.get(kid)!, wiv).setAAD(Buffer.from(`voltlink:v2:${kid}:${context}`));
+  const w = crypto
+    .createCipheriv('aes-256-gcm', r.keys.get(kid)!, wiv)
+    .setAAD(Buffer.from(`voltlink:v2:${kid}:${context}`));
   const wrapped = Buffer.concat([w.update(dek), w.final()]);
   const envelope = {
     v: 2,
@@ -68,7 +77,11 @@ export function seal(plaintext: string, context: string): { keyVersion: number; 
     tag: b64(c.getAuthTag()),
     body: b64(body),
   };
-  return { keyVersion: kid, algorithm: 'aes-256-gcm-envelope-v2', ciphertext: JSON.stringify(envelope) };
+  return {
+    keyVersion: kid,
+    algorithm: 'aes-256-gcm-envelope-v2',
+    ciphertext: JSON.stringify(envelope),
+  };
 }
 
 function openV2(ciphertext: string, context: string): string {
@@ -82,7 +95,9 @@ function openV2(ciphertext: string, context: string): string {
   const iv = Buffer.from(String(envl.iv), 'base64');
   const tag = Buffer.from(String(envl.tag), 'base64');
   const body = Buffer.from(String(envl.body), 'base64');
-  const w = crypto.createDecipheriv('aes-256-gcm', key, wiv).setAAD(Buffer.from(`voltlink:v2:${kid}:${context}`));
+  const w = crypto
+    .createDecipheriv('aes-256-gcm', key, wiv)
+    .setAAD(Buffer.from(`voltlink:v2:${kid}:${context}`));
   w.setAuthTag(wtag);
   const dek = Buffer.concat([w.update(dekB), w.final()]);
   const c = crypto.createDecipheriv('aes-256-gcm', dek, iv).setAAD(contextAad(context));
@@ -106,14 +121,18 @@ export function open(ciphertext: string, context: string): string {
 }
 
 /** Re-wrap a sealed value under the active kid (body untouched). v1 becomes v2. */
-export function rewrap(ciphertext: string, context: string): { keyVersion: number; algorithm: string; ciphertext: string } {
+export function rewrap(
+  ciphertext: string,
+  context: string,
+): { keyVersion: number; algorithm: string; ciphertext: string } {
   let parsed: { v?: number; kid?: number };
   try {
     parsed = JSON.parse(ciphertext) as { v?: number; kid?: number };
   } catch {
     throw new Error('Invalid sealed value');
   }
-  if (parsed.v === 2 && parsed.kid === ring().active) return { keyVersion: parsed.kid, algorithm: 'aes-256-gcm-envelope-v2', ciphertext };
+  if (parsed.v === 2 && parsed.kid === ring().active)
+    return { keyVersion: parsed.kid, algorithm: 'aes-256-gcm-envelope-v2', ciphertext };
   return seal(open(ciphertext, context), context);
 }
 

@@ -21,11 +21,16 @@ function readSessionToken(req: Request): string {
 
 export async function authenticateApiKey(token: string, ip?: string) {
   if (!API_KEY_RE.test(token)) throw new AuthError('API_KEY_INVALID', 'Invalid API key.', 401);
-  const key = await prisma.apiKey.findUnique({ where: { keyHash: sha256hex(token) }, include: { user: true } });
+  const key = await prisma.apiKey.findUnique({
+    where: { keyHash: sha256hex(token) },
+    include: { user: true },
+  });
   const member =
     key && key.userId
       ? await prisma.membership.findUnique({
-          where: { organizationId_userId: { organizationId: key.organizationId, userId: key.userId } },
+          where: {
+            organizationId_userId: { organizationId: key.organizationId, userId: key.userId },
+          },
         })
       : null;
   if (
@@ -40,7 +45,10 @@ export async function authenticateApiKey(token: string, ip?: string) {
   }
   if (!key.lastUsedAt || Date.now() - key.lastUsedAt.getTime() > 60_000) {
     void prisma.apiKey
-      .update({ where: { id: key.id }, data: { lastUsedAt: new Date(), lastUsedIp: ip?.slice(0, 64) } })
+      .update({
+        where: { id: key.id },
+        data: { lastUsedAt: new Date(), lastUsedIp: ip?.slice(0, 64) },
+      })
       .catch(() => undefined);
   }
   return {
@@ -61,9 +69,19 @@ export async function authenticateApiKey(token: string, ip?: string) {
 export async function authenticate(req: Request, mode: 'session' | 'any' = 'any') {
   const header = req.header('authorization') ?? '';
   if (header.startsWith('Bearer vlk_')) {
-    if (mode === 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
+    if (mode === 'session')
+      throw new AccessDenied(
+        'API_KEY_NOT_ALLOWED',
+        'This endpoint requires an interactive session.',
+        403,
+      );
     const cookie = req.cookies?.[env.SESSION_COOKIE];
-    if (cookie) throw new AuthError('AMBIGUOUS_CREDENTIALS', 'Send a session cookie or an API key, not both.', 400);
+    if (cookie)
+      throw new AuthError(
+        'AMBIGUOUS_CREDENTIALS',
+        'Send a session cookie or an API key, not both.',
+        400,
+      );
     return authenticateApiKey(header.slice(7), req.ip);
   }
 
@@ -91,7 +109,9 @@ export async function authenticate(req: Request, mode: 'session' | 'any' = 'any'
     throw new AuthError('SESSION_REVOKED', 'This session was revoked or expired.', 401);
   }
   if (!s.lastSeenAt || Date.now() - s.lastSeenAt.getTime() > 300_000) {
-    void prisma.userSession.update({ where: { id: s.id }, data: { lastSeenAt: new Date() } }).catch(() => undefined);
+    void prisma.userSession
+      .update({ where: { id: s.id }, data: { lastSeenAt: new Date() } })
+      .catch(() => undefined);
   }
   return {
     kind: 'session' as const,
@@ -101,6 +121,7 @@ export async function authenticate(req: Request, mode: 'session' | 'any' = 'any'
     emailVerified: !!s.user.emailVerifiedAt,
     mfaEnrolled: s.user.totpEnabled || s.user._count.passkeys > 0,
     stepUpAt: s.stepUpAt,
-    stepUpMethod: (s.stepUpMethod ?? null) as 'password' | 'totp' | 'recovery_code' | 'passkey' | null,
+    stepUpMethod: (s.stepUpMethod ?? null) as
+      'password' | 'totp' | 'recovery_code' | 'passkey' | null,
   };
 }

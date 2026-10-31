@@ -49,11 +49,21 @@ authRouter.get('/setup-status', { auth: 'public', target: { kind: 'none' } }, as
 });
 
 authRouter.post('/register', { auth: 'public', target: { kind: 'none' } }, async (req, res) => {
-  const body = (req.body ?? {}) as { email?: string; name?: string; password?: string; setupToken?: string; inviteToken?: string };
+  const body = (req.body ?? {}) as {
+    email?: string;
+    name?: string;
+    password?: string;
+    setupToken?: string;
+    inviteToken?: string;
+  };
   const status = await setupStatus();
   if (status.needsSetup) {
     if (typeof body.setupToken !== 'string' || !body.setupToken) {
-      throw new AccessDenied('SETUP_REQUIRED', 'This instance needs first-run setup with the setup token.', 403);
+      throw new AccessDenied(
+        'SETUP_REQUIRED',
+        'This instance needs first-run setup with the setup token.',
+        403,
+      );
     }
     const { user } = await bootstrapInstanceAdmin({
       email: String(body.email ?? ''),
@@ -61,7 +71,11 @@ authRouter.post('/register', { auth: 'public', target: { kind: 'none' } }, async
       password: String(body.password ?? ''),
       setupToken: body.setupToken,
     });
-    const { token } = await createSession(user.id, req.ip, req.headers['user-agent'] as string | undefined);
+    const { token } = await createSession(
+      user.id,
+      req.ip,
+      req.headers['user-agent'] as string | undefined,
+    );
     await setSessionCookie(res, token);
     res.status(201).json({ data: { user } });
     return;
@@ -73,7 +87,11 @@ authRouter.post('/register', { auth: 'public', target: { kind: 'none' } }, async
     inviteToken: typeof body.inviteToken === 'string' ? body.inviteToken : undefined,
   });
   if (result.kind === 'created') {
-    const { token } = await createSession(result.user.id, req.ip, req.headers['user-agent'] as string | undefined);
+    const { token } = await createSession(
+      result.user.id,
+      req.ip,
+      req.headers['user-agent'] as string | undefined,
+    );
     await setSessionCookie(res, token);
     res.status(201).json({ data: { user: result.user } });
     return;
@@ -86,18 +104,27 @@ authRouter.post('/verify-email', { auth: 'public', target: { kind: 'none' } }, a
   res.json({ data: { ok: true } });
 });
 
-authRouter.post('/resend-verification', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
-  const actor = req.actor!;
-  if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: actor.userId } });
-  if (user.emailVerifiedAt) {
-    res.json({ data: { ok: true, alreadyVerified: true } });
-    return;
-  }
-  const { requestVerificationFor } = await import('../auth/service');
-  await requestVerificationFor(user);
-  res.json({ data: { ok: true } });
-});
+authRouter.post(
+  '/resend-verification',
+  { auth: 'session', target: { kind: 'none' } },
+  async (req, res) => {
+    const actor = req.actor!;
+    if (actor.kind !== 'session')
+      throw new AccessDenied(
+        'API_KEY_NOT_ALLOWED',
+        'This endpoint requires an interactive session.',
+        403,
+      );
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: actor.userId } });
+    if (user.emailVerifiedAt) {
+      res.json({ data: { ok: true, alreadyVerified: true } });
+      return;
+    }
+    const { requestVerificationFor } = await import('../auth/service');
+    await requestVerificationFor(user);
+    res.json({ data: { ok: true } });
+  },
+);
 
 // ---- sign-in (A-TOTPLOGIN: /login/totp is gone; MFA completes at /login/mfa) ----
 
@@ -110,12 +137,22 @@ authRouter.post('/login', { auth: 'public', target: { kind: 'none' } }, async (r
     userAgent: req.headers['user-agent'] as string | undefined,
   });
   if (result.mfaRequired) {
-    const u = await prisma.user.findUnique({ where: { email: String(body.email ?? '').trim().toLowerCase() } });
+    const u = await prisma.user.findUnique({
+      where: {
+        email: String(body.email ?? '')
+          .trim()
+          .toLowerCase(),
+      },
+    });
     await createMfaCeremony(res, u!.id);
     res.json({ data: { mfaRequired: true, methods: result.methods } });
     return;
   }
-  const { token } = await createSession(result.user!.id, req.ip, req.headers['user-agent'] as string | undefined);
+  const { token } = await createSession(
+    result.user!.id,
+    req.ip,
+    req.headers['user-agent'] as string | undefined,
+  );
   await setSessionCookie(res, token);
   res.json({ data: { user: result.user } });
 });
@@ -143,7 +180,10 @@ authRouter.router.use(gone);
 authRouter.post('/logout', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
   const actor = req.actor!;
   if (actor.kind === 'session') {
-    await prisma.userSession.updateMany({ where: { id: actor.sessionId }, data: { revokedAt: new Date() } });
+    await prisma.userSession.updateMany({
+      where: { id: actor.sessionId },
+      data: { revokedAt: new Date() },
+    });
   }
   res.clearCookie(env.SESSION_COOKIE, { path: '/' });
   res.json({ data: { ok: true } });
@@ -151,71 +191,143 @@ authRouter.post('/logout', { auth: 'session', target: { kind: 'none' } }, async 
 
 // ---- password reset (uniform responses, A-ENUM) ----
 
-authRouter.post('/forgot-password', { auth: 'public', target: { kind: 'none' } }, async (req, res) => {
-  await requestPasswordReset(String((req.body as { email?: string }).email ?? '').trim().toLowerCase());
-  res.json({ data: { ok: true } });
-});
+authRouter.post(
+  '/forgot-password',
+  { auth: 'public', target: { kind: 'none' } },
+  async (req, res) => {
+    await requestPasswordReset(
+      String((req.body as { email?: string }).email ?? '')
+        .trim()
+        .toLowerCase(),
+    );
+    res.json({ data: { ok: true } });
+  },
+);
 
-authRouter.post('/reset-password', { auth: 'public', target: { kind: 'none' } }, async (req, res) => {
-  await resetPassword(String((req.body as { token?: string }).token ?? ''), String((req.body as { password?: string }).password ?? ''));
-  res.json({ data: { ok: true } });
-});
+authRouter.post(
+  '/reset-password',
+  { auth: 'public', target: { kind: 'none' } },
+  async (req, res) => {
+    await resetPassword(
+      String((req.body as { token?: string }).token ?? ''),
+      String((req.body as { password?: string }).password ?? ''),
+    );
+    res.json({ data: { ok: true } });
+  },
+);
 
 // ---- sessions ----
 
 authRouter.get('/sessions', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
   const actor = req.actor!;
-  if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
+  if (actor.kind !== 'session')
+    throw new AccessDenied(
+      'API_KEY_NOT_ALLOWED',
+      'This endpoint requires an interactive session.',
+      403,
+    );
   res.json({ data: await listSessions(actor.userId, actor.sessionId) });
 });
 
 authRouter.post(
   '/sessions/:id/revoke',
-  { auth: 'session', target: { kind: 'resource', resource: 'session', from: 'param:id', perm: 'org.read' } },
+  {
+    auth: 'session',
+    target: { kind: 'resource', resource: 'session', from: 'param:id', perm: 'org.read' },
+  },
   async (req, res) => {
     const actor = req.actor!;
-    if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
+    if (actor.kind !== 'session')
+      throw new AccessDenied(
+        'API_KEY_NOT_ALLOWED',
+        'This endpoint requires an interactive session.',
+        403,
+      );
     await revokeSession(actor.userId, String(req.params.id));
     res.json({ data: { ok: true } });
   },
 );
 
-authRouter.post('/sessions/revoke-others', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
-  const actor = req.actor!;
-  if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
-  await revokeAllOtherSessions(actor.userId, actor.sessionId);
-  res.json({ data: { ok: true } });
-});
+authRouter.post(
+  '/sessions/revoke-others',
+  { auth: 'session', target: { kind: 'none' } },
+  async (req, res) => {
+    const actor = req.actor!;
+    if (actor.kind !== 'session')
+      throw new AccessDenied(
+        'API_KEY_NOT_ALLOWED',
+        'This endpoint requires an interactive session.',
+        403,
+      );
+    await revokeAllOtherSessions(actor.userId, actor.sessionId);
+    res.json({ data: { ok: true } });
+  },
+);
 
 // ---- TOTP (A-TOTPSETUP: setup requires step-up; active secret untouched
 // until confirmation) ----
 
-authRouter.post('/mfa/totp/setup', { auth: 'session', stepUp: {}, target: { kind: 'none' } }, async (req, res) => {
-  const actor = req.actor!;
-  if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
-  res.json({ data: await totpSetup(actor.userId) });
-});
+authRouter.post(
+  '/mfa/totp/setup',
+  { auth: 'session', stepUp: {}, target: { kind: 'none' } },
+  async (req, res) => {
+    const actor = req.actor!;
+    if (actor.kind !== 'session')
+      throw new AccessDenied(
+        'API_KEY_NOT_ALLOWED',
+        'This endpoint requires an interactive session.',
+        403,
+      );
+    res.json({ data: await totpSetup(actor.userId) });
+  },
+);
 
-authRouter.post('/mfa/totp/confirm', { auth: 'session', stepUp: {}, target: { kind: 'none' } }, async (req, res) => {
-  const actor = req.actor!;
-  if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
-  const { recoveryCodes } = await totpConfirm(actor.userId, String((req.body as { code?: string }).code ?? ''));
-  res.json({ data: { recoveryCodes } });
-});
+authRouter.post(
+  '/mfa/totp/confirm',
+  { auth: 'session', stepUp: {}, target: { kind: 'none' } },
+  async (req, res) => {
+    const actor = req.actor!;
+    if (actor.kind !== 'session')
+      throw new AccessDenied(
+        'API_KEY_NOT_ALLOWED',
+        'This endpoint requires an interactive session.',
+        403,
+      );
+    const { recoveryCodes } = await totpConfirm(
+      actor.userId,
+      String((req.body as { code?: string }).code ?? ''),
+    );
+    res.json({ data: { recoveryCodes } });
+  },
+);
 
-authRouter.post('/mfa/totp/disable', { auth: 'session', stepUp: { possession: true }, target: { kind: 'none' } }, async (req, res) => {
-  const actor = req.actor!;
-  if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
-  await totpDisable(actor.userId);
-  res.json({ data: { ok: true } });
-});
+authRouter.post(
+  '/mfa/totp/disable',
+  { auth: 'session', stepUp: { possession: true }, target: { kind: 'none' } },
+  async (req, res) => {
+    const actor = req.actor!;
+    if (actor.kind !== 'session')
+      throw new AccessDenied(
+        'API_KEY_NOT_ALLOWED',
+        'This endpoint requires an interactive session.',
+        403,
+      );
+    await totpDisable(actor.userId);
+    res.json({ data: { ok: true } });
+  },
+);
 
 authRouter.post(
   '/mfa/recovery-codes/regenerate',
   { auth: 'session', stepUp: { possession: true }, target: { kind: 'none' } },
   async (req, res) => {
     const actor = req.actor!;
-    if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
+    if (actor.kind !== 'session')
+      throw new AccessDenied(
+        'API_KEY_NOT_ALLOWED',
+        'This endpoint requires an interactive session.',
+        403,
+      );
     const { recoveryCodes } = await regenerateRecoveryCodes(actor.userId);
     res.json({ data: { recoveryCodes } });
   },
@@ -225,8 +337,18 @@ authRouter.post(
 
 authRouter.post('/step-up', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
   const actor = req.actor!;
-  if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
-  const body = (req.body ?? {}) as { method?: string; password?: string; code?: string; response?: never };
+  if (actor.kind !== 'session')
+    throw new AccessDenied(
+      'API_KEY_NOT_ALLOWED',
+      'This endpoint requires an interactive session.',
+      403,
+    );
+  const body = (req.body ?? {}) as {
+    method?: string;
+    password?: string;
+    code?: string;
+    response?: never;
+  };
   const result = await stepUp(actor, req, {
     method: (body.method as 'password' | 'totp' | 'recovery_code' | 'passkey') ?? 'password',
     password: body.password,
@@ -240,33 +362,73 @@ authRouter.post('/step-up', { auth: 'session', target: { kind: 'none' } }, async
 
 authRouter.get('/passkeys', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
   const actor = req.actor!;
-  if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
+  if (actor.kind !== 'session')
+    throw new AccessDenied(
+      'API_KEY_NOT_ALLOWED',
+      'This endpoint requires an interactive session.',
+      403,
+    );
   res.json({ data: await listPasskeys(actor.userId) });
 });
 
-authRouter.post('/passkeys/options', { auth: 'session', stepUp: {}, target: { kind: 'none' } }, async (req, res) => {
-  const actor = req.actor!;
-  if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
-  const options = await passkeyRegistrationOptions(actor.userId);
-  const { createCeremony } = await import('../auth/ceremony');
-  await createCeremony(res, { purpose: 'passkey_register', userId: actor.userId, sessionId: actor.sessionId, challenge: options.challenge });
-  res.json({ data: options });
-});
+authRouter.post(
+  '/passkeys/options',
+  { auth: 'session', stepUp: {}, target: { kind: 'none' } },
+  async (req, res) => {
+    const actor = req.actor!;
+    if (actor.kind !== 'session')
+      throw new AccessDenied(
+        'API_KEY_NOT_ALLOWED',
+        'This endpoint requires an interactive session.',
+        403,
+      );
+    const options = await passkeyRegistrationOptions(actor.userId);
+    const { createCeremony } = await import('../auth/ceremony');
+    await createCeremony(res, {
+      purpose: 'passkey_register',
+      userId: actor.userId,
+      sessionId: actor.sessionId,
+      challenge: options.challenge,
+    });
+    res.json({ data: options });
+  },
+);
 
-authRouter.post('/passkeys', { auth: 'session', stepUp: {}, target: { kind: 'none' } }, async (req, res) => {
-  const actor = req.actor!;
-  if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
-  const body = (req.body ?? {}) as { name?: string; response?: never };
-  await verifyPasskeyRegistration(req, actor.userId, { name: body.name, response: body.response as never });
-  res.status(201).json({ data: { ok: true } });
-});
+authRouter.post(
+  '/passkeys',
+  { auth: 'session', stepUp: {}, target: { kind: 'none' } },
+  async (req, res) => {
+    const actor = req.actor!;
+    if (actor.kind !== 'session')
+      throw new AccessDenied(
+        'API_KEY_NOT_ALLOWED',
+        'This endpoint requires an interactive session.',
+        403,
+      );
+    const body = (req.body ?? {}) as { name?: string; response?: never };
+    await verifyPasskeyRegistration(req, actor.userId, {
+      name: body.name,
+      response: body.response as never,
+    });
+    res.status(201).json({ data: { ok: true } });
+  },
+);
 
 authRouter.delete(
   '/passkeys/:id',
-  { auth: 'session', stepUp: { possession: true }, target: { kind: 'resource', resource: 'passkey', from: 'param:id', perm: 'org.read' } },
+  {
+    auth: 'session',
+    stepUp: { possession: true },
+    target: { kind: 'resource', resource: 'passkey', from: 'param:id', perm: 'org.read' },
+  },
   async (req, res) => {
     const actor = req.actor!;
-    if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
+    if (actor.kind !== 'session')
+      throw new AccessDenied(
+        'API_KEY_NOT_ALLOWED',
+        'This endpoint requires an interactive session.',
+        403,
+      );
     await deletePasskey(actor.userId, String(req.params.id));
     res.json({ data: { ok: true } });
   },
@@ -276,7 +438,11 @@ authRouter.delete(
 // DELETE route: possession step-up plus a self-owned resource target.
 authRouter.post(
   '/passkeys/:id/delete',
-  { auth: 'session', stepUp: { possession: true }, target: { kind: 'resource', resource: 'passkey', from: 'param:id', perm: 'org.read' } },
+  {
+    auth: 'session',
+    stepUp: { possession: true },
+    target: { kind: 'resource', resource: 'passkey', from: 'param:id', perm: 'org.read' },
+  },
   async (req, res) => {
     const actor = sessionActor(req);
     await deletePasskey(actor.userId, String(req.params.id));
@@ -284,29 +450,56 @@ authRouter.post(
   },
 );
 
-authRouter.get('/passkey/login/options', { auth: 'public', target: { kind: 'none' } }, async (_req, res) => {
-  const options = await passkeyLoginOptions();
-  const { createCeremony } = await import('../auth/ceremony');
-  const { webauthnRelyingParty } = await import('../auth/service');
-  void webauthnRelyingParty;
-  await createCeremony(res, { purpose: 'passkey_login', challenge: options.challenge });
-  res.json({ data: options });
-});
+authRouter.get(
+  '/passkey/login/options',
+  { auth: 'public', target: { kind: 'none' } },
+  async (_req, res) => {
+    const options = await passkeyLoginOptions();
+    const { createCeremony } = await import('../auth/ceremony');
+    const { webauthnRelyingParty } = await import('../auth/service');
+    void webauthnRelyingParty;
+    await createCeremony(res, { purpose: 'passkey_login', challenge: options.challenge });
+    res.json({ data: options });
+  },
+);
 
-authRouter.post('/passkey/login/verify', { auth: 'public', target: { kind: 'none' } }, async (req, res) => {
-  const { token, user } = await passkeyLogin(req, { response: (req.body as { response: never }).response }, req.ip, req.headers['user-agent'] as string | undefined);
-  await setSessionCookie(res, token);
-  res.json({ data: { user } });
-});
+authRouter.post(
+  '/passkey/login/verify',
+  { auth: 'public', target: { kind: 'none' } },
+  async (req, res) => {
+    const { token, user } = await passkeyLogin(
+      req,
+      { response: (req.body as { response: never }).response },
+      req.ip,
+      req.headers['user-agent'] as string | undefined,
+    );
+    await setSessionCookie(res, token);
+    res.json({ data: { user } });
+  },
+);
 
-authRouter.get('/step-up/passkey/options', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
-  const actor = req.actor!;
-  if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
-  const options = await passkeyStepUpOptions(actor.userId);
-  const { createCeremony } = await import('../auth/ceremony');
-  await createCeremony(res, { purpose: 'stepup_passkey', userId: actor.userId, sessionId: actor.sessionId, challenge: options.challenge });
-  res.json({ data: options });
-});
+authRouter.get(
+  '/step-up/passkey/options',
+  { auth: 'session', target: { kind: 'none' } },
+  async (req, res) => {
+    const actor = req.actor!;
+    if (actor.kind !== 'session')
+      throw new AccessDenied(
+        'API_KEY_NOT_ALLOWED',
+        'This endpoint requires an interactive session.',
+        403,
+      );
+    const options = await passkeyStepUpOptions(actor.userId);
+    const { createCeremony } = await import('../auth/ceremony');
+    await createCeremony(res, {
+      purpose: 'stepup_passkey',
+      userId: actor.userId,
+      sessionId: actor.sessionId,
+      challenge: options.challenge,
+    });
+    res.json({ data: options });
+  },
+);
 
 // ---- me (the access layer fills req.actor) ----
 
@@ -314,50 +507,125 @@ authRouter.get('/step-up/passkey/options', { auth: 'session', target: { kind: 'n
 
 authRouter.get('/api-keys', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
   const actor = req.actor!;
-  if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
-  const rows = await prisma.apiKey.findMany({ where: { userId: actor.userId }, orderBy: { createdAt: 'desc' } });
+  if (actor.kind !== 'session')
+    throw new AccessDenied(
+      'API_KEY_NOT_ALLOWED',
+      'This endpoint requires an interactive session.',
+      403,
+    );
+  const rows = await prisma.apiKey.findMany({
+    where: { userId: actor.userId },
+    orderBy: { createdAt: 'desc' },
+  });
   res.json({
     data: rows.map((k) => ({
-      id: k.id, name: k.name, prefix: k.prefix, scopes: k.scopes as unknown[],
-      expiresAt: k.expiresAt.toISOString(), createdAt: k.createdAt.toISOString(),
-      lastUsedAt: k.lastUsedAt?.toISOString() ?? null, revokedAt: k.revokedAt?.toISOString() ?? null,
+      id: k.id,
+      name: k.name,
+      prefix: k.prefix,
+      scopes: k.scopes as unknown[],
+      expiresAt: k.expiresAt.toISOString(),
+      createdAt: k.createdAt.toISOString(),
+      lastUsedAt: k.lastUsedAt?.toISOString() ?? null,
+      revokedAt: k.revokedAt?.toISOString() ?? null,
     })),
   });
 });
 
-authRouter.post('/api-keys', { auth: 'session', verifiedEmail: true, target: { kind: 'none' } }, async (req, res) => {
-  const actor = req.actor!;
-  if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
-  const body = (req.body ?? {}) as { name?: string; scopes?: unknown; expiresInDays?: number };
-  const allowed = new Set(API_SCOPES);
-  const scopes = Array.isArray(body.scopes) ? [...new Set(body.scopes.filter((s): s is ApiScope => typeof s === 'string' && allowed.has(s as ApiScope)))] : [];
-  if (!body.name || scopes.length === 0) {
-    res.status(400).json({ error: { code: 'VALIDATION', message: 'name and at least one valid scope are required.' } });
-    return;
-  }
-  const membership = await prisma.membership.findFirst({ where: { userId: actor.userId, status: 'ACTIVE' }, orderBy: { createdAt: 'asc' } });
-  if (!membership) {
-    res.status(403).json({ error: { code: 'FORBIDDEN', message: 'No organization available.' } });
-    return;
-  }
-  const key = await createApiKey({ userId: actor.userId, organizationId: membership.organizationId, name: body.name, scopes, expiresInDays: Number(body.expiresInDays) || 90 });
-  await audit({ actorId: actor.userId, organizationId: membership.organizationId, action: 'apikey.created', entityType: 'apiKey', entityId: key.id, details: { scopes } });
-  res.status(201).json({ data: key });
-});
+authRouter.post(
+  '/api-keys',
+  { auth: 'session', verifiedEmail: true, target: { kind: 'none' } },
+  async (req, res) => {
+    const actor = req.actor!;
+    if (actor.kind !== 'session')
+      throw new AccessDenied(
+        'API_KEY_NOT_ALLOWED',
+        'This endpoint requires an interactive session.',
+        403,
+      );
+    const body = (req.body ?? {}) as { name?: string; scopes?: unknown; expiresInDays?: number };
+    const allowed = new Set(API_SCOPES);
+    const scopes = Array.isArray(body.scopes)
+      ? [
+          ...new Set(
+            body.scopes.filter(
+              (s): s is ApiScope => typeof s === 'string' && allowed.has(s as ApiScope),
+            ),
+          ),
+        ]
+      : [];
+    if (!body.name || scopes.length === 0) {
+      res
+        .status(400)
+        .json({
+          error: { code: 'VALIDATION', message: 'name and at least one valid scope are required.' },
+        });
+      return;
+    }
+    const membership = await prisma.membership.findFirst({
+      where: { userId: actor.userId, status: 'ACTIVE' },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!membership) {
+      res.status(403).json({ error: { code: 'FORBIDDEN', message: 'No organization available.' } });
+      return;
+    }
+    const key = await createApiKey({
+      userId: actor.userId,
+      organizationId: membership.organizationId,
+      name: body.name,
+      scopes,
+      expiresInDays: Number(body.expiresInDays) || 90,
+    });
+    await audit({
+      actorId: actor.userId,
+      organizationId: membership.organizationId,
+      action: 'apikey.created',
+      entityType: 'apiKey',
+      entityId: key.id,
+      details: { scopes },
+    });
+    res.status(201).json({ data: key });
+  },
+);
 
-authRouter.delete('/api-keys/:id', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
-  const actor = req.actor!;
-  if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
-  await revokeApiKey(actor.userId, String(req.params.id));
-  await audit({ actorId: actor.userId, action: 'apikey.revoked', entityType: 'apiKey', entityId: String(req.params.id) });
-  res.json({ data: { ok: true } });
-});
+authRouter.delete(
+  '/api-keys/:id',
+  { auth: 'session', target: { kind: 'none' } },
+  async (req, res) => {
+    const actor = req.actor!;
+    if (actor.kind !== 'session')
+      throw new AccessDenied(
+        'API_KEY_NOT_ALLOWED',
+        'This endpoint requires an interactive session.',
+        403,
+      );
+    await revokeApiKey(actor.userId, String(req.params.id));
+    await audit({
+      actorId: actor.userId,
+      action: 'apikey.revoked',
+      entityType: 'apiKey',
+      entityId: String(req.params.id),
+    });
+    res.json({ data: { ok: true } });
+  },
+);
 
 authRouter.get('/me', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
   const actor = req.actor!;
-  if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: actor.userId }, include: { _count: { select: { passkeys: true } } } });
-  const memberships = await prisma.membership.findMany({ where: { userId: actor.userId, status: 'ACTIVE' }, include: { organization: true } });
+  if (actor.kind !== 'session')
+    throw new AccessDenied(
+      'API_KEY_NOT_ALLOWED',
+      'This endpoint requires an interactive session.',
+      403,
+    );
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: actor.userId },
+    include: { _count: { select: { passkeys: true } } },
+  });
+  const memberships = await prisma.membership.findMany({
+    where: { userId: actor.userId, status: 'ACTIVE' },
+    include: { organization: true },
+  });
   const { ROLE_PERMISSIONS } = await import('@voltlink/shared');
   res.json({
     data: {
@@ -376,11 +644,15 @@ authRouter.get('/me', { auth: 'session', target: { kind: 'none' } }, async (req,
 
 // ---- instance settings (admin page): registration mode ----
 
-authRouter.patch('/instance/registration-mode', { auth: 'session', stepUp: {}, target: { kind: 'instanceAdmin' } }, async (req, res) => {
-  const mode = String((req.body as { mode?: string }).mode ?? '');
-  if (!['invite', 'open', 'closed'].includes(mode)) {
-    throw new AccessDenied('BAD_REQUEST', 'mode must be invite, open or closed.', 400);
-  }
-  await setRegistrationMode(mode as 'invite' | 'open' | 'closed');
-  res.json({ data: { ok: true } });
-});
+authRouter.patch(
+  '/instance/registration-mode',
+  { auth: 'session', stepUp: {}, target: { kind: 'instanceAdmin' } },
+  async (req, res) => {
+    const mode = String((req.body as { mode?: string }).mode ?? '');
+    if (!['invite', 'open', 'closed'].includes(mode)) {
+      throw new AccessDenied('BAD_REQUEST', 'mode must be invite, open or closed.', 400);
+    }
+    await setRegistrationMode(mode as 'invite' | 'open' | 'closed');
+    res.json({ data: { ok: true } });
+  },
+);

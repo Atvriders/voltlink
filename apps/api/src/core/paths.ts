@@ -9,7 +9,9 @@ import path from 'node:path';
 function findAppRoot(start: string): string | undefined {
   for (let dir = start, i = 0; i < 6; i++, dir = path.dirname(dir)) {
     try {
-      if (JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).name === '@voltlink/api') {
+      if (
+        JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).name === '@voltlink/api'
+      ) {
         return dir;
       }
     } catch {

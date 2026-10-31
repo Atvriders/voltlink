@@ -2,15 +2,15 @@
 
 ## Layers
 
-| Layer | Tool | Where |
-| --- | --- | --- |
-| Unit | Vitest | `apps/api/test/`, `apps/web/src/**/*.test.ts(x)` |
-| API | Vitest + supertest against PostgreSQL | `apps/api/test/` |
-| E2E | Playwright (desktop + Pixel 7 mobile) | `tests/e2e/` |
-| Visual regression | Playwright snapshots | `tests/e2e/` |
-| WebGL assets | Playwright + GLB validation | `tests/e2e/webgl-assets.spec.ts`, `blender/scripts/validate_assets.py` |
-| Security | auth/CSRF/rate-limit tests | `apps/api/test/` |
-| Legacy content | grep-based scan | `scripts/legacy-scan.ts` |
+| Layer             | Tool                                  | Where                                                                  |
+| ----------------- | ------------------------------------- | ---------------------------------------------------------------------- |
+| Unit              | Vitest                                | `apps/api/test/`, `apps/web/src/**/*.test.ts(x)`                       |
+| API               | Vitest + supertest against PostgreSQL | `apps/api/test/`                                                       |
+| E2E               | Playwright (desktop + Pixel 7 mobile) | `tests/e2e/`                                                           |
+| Visual regression | Playwright snapshots                  | `tests/e2e/`                                                           |
+| WebGL assets      | Playwright + GLB validation           | `tests/e2e/webgl-assets.spec.ts`, `blender/scripts/validate_assets.py` |
+| Security          | auth/CSRF/rate-limit tests            | `apps/api/test/`                                                       |
+| Legacy content    | grep-based scan                       | `scripts/legacy-scan.ts`                                               |
 
 ## Running
 

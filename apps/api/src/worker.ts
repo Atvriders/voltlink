@@ -19,8 +19,14 @@ async function main(): Promise<void> {
 
   const queue = getQueue();
   const consumers = [
-    queue.consume('vehicle-commands', 4, (payload) => processCommandJob(payload as { commandId: string; stage?: 'dispatch' | 'confirm' })),
-    queue.consume('telemetry', 4, (payload) => processTelemetryJob(payload as { accountId: string; vehicleId: string; providerVehicleId: string })),
+    queue.consume('vehicle-commands', 4, (payload) =>
+      processCommandJob(payload as { commandId: string; stage?: 'dispatch' | 'confirm' }),
+    ),
+    queue.consume('telemetry', 4, (payload) =>
+      processTelemetryJob(
+        payload as { accountId: string; vehicleId: string; providerVehicleId: string },
+      ),
+    ),
     queue.consume('reports', 2, async (payload) => {
       const p = payload as { userId: string; kind: string };
       await prisma.appNotification.create({
@@ -34,22 +40,38 @@ async function main(): Promise<void> {
         },
       });
     }),
-    queue.consume('privacy-redaction', 2, async (payload) => { await runPrivacyRedaction((payload as { zoneId: string }).zoneId); }),
-    queue.consume('account-deletion', 1, async (payload) => { await runAccountDeletion((payload as { userId: string }).userId); }),
+    queue.consume('privacy-redaction', 2, async (payload) => {
+      await runPrivacyRedaction((payload as { zoneId: string }).zoneId);
+    }),
+    queue.consume('account-deletion', 1, async (payload) => {
+      await runAccountDeletion((payload as { userId: string }).userId);
+    }),
     queue.consume('demo', 1, async (payload) => {
       // demo seed completion bookkeeping
       const p = payload as { userId: string };
       await prisma.appNotification.create({
-        data: { userId: p.userId, event: 'system', severity: 'info', title: 'Demo fleet ready', body: 'Your fictional demo fleet finished loading.', channel: 'in_app' },
+        data: {
+          userId: p.userId,
+          event: 'system',
+          severity: 'info',
+          title: 'Demo fleet ready',
+          body: 'Your fictional demo fleet finished loading.',
+          channel: 'in_app',
+        },
       });
     }),
   ];
 
-  const beat = setInterval(() => void setSetting('workerBeat', new Date().toISOString()).catch(() => undefined), 30_000);
+  const beat = setInterval(
+    () => void setSetting('workerBeat', new Date().toISOString()).catch(() => undefined),
+    30_000,
+  );
   beat.unref();
   console.log('[voltlink] worker started');
   const shutdown = () => {
-    void Promise.all(consumers.map((c) => c.stop())).then(() => prisma.$disconnect().then(() => process.exit(0)));
+    void Promise.all(consumers.map((c) => c.stop())).then(() =>
+      prisma.$disconnect().then(() => process.exit(0)),
+    );
     setTimeout(() => process.exit(0), 5000).unref();
   };
   process.on('SIGTERM', shutdown);

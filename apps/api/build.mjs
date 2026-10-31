@@ -8,7 +8,15 @@ rmSync('dist', { recursive: true, force: true }); // never ship stale bundles
 
 // Every external must be a `dependencies` entry of @voltlink/api: the in-image
 // self-test requires each of them at runtime (guide 04 §2.4).
-const EXTERNALS = ['@prisma/client', 'prisma', 'argon2', 'nodemailer', 'web-push', 'ioredis', 'undici'];
+const EXTERNALS = [
+  '@prisma/client',
+  'prisma',
+  'argon2',
+  'nodemailer',
+  'web-push',
+  'ioredis',
+  'undici',
+];
 
 const common = {
   bundle: true,

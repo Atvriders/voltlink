@@ -8,7 +8,9 @@ import { PATHS } from '../core/paths';
 
 async function main(): Promise<void> {
   const req = createRequire(path.join(PATHS.root, 'dist', 'index.cjs'));
-  const externals: string[] = JSON.parse(fs.readFileSync(path.join(PATHS.root, 'dist', 'externals.json'), 'utf8'));
+  const externals: string[] = JSON.parse(
+    fs.readFileSync(path.join(PATHS.root, 'dist', 'externals.json'), 'utf8'),
+  );
   for (const name of externals) {
     if (name === 'prisma') {
       // prisma's main is ESM-only; the CLI is executed as its own process.
@@ -20,7 +22,8 @@ async function main(): Promise<void> {
   }
   new (req('@prisma/client').PrismaClient)(); // the stub throws here
   const argon2 = req('argon2');
-  if (!(await argon2.verify(await argon2.hash('voltlink-selftest'), 'voltlink-selftest'))) throw new Error('argon2 self-check failed');
+  if (!(await argon2.verify(await argon2.hash('voltlink-selftest'), 'voltlink-selftest')))
+    throw new Error('argon2 self-check failed');
   for (const p of [PATHS.schema, PATHS.migrations, path.join(PATHS.webDist, 'index.html')]) {
     fs.accessSync(p);
   }

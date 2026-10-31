@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { fmtDist, fmtDuration, fmtEnergy, fmtKm, fmtMoney, fmtPower, fmtSpeed, fmtTemp, timeAgo, FRESHNESS_LABEL, COMMAND_STATUS_LABEL } from './format';
+import {
+  fmtDist,
+  fmtDuration,
+  fmtEnergy,
+  fmtKm,
+  fmtMoney,
+  fmtPower,
+  fmtSpeed,
+  fmtTemp,
+  timeAgo,
+  FRESHNESS_LABEL,
+  COMMAND_STATUS_LABEL,
+} from './format';
 import { circleGeoJson, fictionalCityGeoJson, routeGeoJson } from './map';
 
 describe('format helpers', () => {
@@ -52,7 +64,17 @@ describe('format helpers', () => {
   });
 
   it('command status labels cover the lifecycle', () => {
-    for (const s of ['queued', 'submitted', 'accepted', 'confirmed', 'failed', 'rejected', 'unsupported', 'timed_out', 'canceled']) {
+    for (const s of [
+      'queued',
+      'submitted',
+      'accepted',
+      'confirmed',
+      'failed',
+      'rejected',
+      'unsupported',
+      'timed_out',
+      'canceled',
+    ]) {
       expect(COMMAND_STATUS_LABEL[s]).toBeTruthy();
     }
   });
@@ -75,11 +97,17 @@ describe('map geometry helpers', () => {
   });
 
   it('routeGeoJson maps points to lon/lat pairs', () => {
-    const r = routeGeoJson([{ lat: 39, lon: -104 }, { lat: 40, lon: -105 }]);
+    const r = routeGeoJson([
+      { lat: 39, lon: -104 },
+      { lat: 40, lon: -105 },
+    ]);
     expect(r.type).toBe('Feature');
     const geom = r.geometry as { type: string; coordinates: number[][] };
     expect(geom.type).toBe('LineString');
-    expect(geom.coordinates).toEqual([[-104, 39], [-105, 40]]);
+    expect(geom.coordinates).toEqual([
+      [-104, 39],
+      [-105, 40],
+    ]);
   });
 
   it('fictional city has streets and water', () => {

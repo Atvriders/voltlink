@@ -23,9 +23,16 @@ async function main(): Promise<void> {
   const minute = setInterval(async () => {
     try {
       await setSetting('schedulerBeat', '1');
-      const rows = await prisma.automation.findMany({ where: { enabled: true, triggerType: 'scheduled' } });
+      const rows = await prisma.automation.findMany({
+        where: { enabled: true, triggerType: 'scheduled' },
+      });
       for (const row of rows) {
-        void dispatchTrigger({ type: 'scheduled', userId: row.userId, vehicleId: row.vehicleId ?? undefined, data: {} });
+        void dispatchTrigger({
+          type: 'scheduled',
+          userId: row.userId,
+          vehicleId: row.vehicleId ?? undefined,
+          data: {},
+        });
       }
     } catch (err) {
       console.error('scheduled automation tick failed:', (err as Error).message);

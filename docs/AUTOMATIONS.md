@@ -30,29 +30,29 @@ Automation
 
 ## Actions
 
-| Action | Effect |
-| --- | --- |
-| Notify | Notification through the user's preferred channels |
-| Webhook | `POST` JSON payload to a chosen webhook endpoint |
-| Create incident | Opens a status-page incident with the payload |
-| Generate report | Queues a fleet or vehicle report generation |
+| Action          | Effect                                                                                      |
+| --------------- | ------------------------------------------------------------------------------------------- |
+| Notify          | Notification through the user's preferred channels                                          |
+| Webhook         | `POST` JSON payload to a chosen webhook endpoint                                            |
+| Create incident | Opens a status-page incident with the payload                                               |
+| Generate report | Queues a fleet or vehicle report generation                                                 |
 | Vehicle command | Issues a command through the normal lifecycle (step-up still applies to high-risk commands) |
 
 ## Testing
 
 Every automation supports **dry-run**: pick a recent event and VoltLink
 evaluates trigger, conditions and actions without executing writes, showing
-exactly what *would* have happened.
+exactly what _would_ have happened.
 
 The **executions** panel records each real run: timestamps, matched conditions,
 per-action outcomes, and errors.
 
 ## Examples
 
-- *"If battery falls below 20% and it's after 22:00, notify me"*
-- *"When the pickup exits the jobsite geofence, create an incident and notify
-  the fleet group"*
-- *"On charge completed, generate a charging behaviour report"*
+- _"If battery falls below 20% and it's after 22:00, notify me"_
+- _"When the pickup exits the jobsite geofence, create an incident and notify
+  the fleet group"_
+- _"On charge completed, generate a charging behaviour report"_
 
 ## Webhook payload
 
@@ -91,7 +91,9 @@ const headers = {
   'webhook-signature': `v1,${base64HmacSha256(secret, `${headersId}.${headersTs}.${body}`)}`,
 };
 await fetch(`https://voltlink.example.com/api/v1/hooks/automations/${publicId}`, {
-  method: 'POST', headers, body,
+  method: 'POST',
+  headers,
+  body,
 });
 ```
 

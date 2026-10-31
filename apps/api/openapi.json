@@ -83,33 +83,61 @@
         "responses": {
           "200": {
             "description": "User public profile (includes theme, units, timezone, roles).",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserPublic" } } }
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/UserPublic" } }
+            }
           },
           "401": { "$ref": "#/components/responses/Unauthorized" }
         }
       }
     },
     "/auth/logout": {
-      "post": { "tags": ["auth"], "summary": "Revoke the current session", "responses": { "204": { "description": "Logged out." } } }
+      "post": {
+        "tags": ["auth"],
+        "summary": "Revoke the current session",
+        "responses": { "204": { "description": "Logged out." } }
+      }
     },
     "/auth/sessions": {
-      "get": { "tags": ["auth"], "summary": "List sessions", "responses": { "200": { "description": "Session list." } } }
+      "get": {
+        "tags": ["auth"],
+        "summary": "List sessions",
+        "responses": { "200": { "description": "Session list." } }
+      }
     },
     "/auth/sessions/{id}": {
-      "delete": { "tags": ["auth"], "summary": "Revoke one session", "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }], "responses": { "204": { "description": "Revoked." } } }
+      "delete": {
+        "tags": ["auth"],
+        "summary": "Revoke one session",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "204": { "description": "Revoked." } }
+      }
     },
     "/auth/sessions/revoke-all": {
-      "post": { "tags": ["auth"], "summary": "Revoke all sessions", "responses": { "204": { "description": "All sessions revoked." } } }
+      "post": {
+        "tags": ["auth"],
+        "summary": "Revoke all sessions",
+        "responses": { "204": { "description": "All sessions revoked." } }
+      }
     },
     "/auth/step-up": {
       "post": {
         "tags": ["auth"],
         "summary": "Step-up re-authentication for high-risk commands",
-        "responses": { "200": { "description": "Step-up window opened." }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+        "responses": {
+          "200": { "description": "Step-up window opened." },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
       }
     },
     "/auth/csrf": {
-      "get": { "tags": ["auth"], "summary": "Issue the CSRF cookie and return the header value", "responses": { "200": { "description": "CSRF token." } } }
+      "get": {
+        "tags": ["auth"],
+        "summary": "Issue the CSRF cookie and return the header value",
+        "responses": { "200": { "description": "CSRF token." } }
+      }
     },
     "/users/settings": {
       "patch": {
@@ -119,16 +147,32 @@
       }
     },
     "/users/export": {
-      "get": { "tags": ["users"], "summary": "Full JSON export of the user's data", "responses": { "200": { "description": "Data bundle." } } }
+      "get": {
+        "tags": ["users"],
+        "summary": "Full JSON export of the user's data",
+        "responses": { "200": { "description": "Data bundle." } }
+      }
     },
     "/users": {
-      "delete": { "tags": ["users"], "summary": "Permanently delete the account and owned data", "responses": { "204": { "description": "Deleted." } } }
+      "delete": {
+        "tags": ["users"],
+        "summary": "Permanently delete the account and owned data",
+        "responses": { "204": { "description": "Deleted." } }
+      }
     },
     "/providers/readiness": {
-      "get": { "tags": ["providers"], "summary": "Readiness diagnostics for connected providers", "responses": { "200": { "description": "Check list." } } }
+      "get": {
+        "tags": ["providers"],
+        "summary": "Readiness diagnostics for connected providers",
+        "responses": { "200": { "description": "Check list." } }
+      }
     },
     "/providers/demo/connect": {
-      "post": { "tags": ["providers"], "summary": "Connect the demo fleet (5 vehicles, 30 days of history)", "responses": { "200": { "description": "Import summary." } } }
+      "post": {
+        "tags": ["providers"],
+        "summary": "Connect the demo fleet (5 vehicles, 30 days of history)",
+        "responses": { "200": { "description": "Import summary." } }
+      }
     },
     "/vehicles": {
       "get": {
@@ -137,7 +181,19 @@
         "responses": {
           "200": {
             "description": "Vehicles.",
-            "content": { "application/json": { "schema": { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/VehicleWithState" } } } } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/VehicleWithState" }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -146,15 +202,27 @@
       "get": {
         "tags": ["vehicles"],
         "summary": "Live state for one vehicle",
-        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "Vehicle state.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/VehicleState" } } } }, "404": { "$ref": "#/components/responses/NotFound" } }
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vehicle state.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/VehicleState" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
       }
     },
     "/vehicles/{id}/refresh": {
       "post": {
         "tags": ["vehicles"],
         "summary": "Force a state fetch now",
-        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
         "responses": { "202": { "description": "Refresh scheduled." } }
       }
     },
@@ -162,7 +230,9 @@
       "post": {
         "tags": ["commands"],
         "summary": "Issue a vehicle command (validated, rate-limited, idempotent)",
-        "parameters": [{ "name": "vehicleId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "parameters": [
+          { "name": "vehicleId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -179,7 +249,12 @@
           }
         },
         "responses": {
-          "202": { "description": "Queued.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/VehicleCommand" } } } },
+          "202": {
+            "description": "Queued.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/VehicleCommand" } }
+            }
+          },
           "403": { "description": "Step-up required, capability missing, or kill switch active." },
           "429": { "description": "Rate bucket exhausted." }
         }
@@ -197,13 +272,24 @@
       "get": {
         "tags": ["commands"],
         "summary": "Command detail with audit events",
-        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "Command.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/VehicleCommand" } } } } }
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Command.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/VehicleCommand" } }
+            }
+          }
+        }
       },
       "post": {
         "tags": ["commands"],
         "summary": "Cancel a pending command",
-        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
         "responses": { "200": { "description": "Canceled." } }
       }
     },
@@ -222,13 +308,25 @@
       }
     },
     "/drives/export.csv": {
-      "get": { "tags": ["drives"], "summary": "Export drives as CSV", "responses": { "200": { "description": "CSV." } } }
+      "get": {
+        "tags": ["drives"],
+        "summary": "Export drives as CSV",
+        "responses": { "200": { "description": "CSV." } }
+      }
     },
     "/charging/sessions": {
-      "get": { "tags": ["charging"], "summary": "List charging sessions", "responses": { "200": { "description": "Sessions." } } }
+      "get": {
+        "tags": ["charging"],
+        "summary": "List charging sessions",
+        "responses": { "200": { "description": "Sessions." } }
+      }
     },
     "/charging/rates": {
-      "get": { "tags": ["charging"], "summary": "List electricity rate rules", "responses": { "200": { "description": "Rate rules." } } },
+      "get": {
+        "tags": ["charging"],
+        "summary": "List electricity rate rules",
+        "responses": { "200": { "description": "Rate rules." } }
+      },
       "post": {
         "tags": ["charging"],
         "summary": "Create a rate rule (flat / time-of-use / location)",
@@ -236,50 +334,119 @@
       }
     },
     "/analytics/battery-health": {
-      "get": { "tags": ["analytics"], "summary": "Battery health estimate per vehicle", "responses": { "200": { "description": "Health estimates." } } }
+      "get": {
+        "tags": ["analytics"],
+        "summary": "Battery health estimate per vehicle",
+        "responses": { "200": { "description": "Health estimates." } }
+      }
     },
     "/automations": {
-      "get": { "tags": ["automations"], "summary": "List automations", "responses": { "200": { "description": "Automations." } } },
+      "get": {
+        "tags": ["automations"],
+        "summary": "List automations",
+        "responses": { "200": { "description": "Automations." } }
+      },
       "post": {
         "tags": ["automations"],
         "summary": "Create an automation (trigger + conditions + actions)",
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Automation" } } } },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/Automation" } }
+          }
+        },
         "responses": { "201": { "description": "Created." } }
       }
     },
     "/automations/{id}/dry-run": {
-      "post": { "tags": ["automations"], "summary": "Evaluate without executing", "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Evaluation result." } } }
+      "post": {
+        "tags": ["automations"],
+        "summary": "Evaluate without executing",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Evaluation result." } }
+      }
     },
     "/notifications": {
-      "get": { "tags": ["notifications"], "summary": "Inbox", "responses": { "200": { "description": "Notifications." } } }
+      "get": {
+        "tags": ["notifications"],
+        "summary": "Inbox",
+        "responses": { "200": { "description": "Notifications." } }
+      }
     },
     "/notifications/read-all": {
-      "post": { "tags": ["notifications"], "summary": "Mark all read", "responses": { "204": { "description": "Marked." } } }
+      "post": {
+        "tags": ["notifications"],
+        "summary": "Mark all read",
+        "responses": { "204": { "description": "Marked." } }
+      }
     },
     "/notifications/preferences": {
-      "get": { "tags": ["notifications"], "summary": "Channel preferences", "responses": { "200": { "description": "Preferences." } } },
-      "patch": { "tags": ["notifications"], "summary": "Update preferences", "responses": { "200": { "description": "Updated." } } }
+      "get": {
+        "tags": ["notifications"],
+        "summary": "Channel preferences",
+        "responses": { "200": { "description": "Preferences." } }
+      },
+      "patch": {
+        "tags": ["notifications"],
+        "summary": "Update preferences",
+        "responses": { "200": { "description": "Updated." } }
+      }
     },
     "/fleet/overview": {
-      "get": { "tags": ["fleet"], "summary": "Fleet overview (groups, status, totals)", "responses": { "200": { "description": "Overview." } } }
+      "get": {
+        "tags": ["fleet"],
+        "summary": "Fleet overview (groups, status, totals)",
+        "responses": { "200": { "description": "Overview." } }
+      }
     },
     "/fleet/report": {
-      "post": { "tags": ["fleet"], "summary": "Generate a fleet report", "responses": { "200": { "description": "Report." } } }
+      "post": {
+        "tags": ["fleet"],
+        "summary": "Generate a fleet report",
+        "responses": { "200": { "description": "Report." } }
+      }
     },
     "/status": {
-      "get": { "tags": ["status"], "summary": "Public status bundle (components, incidents, maintenance, uptime)", "responses": { "200": { "description": "Status." } } }
+      "get": {
+        "tags": ["status"],
+        "summary": "Public status bundle (components, incidents, maintenance, uptime)",
+        "responses": { "200": { "description": "Status." } }
+      }
     },
     "/status/badge.svg": {
-      "get": { "tags": ["status"], "summary": "SVG status badge", "responses": { "200": { "description": "SVG.", "content": { "image/svg+xml": { "schema": { "type": "string" } } } } } }
+      "get": {
+        "tags": ["status"],
+        "summary": "SVG status badge",
+        "responses": {
+          "200": {
+            "description": "SVG.",
+            "content": { "image/svg+xml": { "schema": { "type": "string" } } }
+          }
+        }
+      }
     },
     "/admin/health": {
-      "get": { "tags": ["admin"], "summary": "Platform health (DB, queue, roles)", "responses": { "200": { "description": "Health." }, "403": { "description": "Admin role required." } } }
+      "get": {
+        "tags": ["admin"],
+        "summary": "Platform health (DB, queue, roles)",
+        "responses": {
+          "200": { "description": "Health." },
+          "403": { "description": "Admin role required." }
+        }
+      }
     },
     "/realtime": {
       "get": {
         "tags": ["admin"],
         "summary": "SSE stream of vehicle events for the authenticated user",
-        "responses": { "200": { "description": "text/event-stream.", "content": { "text/event-stream": { "schema": { "type": "string" } } } } }
+        "responses": {
+          "200": {
+            "description": "text/event-stream.",
+            "content": { "text/event-stream": { "schema": { "type": "string" } } }
+          }
+        }
       }
     }
   },
@@ -287,7 +454,10 @@
     "responses": {
       "Unauthorized": { "description": "Not authenticated." },
       "NotFound": { "description": "Resource not found." },
-      "Validation": { "description": "Validation error.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+      "Validation": {
+        "description": "Validation error.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      }
     },
     "schemas": {
       "Error": {
@@ -316,11 +486,38 @@
       },
       "CommandName": {
         "type": "string",
-        "enum": ["lock", "unlock", "honk_horn", "flash_lights", "climate_on", "climate_off", "set_temperature", "charge_start", "charge_stop", "set_charge_limit", "wake", "remote_start", "open_trunk", "open_frunk", "enable_sentry", "disable_sentry"]
+        "enum": [
+          "lock",
+          "unlock",
+          "honk_horn",
+          "flash_lights",
+          "climate_on",
+          "climate_off",
+          "set_temperature",
+          "charge_start",
+          "charge_stop",
+          "set_charge_limit",
+          "wake",
+          "remote_start",
+          "open_trunk",
+          "open_frunk",
+          "enable_sentry",
+          "disable_sentry"
+        ]
       },
       "CommandStatus": {
         "type": "string",
-        "enum": ["queued", "submitted", "accepted", "confirmed", "failed", "rejected", "unsupported", "timed_out", "canceled"]
+        "enum": [
+          "queued",
+          "submitted",
+          "accepted",
+          "confirmed",
+          "failed",
+          "rejected",
+          "unsupported",
+          "timed_out",
+          "canceled"
+        ]
       },
       "VehicleCommand": {
         "type": "object",
@@ -385,7 +582,10 @@
           "name": { "type": "string" },
           "trigger": { "type": "string" },
           "conditions": { "type": "object", "additionalProperties": true },
-          "actions": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "actions": {
+            "type": "array",
+            "items": { "type": "object", "additionalProperties": true }
+          },
           "cooldownSec": { "type": "integer" },
           "enabled": { "type": "boolean" }
         }

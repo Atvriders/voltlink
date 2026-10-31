@@ -45,7 +45,13 @@ export interface AccessContext {
   vehicleIds?: string[];
   organizationId?: string;
   permissions?: Set<string>;
-  resource?: { id: string; vehicleId?: string; organizationId?: string; ownerUserId?: string; [key: string]: unknown };
+  resource?: {
+    id: string;
+    vehicleId?: string;
+    organizationId?: string;
+    ownerUserId?: string;
+    [key: string]: unknown;
+  };
 }
 
 declare global {

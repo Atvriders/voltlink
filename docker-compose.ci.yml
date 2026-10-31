@@ -1,0 +1,18 @@
+# CI overlay: runs the locally built voltlink:ci image instead of the published
+# GHCR image, so the image job can smoke the exact artifact it just built.
+services:
+  migrate:
+    image: voltlink:ci
+    pull_policy: never
+  web:
+    image: voltlink:ci
+    pull_policy: never
+  worker:
+    image: voltlink:ci
+    pull_policy: never
+  scheduler:
+    image: voltlink:ci
+    pull_policy: never
+  status:
+    image: voltlink:ci
+    pull_policy: never

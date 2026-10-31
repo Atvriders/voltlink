@@ -5,7 +5,12 @@
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
-export type MapPoint = { lat: number; lon: number; label?: string; kind?: 'vehicle' | 'place' | 'charger' | 'geofence' | 'privacy' | 'start' | 'end' | 'route' };
+export type MapPoint = {
+  lat: number;
+  lon: number;
+  label?: string;
+  kind?: 'vehicle' | 'place' | 'charger' | 'geofence' | 'privacy' | 'start' | 'end' | 'route';
+};
 
 /** Deterministic fictional city: grid of streets around the demo coordinates. */
 export function fictionalCityGeoJson(): { type: 'FeatureCollection'; features: unknown[] } {
@@ -19,7 +24,13 @@ export function fictionalCityGeoJson(): { type: 'FeatureCollection'; features: u
     const latCenterIdx = Math.round(span / step);
     features.push({
       type: 'Feature',
-      geometry: { type: 'LineString', coordinates: [[center.lon - span * 1.4, lat], [center.lon + span * 1.4, lat]] },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [center.lon - span * 1.4, lat],
+          [center.lon + span * 1.4, lat],
+        ],
+      },
       properties: { kind: latIdx === latCenterIdx ? 'arterial' : 'street' },
     });
   }
@@ -28,32 +39,58 @@ export function fictionalCityGeoJson(): { type: 'FeatureCollection'; features: u
     const lonCenterIdx = Math.round((span * 1.4) / step);
     features.push({
       type: 'Feature',
-      geometry: { type: 'LineString', coordinates: [[lon, center.lat - span], [lon, center.lat + span]] },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [lon, center.lat - span],
+          [lon, center.lat + span],
+        ],
+      },
       properties: { kind: lonIdx === lonCenterIdx ? 'arterial' : 'street' },
     });
   }
   // Lake in the northeast
   features.push({
     type: 'Feature',
-    geometry: { type: 'Polygon', coordinates: [[
-      [center.lon + 0.03, center.lat + 0.055], [center.lon + 0.055, center.lat + 0.07],
-      [center.lon + 0.04, center.lat + 0.095], [center.lon + 0.012, center.lat + 0.08], [center.lon + 0.03, center.lat + 0.055],
-    ]] },
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [center.lon + 0.03, center.lat + 0.055],
+          [center.lon + 0.055, center.lat + 0.07],
+          [center.lon + 0.04, center.lat + 0.095],
+          [center.lon + 0.012, center.lat + 0.08],
+          [center.lon + 0.03, center.lat + 0.055],
+        ],
+      ],
+    },
     properties: { kind: 'water' },
   });
   // Parks
   features.push({
     type: 'Feature',
-    geometry: { type: 'Polygon', coordinates: [[
-      [center.lon - 0.055, center.lat - 0.04], [center.lon - 0.03, center.lat - 0.04],
-      [center.lon - 0.03, center.lat - 0.075], [center.lon - 0.055, center.lat - 0.075], [center.lon - 0.055, center.lat - 0.04],
-    ]] },
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [center.lon - 0.055, center.lat - 0.04],
+          [center.lon - 0.03, center.lat - 0.04],
+          [center.lon - 0.03, center.lat - 0.075],
+          [center.lon - 0.055, center.lat - 0.075],
+          [center.lon - 0.055, center.lat - 0.04],
+        ],
+      ],
+    },
     properties: { kind: 'park' },
   });
   return { type: 'FeatureCollection', features };
 }
 
-export function buildStyle(): { version: number; sources: Record<string, unknown>; layers: unknown[] } {
+export function buildStyle(): {
+  version: number;
+  sources: Record<string, unknown>;
+  layers: unknown[];
+} {
   return {
     version: 8,
     sources: {
@@ -106,7 +143,10 @@ export function createMap(container: HTMLElement, interactive = true): maplibreg
 }
 
 /** GeoJSON for drive routes (trimmed for long routes). */
-export function routeGeoJson(points: { lat: number; lon: number }[]): { type: 'Feature'; geometry: { type: 'LineString'; coordinates: number[][] } } {
+export function routeGeoJson(points: { lat: number; lon: number }[]): {
+  type: 'Feature';
+  geometry: { type: 'LineString'; coordinates: number[][] };
+} {
   return {
     type: 'Feature',
     geometry: { type: 'LineString', coordinates: points.map((p) => [p.lon, p.lat]) },
@@ -114,7 +154,11 @@ export function routeGeoJson(points: { lat: number; lon: number }[]): { type: 'F
 }
 
 /** Circle polygon helper for geofences/privacy zones. */
-export function circleGeoJson(lat: number, lon: number, radiusM: number): { type: 'Feature'; geometry: { type: 'Polygon'; coordinates: number[][][] } } {
+export function circleGeoJson(
+  lat: number,
+  lon: number,
+  radiusM: number,
+): { type: 'Feature'; geometry: { type: 'Polygon'; coordinates: number[][][] } } {
   const pts: number[][] = [];
   const R = 6378137;
   for (let a = 0; a <= 64; a++) {

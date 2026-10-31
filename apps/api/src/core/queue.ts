@@ -19,7 +19,11 @@ export interface QueueConsumer {
 export interface JobQueue {
   enqueue(queue: string, payload: unknown, opts?: EnqueueOptions): Promise<string>;
   /** Register a handler for a queue. Returns a consumer with start/stop. */
-  consume(queue: string, concurrency: number, handler: (payload: unknown, jobId: string) => Promise<void>): QueueConsumer;
+  consume(
+    queue: string,
+    concurrency: number,
+    handler: (payload: unknown, jobId: string) => Promise<void>,
+  ): QueueConsumer;
   depth(queue: string): Promise<number>;
   ping(): Promise<boolean>;
   close(): Promise<void>;
@@ -45,7 +49,11 @@ class PgQueue implements JobQueue {
     return job.id;
   }
 
-  consume(queueName: string, concurrency: number, handler: (payload: unknown, jobId: string) => Promise<void>): QueueConsumer {
+  consume(
+    queueName: string,
+    concurrency: number,
+    handler: (payload: unknown, jobId: string) => Promise<void>,
+  ): QueueConsumer {
     const state: { stop: boolean; promise?: Promise<void> } = { stop: false };
     const workerId = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
     const run = async () => {
@@ -66,16 +74,19 @@ class PgQueue implements JobQueue {
               await new Promise((r) => setTimeout(r, 500));
               continue;
             }
-            await client.query(`UPDATE "BackgroundJob" SET status='processing', "lockedAt"=now(), "lockedBy"=$1, "startedAt"=now() WHERE id = ANY($2)`, [
-              workerId,
-              res.rows.map((r) => r.id),
-            ]);
+            await client.query(
+              `UPDATE "BackgroundJob" SET status='processing', "lockedAt"=now(), "lockedBy"=$1, "startedAt"=now() WHERE id = ANY($2)`,
+              [workerId, res.rows.map((r) => r.id)],
+            );
             await client.query('COMMIT');
             for (const row of res.rows) {
               void (async () => {
                 try {
                   await handler(JSON.parse(row.payload), row.id);
-                  await prisma.backgroundJob.update({ where: { id: row.id }, data: { status: 'done', doneAt: new Date() } });
+                  await prisma.backgroundJob.update({
+                    where: { id: row.id },
+                    data: { status: 'done', doneAt: new Date() },
+                  });
                 } catch (err) {
                   const attempts = (row.attempts as number) + 1;
                   const failed = attempts >= (row.maxAttempts as number);
@@ -85,7 +96,9 @@ class PgQueue implements JobQueue {
                       attempts,
                       status: failed ? 'dead' : 'pending',
                       error: String((err as Error).message).slice(0, 2000),
-                      runAt: failed ? undefined : new Date(Date.now() + Math.min(2 ** attempts, 300) * 1000),
+                      runAt: failed
+                        ? undefined
+                        : new Date(Date.now() + Math.min(2 ** attempts, 300) * 1000),
                       doneAt: failed ? new Date() : undefined,
                     },
                   });
@@ -146,7 +159,12 @@ class RedisQueue implements JobQueue {
 
   async enqueue(queueName: string, payload: unknown, opts: EnqueueOptions = {}): Promise<string> {
     const jobId = `${queueName}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
-    const record = JSON.stringify({ id: jobId, payload, attempts: 0, maxAttempts: opts.maxAttempts ?? 3 });
+    const record = JSON.stringify({
+      id: jobId,
+      payload,
+      attempts: 0,
+      maxAttempts: opts.maxAttempts ?? 3,
+    });
     if (opts.dedupeKey) {
       const ok = await this.redis.set(`vl:dedupe:${opts.dedupeKey}`, '1', 'EX', 3600, 'NX');
       if (!ok) return jobId; // duplicate suppressed
@@ -159,7 +177,11 @@ class RedisQueue implements JobQueue {
     return jobId;
   }
 
-  consume(queueName: string, concurrency: number, handler: (payload: unknown, jobId: string) => Promise<void>): QueueConsumer {
+  consume(
+    queueName: string,
+    concurrency: number,
+    handler: (payload: unknown, jobId: string) => Promise<void>,
+  ): QueueConsumer {
     const state = { stop: false };
     const processOne = async (record: string) => {
       const job = JSON.parse(record);
@@ -168,15 +190,29 @@ class RedisQueue implements JobQueue {
       } catch (err) {
         job.attempts += 1;
         if (job.attempts < job.maxAttempts) {
-          await this.redis.zadd(`vl:zset:${queueName}`, Date.now() + Math.min(2 ** job.attempts, 300) * 1000, JSON.stringify(job));
+          await this.redis.zadd(
+            `vl:zset:${queueName}`,
+            Date.now() + Math.min(2 ** job.attempts, 300) * 1000,
+            JSON.stringify(job),
+          );
         } else {
-          await this.redis.rpush(`vl:dead:${queueName}`, JSON.stringify({ ...job, error: String((err as Error).message).slice(0, 2000) }));
+          await this.redis.rpush(
+            `vl:dead:${queueName}`,
+            JSON.stringify({ ...job, error: String((err as Error).message).slice(0, 2000) }),
+          );
         }
       }
     };
     const loop = async () => {
       while (!state.stop) {
-        const due = await this.redis.zrangebyscore(`vl:zset:${queueName}`, 0, Date.now(), 'LIMIT', 0, concurrency);
+        const due = await this.redis.zrangebyscore(
+          `vl:zset:${queueName}`,
+          0,
+          Date.now(),
+          'LIMIT',
+          0,
+          concurrency,
+        );
         if (due.length > 0) {
           await this.redis.zrem(`vl:zset:${queueName}`, ...due);
           await Promise.all(due.map(processOne));
@@ -196,7 +232,10 @@ class RedisQueue implements JobQueue {
   }
 
   async depth(queueName: string): Promise<number> {
-    const [len, zcard] = await Promise.all([this.redis.llen(`vl:queue:${queueName}`), this.redis.zcard(`vl:zset:${queueName}`)]);
+    const [len, zcard] = await Promise.all([
+      this.redis.llen(`vl:queue:${queueName}`),
+      this.redis.zcard(`vl:zset:${queueName}`),
+    ]);
     return len + zcard;
   }
 
