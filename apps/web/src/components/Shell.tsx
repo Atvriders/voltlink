@@ -427,7 +427,15 @@ export function Shell({ user, children }: { user: UserPublic | null; children: R
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-7xl flex-1 p-3 sm:p-5">{children}</main>
+        <a
+          href="#main"
+          className="vl-skip-link rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-onaccent"
+        >
+          Skip to main content
+        </a>
+        <main id="main" tabIndex={-1} className="mx-auto w-full max-w-7xl flex-1 p-3 sm:p-5">
+          {children}
+        </main>
 
         {/* Mobile bottom nav */}
         <nav

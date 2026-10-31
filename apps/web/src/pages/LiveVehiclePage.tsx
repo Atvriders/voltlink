@@ -67,6 +67,7 @@ import {
 import { computeFreshness, controlsFor, type ParamControl } from '@voltlink/shared';
 import { outcomeFor } from '../lib/commandLifecycle';
 import { useNow } from '../lib/useNow';
+import { useAnnounce } from '../lib/announcer';
 
 interface CommandWithEvents extends VehicleCommand {
   events?: { id: string; event: string; actor: string; detail: string; createdAt: string }[];
@@ -333,6 +334,7 @@ function ControlsPanel({
   const [paramFor, setParamFor] = useState<CommandType | null>(null);
   const [error, setError] = useState('');
   const [issueType, setIssueType] = useState<CommandType | null>(null);
+  const announce = useAnnounce();
   const issue = useMutation({
     // F-PARAMS + A-STEPUP: parameters and a fresh idempotency key travel with
     // the command; credentials never do. 403 STEP_UP_REQUIRED is handled by the
@@ -349,11 +351,14 @@ function ControlsPanel({
       }),
     onSuccess: (cmd) => {
       onCommandIssued(cmd);
+      announce(`Command ${COMMAND_DEFINITIONS[cmd.type]?.label ?? cmd.type}: ${cmd.status}`);
       setIssueType(null);
       setError('');
     },
     onError: (err) => {
-      setError(err instanceof ApiError ? err.message : 'Command failed.');
+      const msg = err instanceof ApiError ? err.message : 'Command failed.';
+      setError(msg);
+      announce(msg, 'assertive');
       setIssueType(null);
     },
   });

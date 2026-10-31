@@ -4,6 +4,7 @@ import App from './App';
 import './index.css';
 import { applyTheme } from './auth/AuthContext';
 import { ErrorBoundary, RootErrorFallback } from './components/boundaries';
+import { AnnouncerProvider } from './lib/announcer';
 
 applyTheme();
 
@@ -15,8 +16,10 @@ createRoot(document.getElementById('root')!, {
   onCaughtError: (error) => console.error('[voltlink] caught:', error),
 }).render(
   <StrictMode>
-    <ErrorBoundary fallback={() => <RootErrorFallback />}>
-      <App />
-    </ErrorBoundary>
+    <AnnouncerProvider>
+      <ErrorBoundary fallback={() => <RootErrorFallback />}>
+        <App />
+      </ErrorBoundary>
+    </AnnouncerProvider>
   </StrictMode>,
 );

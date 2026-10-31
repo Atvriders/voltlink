@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Crosshair, MapPin, Plus, Shield } from 'lucide-react';
 import type * as maplibregl from 'maplibre-gl';
 import { api } from '../api/client';
+import { useAnnounce } from '../lib/announcer';
 import MapView, { circleGeoJson } from '../components/MapView';
 import { Badge, Button, Card, Field, Input, Modal, Select } from '../components/ui';
 import type { Geofence, Place, PrivacyZone, VehicleWithState } from '@voltlink/shared';
@@ -105,12 +106,14 @@ export default function MapPage() {
     map?.flyTo({ center: [lon, lat], zoom: 14, duration: 1200 });
   };
 
+  const announce = useAnnounce();
   const savePlace = async () => {
     if (!pick || !placeName) return;
     await api('/api/v1/vehicles/places/all', {
       method: 'POST',
       body: { name: placeName, type: placeType, lat: pick.lat, lon: pick.lon, radiusM: 150 },
     });
+    announce(`Place saved: ${placeName}`);
     setAddPlace(false);
     setPick(null);
     setPlaceName('');

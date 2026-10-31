@@ -181,6 +181,37 @@ body,
   height: 100%;
 }
 
+/* F-A11Y: the sticky header must never hide the focused element. */
+html {
+  scroll-padding-top: 4rem;
+}
+
+/* Visually hidden live regions (F-A11Y). */
+.vl-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Skip link (F-A11Y). */
+.vl-skip-link {
+  position: absolute;
+  left: 0.5rem;
+  top: 0.5rem;
+  z-index: 100;
+  transform: translateY(-200%);
+  transition: transform 0.15s;
+}
+.vl-skip-link:focus {
+  transform: translateY(0);
+}
+
 body {
   margin: 0;
   background: var(--vl-canvas);
