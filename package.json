@@ -26,13 +26,15 @@
   "scripts": {
     "dev:api": "npm -w @voltlink/api run dev",
     "dev:web": "npm -w @voltlink/web run dev",
-    "build": "npm -w @voltlink/shared run build && npm -w @voltlink/api run build && npm -w @voltlink/web run build",
+    "build": "npm run prisma:generate && npm -w @voltlink/shared run build && npm -w @voltlink/api run build && npm -w @voltlink/web run build && node scripts/stage-web-dist.mjs",
     "test": "npm -w @voltlink/shared run test && npm -w @voltlink/api run test && npm -w @voltlink/web run test",
     "typecheck": "npm -w @voltlink/shared run typecheck && npm -w @voltlink/api run typecheck && npm -w @voltlink/web run typecheck",
     "lint": "eslint . --max-warnings=0",
     "legacy:scan": "tsx scripts/legacy-scan.ts",
     "e2e": "playwright test",
-    "naming:scan": "tsx scripts/naming-scan.ts"
+    "naming:scan": "tsx scripts/naming-scan.ts",
+    "prisma:generate": "prisma generate --schema apps/api/prisma/schema.prisma",
+    "check:compose": "tsx scripts/check-compose.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",
@@ -50,6 +52,9 @@
   },
   "allowScripts": {
     "prisma@6.19.3": true,
-    "argon2@0.45.0": true
+    "argon2@0.45.0": true,
+    "@prisma/client": true,
+    "@prisma/engines": true,
+    "esbuild": true
   }
 }

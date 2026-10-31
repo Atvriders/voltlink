@@ -15,7 +15,8 @@ function prismaCli(): string {
   if (fs.existsSync(local)) return local;
   const root = path.join(PATHS.root, '..', '..', 'node_modules', '.bin', 'prisma');
   if (fs.existsSync(root)) return root;
-  return createRequire(path.join(PATHS.root, 'package.json')).resolve('prisma/build/index.js');
+  const prismaRoot = path.dirname(createRequire(path.join(PATHS.root, 'package.json')).resolve('prisma/package.json'));
+  return path.join(prismaRoot, 'build', 'index.js');
 }
 
 export async function runMigrations(): Promise<void> {
