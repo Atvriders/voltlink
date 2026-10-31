@@ -30,6 +30,32 @@ export function startFakeTesla(port = 0): Promise<FakeTesla> {
       headers?: Record<string, string>;
     }> = [];
 
+    // authorize: redirect straight back with a code + the same state
+    app.get('/oauth2/v3/authorize', (req, res) => {
+      requests.push({ method: 'GET', path: '/oauth2/v3/authorize' });
+      const redirect = String(req.query.redirect_uri ?? '');
+      const state = String(req.query.state ?? '');
+      const code = `code-${crypto.randomBytes(4).toString('hex')}`;
+      res.redirect(
+        `${redirect}?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`,
+      );
+    });
+
+    // scenario controls for e2e
+    app.post('/__control/pair', (req, res) => {
+      const vin = String((req.body as { vin?: string }).vin ?? '');
+      if (vin) paired.add(vin);
+      res.json({ ok: true });
+    });
+    app.post('/__control/connectivity', (req, res) => {
+      const { vin, state } = (req.body ?? {}) as {
+        vin?: string;
+        state?: 'online' | 'asleep' | 'offline';
+      };
+      if (vin && state) states.set(vin, state);
+      res.json({ ok: true });
+    });
+
     // auth token endpoint (code exchange + refresh + client_credentials)
     app.post('/oauth2/v3/token', (req, res) => {
       requests.push({ method: 'POST', path: '/oauth2/v3/token', body: req.body });
@@ -114,6 +140,14 @@ export function startFakeTesla(port = 0): Promise<FakeTesla> {
 
     app.get('/api/1/vehicles/:vin/vehicle_data', (req, res) => {
       requests.push({ method: 'GET', path: `/api/1/vehicles/${req.params.vin}/vehicle_data` });
+      const url = req.originalUrl.split('?')[0];
+      const f = failures.find((x) => x.path === url);
+      if (f) {
+        failures.splice(failures.indexOf(f), 1);
+        if (f.headers) for (const [k, v] of Object.entries(f.headers)) res.setHeader(k, v);
+        res.status(f.status).send(f.body);
+        return;
+      }
       const state = states.get(String(req.params.vin)) ?? 'online';
       if (state !== 'online') {
         res.status(408).json({ error: 'vehicle is offline or asleep' });
@@ -219,7 +253,9 @@ export function startFakeTesla(port = 0): Promise<FakeTesla> {
         res.status(404).json({ error: 'expected 17-character VIN' });
         return;
       }
-      const f = failures.find((x) => x.path === req.path);
+      // Match failures on the concrete URL (req.path is the route pattern).
+      const url = req.originalUrl.split('?')[0];
+      const f = failures.find((x) => x.path === url);
       if (f) {
         failures.splice(failures.indexOf(f), 1);
         if (f.headers) for (const [k, v] of Object.entries(f.headers)) res.setHeader(k, v);

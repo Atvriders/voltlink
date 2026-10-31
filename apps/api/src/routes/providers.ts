@@ -251,6 +251,28 @@ providersRouter.get(
   },
 );
 
+// P-TESLASIGN: pairing link for virtual-key installation (owner only).
+providersRouter.get(
+  '/:accountId/vehicles/:vehicleId/pairing-link',
+  {
+    auth: 'session',
+    target: { kind: 'vehicle', from: 'param:vehicleId', perm: 'vehicles.manage' },
+  },
+  async (req, res) => {
+    const vehicle = req.access!.vehicle!;
+    if (vehicle.provider !== 'tesla') {
+      res.status(400).json({
+        error: { code: 'NOT_TESLA', message: 'Pairing links only apply to Tesla vehicles.' },
+      });
+      return;
+    }
+    const { teslaConfig } = await import('../providers/tesla/config');
+    const vin = vehicle.providerVehicleId;
+    const url = `https://tesla.com/_ak/${teslaConfig().partnerDomain}?vin=${encodeURIComponent(String(vin))}`;
+    res.json({ data: { url } });
+  },
+);
+
 // ---- Tessie (optional) ----
 
 providersRouter.post(

@@ -4,6 +4,7 @@
 import { Router } from 'express';
 import { prisma } from '../core/db';
 import { env } from '../core/env';
+import { randomToken } from '../core/crypto';
 import {
   bootstrapInstanceAdmin,
   createMfaCeremony,
@@ -41,6 +42,16 @@ import { API_SCOPES, type ApiScope } from '@voltlink/shared';
 import { audit } from '../core/settings';
 
 export const authRouter = policyRouter('/api/v1/auth');
+
+// The SPA reads its double-submit CSRF token from here (api/client.ts).
+authRouter.get('/csrf', { auth: 'public', target: { kind: 'none' } }, (req, res) => {
+  let token = req.cookies?.['vl_csrf'];
+  if (typeof token !== 'string' || !token) {
+    token = randomToken(16);
+  }
+  res.cookie('vl_csrf', token, { httpOnly: false, sameSite: 'lax', path: '/' });
+  res.json({ data: { token } });
+});
 
 // ---- public: setup and registration (Z-OWNER) ----
 

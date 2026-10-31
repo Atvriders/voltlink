@@ -2,6 +2,7 @@
 // signed commands via the proxy, per-account region, rotating refresh tokens,
 // per-vehicle capabilities and non-billable readiness.
 
+import { prisma } from '../../core/db';
 import { teslaConfig } from './config';
 import { scopesFromJwt, getValidAccessToken } from './tokens';
 import { teslaRequest } from './client';
@@ -23,10 +24,9 @@ const VEHICLES_PATH = '/api/1/vehicles';
 export class TeslaProviderImpl implements VehicleProvider {
   id = 'tesla' as const;
 
-  async readiness(): Promise<{
-    ok: boolean;
-    checks: { name: string; ok: boolean; detail: string }[];
-  }> {
+  async readiness(ctx?: {
+    accountId: string;
+  }): Promise<{ ok: boolean; checks: { name: string; ok: boolean; detail: string }[] }> {
     const cfg = teslaConfig();
     const checks = [
       {
@@ -54,6 +54,24 @@ export class TeslaProviderImpl implements VehicleProvider {
           : 'TESLA_COMMAND_PROXY_URL is not set; commands are unavailable.',
       },
     ];
+    // P-TESLASIGN: per-vehicle key status from fleet_status (unbilled).
+    if (ctx?.accountId) {
+      const vehicles = await prisma.vehicle.findMany({
+        where: { providerAccountId: ctx.accountId },
+        select: { providerVehicleId: true },
+      });
+      for (const v of vehicles) {
+        const fleet = await this.fleetStatus(ctx.accountId, v.providerVehicleId).catch(() => null);
+        const paired = fleet?.protocolRequired ? fleet.keyPaired : true;
+        checks.push({
+          name: `vehicle.${v.providerVehicleId.slice(-4)}.key`,
+          ok: paired,
+          detail: paired
+            ? 'Virtual key installed.'
+            : `virtual key not paired — install it via https://tesla.com/_ak/${cfg.partnerDomain}?vin=${v.providerVehicleId}`,
+        });
+      }
+    }
     return { ok: checks.every((c) => c.ok), checks };
   }
 
