@@ -12,15 +12,53 @@ import type { VehicleWithState } from '@voltlink/shared';
 
 type Scene = 'viewer' | 'stats';
 
+const FALLBACK_DEMO: VehicleWithState = {
+  id: 'demo-fallback',
+  displayName: 'VoltLink One',
+  provider: 'tesla',
+  providerVehicleId: 'DEMO0000000000001',
+  vehicleClass: 'fallback',
+  make: 'VoltLink',
+  model: 'Model One',
+  year: 2025,
+  capabilities: [],
+  demo: true,
+  ownerId: 'demo',
+  providerAccountId: 'demo',
+  groupIds: [],
+  createdAt: new Date(0).toISOString(),
+  state: {
+    vehicleId: 'demo-fallback',
+    provider: 'tesla',
+    providerVehicleId: 'DEMO0000000000001',
+    status: 'parked',
+    fetchedAt: new Date(0).toISOString(),
+    freshness: 'last_known',
+    dataSource: 'estimated',
+    batteryPercent: 78,
+    batteryRangeKm: 392,
+    odometerKm: 4210,
+    lat: 47.6062,
+    lon: -122.3321,
+    speedKmh: 0,
+    locked: true,
+  },
+};
+
 export default function PresentationPage() {
-  const { data: vehicles, isLoading } = useQuery({
-    queryKey: ['vehicles'],
+  // NEW-14: real vehicles are never shown here. Only demo vehicles are used;
+  // if the account has none, a built-in fictional vehicle keeps the slideshow
+  // deterministic and safe to project publicly.
+  const { data: demoVehicles, isLoading } = useQuery({
+    queryKey: ['presentation-vehicles'],
     queryFn: () =>
-      api<VehicleWithState[]>('/api/v1/vehicles').then((vs) =>
-        vs.filter((v) => v.demo).length > 0 ? vs.filter((v) => v.demo) : vs,
-      ),
+      api<VehicleWithState[]>('/api/v1/vehicles').then((vs) => vs.filter((v) => v.demo)),
     refetchInterval: 20000,
   });
+  const vehicles = useMemo(
+    () => (demoVehicles && demoVehicles.length > 0 ? demoVehicles : [FALLBACK_DEMO]),
+    [demoVehicles],
+  );
   const [index, setIndex] = useState(0);
   const [scene, setScene] = useState<Scene>('viewer');
   const [paused, setPaused] = useState(false);
@@ -112,8 +150,8 @@ export default function PresentationPage() {
               )}
             </Card>
             <p className="text-center text-xs text-faint">
-              Presentation mode · deterministic fictional data · automatic scene cycling{' '}
-              {paused ? '(paused)' : ''}
+              Presentation mode · deterministic fictional data (demo vehicles only) · automatic
+              scene cycling {paused ? '(paused)' : ''}
             </p>
           </div>
         ) : (
