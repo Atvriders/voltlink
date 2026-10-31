@@ -557,6 +557,7 @@ const SKIP_ROUTES: ReadonlySet<string> = new Set([
   'PATCH /api/v1/users/retention', // spec: always 404
   'GET /api/v1/status/subscriptions/confirm/:token',
   'GET /api/v1/status/subscriptions/unsubscribe/:token',
+  'GET /api/v1/geocode', // 404 GEOCODER_DISABLED when unconfigured
   'POST /api/v1/invitations/:token/accept',
   'POST /api/v1/automations/webhook/:token', // removed: replaced by inbound hooks
 ]);
