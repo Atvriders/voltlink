@@ -49,6 +49,8 @@ model User {
   apiKeys                ApiKey[]
   webhooks               WebhookEndpoint[]
   pushSubs               PushSubscription[]
+  notificationChannels   NotificationChannel[]
+  inboundWebhooks        InboundWebhook[]
   auditEvents            AuditLog[]
 }
 
@@ -569,6 +571,7 @@ model Automation {
   failureCount        Int                  @default(0)
   createdAt           DateTime @db.Timestamptz(3)             @default(now())
   executions          AutomationExecution[]
+  inboundWebhook      InboundWebhook?
   @@index([organizationId])
   @@index([userId])
 }
@@ -614,25 +617,72 @@ model NotificationPreference {
 }
 
 model WebhookEndpoint {
+  id                    String    @id @default(cuid())
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                  String
+  url                   String
+  displayHint           String?
+  events                Json      @default("[]")
+  secretSealed          String?
+  previousSecretSealed  String?
+  previousUntil         DateTime? @db.Timestamptz(3)
+  enabled               Boolean   @default(true)
+  lastStatus            Int?
+  lastDeliveryAt        DateTime? @db.Timestamptz(3)
+  @@index([userId])
+}
+
+model NotificationChannel {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind                String
+  name                String
+  configCiphertext    String
+  enabled             Boolean  @default(true)
+  disabledReason      String?
+  nextAllowedAt       DateTime? @db.Timestamptz(3)
+  consecutiveFailures Int      @default(0)
+  lastSuccessAt       DateTime? @db.Timestamptz(3)
+  lastFailureAt       DateTime? @db.Timestamptz(3)
+  lastFailureKind     String?
+  createdAt           DateTime @db.Timestamptz(3) @default(now())
+  updatedAt           DateTime @db.Timestamptz(3) @default(now())
+  @@index([userId, kind])
+}
+
+model InboundWebhook {
   id             String    @id @default(cuid())
+  automationId   String    @unique
+  automation     Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
   userId         String
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name           String
-  url            String
-  secretHash     String?
-  enabled        Boolean   @default(true)
-  lastStatus     Int?
-  lastDeliveryAt DateTime? @db.Timestamptz(3)
-  @@index([userId])
+  publicId       String    @unique
+  secretSealed   String
+  createdAt      DateTime  @db.Timestamptz(3) @default(now())
+  lastReceivedAt DateTime? @db.Timestamptz(3)
+  receipts       InboundWebhookReceipt[]
+}
+
+model InboundWebhookReceipt {
+  id        String   @id @default(cuid())
+  hookId    String
+  hook      InboundWebhook @relation(fields: [hookId], references: [id], onDelete: Cascade)
+  messageId String
+  createdAt DateTime @db.Timestamptz(3) @default(now())
+  @@unique([hookId, messageId])
+  @@index([hookId, createdAt])
 }
 
 model PushSubscription {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  endpoint  String   @unique
+  endpoint  String
   keys      Json
   createdAt DateTime @db.Timestamptz(3) @default(now())
+  @@unique([userId, endpoint])
   @@index([userId])
 }
 

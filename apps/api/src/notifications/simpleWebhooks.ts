@@ -7,6 +7,7 @@ import { prisma } from '../core/db';
 import { safeFetch } from '../net/safeFetch';
 import { getOutboundPolicy } from '../net/policy';
 import { getSetting } from '../core/settings';
+import { sealJson, openJson } from '../core/crypto';
 import type { DeliveryChannel } from '@voltlink/shared';
 
 const PROVIDER_SETTING: Record<string, string> = {
@@ -56,11 +57,24 @@ export async function pushSimpleWebhook(userId: string, channel: DeliveryChannel
   }
 }
 
-/** Channel URL is stored as an AppSetting per user+channel (validated http(s)). */
+/** Channel URL is sealed at rest in NotificationChannel.configCiphertext
+ * (N-CHANSECRETS); raw URLs never appear in GET responses (G-08). */
 export async function userChannelUrl(userId: string, key: string): Promise<string | null> {
-  const v = await getSetting(`user:${userId}:${key}`);
-  if (!v) return null;
-  return validateWebhookUrl(v) ? v : null;
+  const kind = keyToKind(key);
+  const row = await prisma.notificationChannel.findFirst({ where: { userId, kind } });
+  if (!row) {
+    const v = await getSetting(`user:${userId}:${key}`);
+    if (!v) return null;
+    if (!validateWebhookUrl(v)) return null;
+    await setUserChannelUrl(userId, key, v).catch(() => undefined);
+    return v;
+  }
+  try {
+    const cfg = openJson<{ url: string }>(row.configCiphertext);
+    return validateWebhookUrl(cfg.url) ? cfg.url : null;
+  } catch {
+    return null;
+  }
 }
 
 export function validateWebhookUrl(raw: string): boolean {
@@ -72,7 +86,22 @@ export function validateWebhookUrl(raw: string): boolean {
   }
 }
 
+function keyToKind(key: string): string {
+  return { ntfyUrl: 'ntfy', gotifyUrl: 'gotify', discordWebhook: 'discord', teamsWebhook: 'teams' }[key] ?? key;
+}
+
 export async function setUserChannelUrl(userId: string, key: string, url: string | null): Promise<void> {
   if (url && !validateWebhookUrl(url)) throw new Error('Webhook URL must be a valid http(s) URL.');
-  await prisma.appSetting.upsert({ where: { key: `user:${userId}:${key}` }, update: { value: url ?? '' }, create: { key: `user:${userId}:${key}`, value: url ?? '' } });
+  const kind = keyToKind(key);
+  const row = await prisma.notificationChannel.findFirst({ where: { userId, kind } });
+  if (row) {
+    if (!url) {
+      await prisma.notificationChannel.delete({ where: { id: row.id } });
+    } else {
+      await prisma.notificationChannel.update({ where: { id: row.id }, data: { configCiphertext: sealJson({ url }).ciphertext } });
+    }
+  } else if (url) {
+    await prisma.notificationChannel.create({ data: { userId, kind, name: key, configCiphertext: sealJson({ url }).ciphertext } });
+  }
+  await prisma.appSetting.deleteMany({ where: { key: `user:${userId}:${key}` } }).catch(() => undefined);
 }

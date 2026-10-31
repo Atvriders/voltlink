@@ -117,8 +117,10 @@ async function checkComponent(key: string): Promise<CheckResult> {
       return { ok: true, detail: accounts === 0 ? 'No Tessie accounts connected.' : `${accounts} accounts connected.` };
     }
     case 'demo': {
-      const { isDemoDegraded } = await import('../providers/demo');
-      return { ok: !isDemoDegraded(), latencyMs: latency(), detail: isDemoDegraded() ? 'Simulated degradation active.' : 'Demo provider healthy.' };
+      // Z-DEMOSCOPE: degradation is per organization; report any degraded demo
+      // organization as a degraded demo provider check.
+      const degraded = await prisma.organization.count({ where: { demoDegraded: true } });
+      return { ok: degraded === 0, latencyMs: latency(), detail: degraded === 0 ? 'Demo provider healthy.' : `${degraded} organization(s) simulate demo-provider degradation.` };
     }
     default:
       return { ok: true, detail: 'No check defined.' };

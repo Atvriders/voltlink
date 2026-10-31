@@ -3,6 +3,7 @@
 
 import crypto from 'node:crypto';
 import { prisma } from '../core/db';
+import { randomId } from '../core/crypto';
 import { ssePublish } from '../core/sse';
 import { sendMail } from '../auth/service';
 import type { DeliveryChannel, EventType, Severity } from '@voltlink/shared';
@@ -19,6 +20,8 @@ export interface NotifyInput {
   channels?: DeliveryChannel[];
   /** Skip preference filtering (system events). */
   force?: boolean;
+  /** Restrict 'webhook' delivery to one endpoint (automations). */
+  webhookEndpointId?: string;
 }
 
 export async function notify(input: NotifyInput): Promise<void> {
@@ -80,7 +83,9 @@ async function deliver(input: NotifyInput & { channel: DeliveryChannel; email: s
     return;
   }
   if (channel === 'webhook') {
-    const endpoints = await prisma.webhookEndpoint.findMany({ where: { userId: input.userId, enabled: true } });
+    const endpoints = input.webhookEndpointId
+      ? await prisma.webhookEndpoint.findMany({ where: { id: input.webhookEndpointId, userId: input.userId, enabled: true } })
+      : await prisma.webhookEndpoint.findMany({ where: { userId: input.userId, enabled: true } });
     for (const ep of endpoints) {
       const payload = {
         event: input.event,
@@ -90,17 +95,27 @@ async function deliver(input: NotifyInput & { channel: DeliveryChannel; email: s
         vehicleId: input.vehicleId ?? null,
         timestamp: new Date().toISOString(),
       };
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (ep.secretHash) {
-        // Deliver without the secret; the receiver verifies via a shared secret
-        // configured out of band. We sign with the stored secret's SHA to allow
-        // integrity checks without exposing the secret itself.
-        headers['X-VoltLink-Event'] = input.event;
+      // Standard Webhooks: sign with the stored secret (never sent), with the
+      // previous secret while it is still within its rotation window.
+      const body = JSON.stringify(payload);
+      const { outgoingHeaders } = await import('../webhooks/standardWebhooks');
+      const { openJson } = await import('../core/crypto');
+      const secrets: string[] = [];
+      try {
+        if (ep.secretSealed) {
+          const sealed = openJson<{ current: string; previous?: string }>(ep.secretSealed);
+          secrets.push(sealed.current);
+          if (sealed.previous && (!ep.previousUntil || ep.previousUntil > new Date())) secrets.push(sealed.previous);
+        }
+      } catch {
+        /* unreadable secret: send unsigned once, then record the failure */
       }
+      const msgId = `msg_${ep.id}:${randomId()}`;
+      const headers = { ...outgoingHeaders(secrets, msgId, body), 'x-voltlink-event': input.event };
       try {
         const { safeFetch } = await import('../net/safeFetch');
         const { getOutboundPolicy } = await import('../net/policy');
-        const res = await safeFetch(getOutboundPolicy(), ep.url, { method: 'POST', headers, body: JSON.stringify(payload) });
+        const res = await safeFetch(getOutboundPolicy(), ep.url, { method: 'POST', headers, body });
         await prisma.webhookEndpoint.update({ where: { id: ep.id }, data: { lastStatus: res.status, lastDeliveryAt: new Date() } });
       } catch {
         await prisma.webhookEndpoint.update({ where: { id: ep.id }, data: { lastStatus: 0, lastDeliveryAt: new Date() } });
@@ -114,7 +129,8 @@ async function deliver(input: NotifyInput & { channel: DeliveryChannel; email: s
 }
 
 export function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  // G-10: single quotes too, so user text is safe inside single-quoted attributes.
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 export function hmacSign(secret: string, body: string): string {

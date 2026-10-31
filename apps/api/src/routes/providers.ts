@@ -2,8 +2,10 @@
 // flow, Tessie token connection, vehicle import, disconnection, and webhook
 // ingestion (provider push where supported).
 
+import crypto from 'node:crypto';
 import { policyRouter, sessionActor } from '../authz/policy';
 import { prisma } from '../core/db';
+import { sha256hex, randomToken, sealJson, openJson } from '../core/crypto';
 import { audit } from '../core/settings';
 import { buildContext, connectDemoAccount, getProvider, removeCredentials, saveCredentials, listProviders } from '../providers/registry';
 import { env } from '../core/env';
@@ -69,39 +71,60 @@ providersRouter.post('/demo/connect', { auth: 'session', target: { kind: 'none' 
 
 // ---- Tesla OAuth ----
 
-providersRouter.get('/tesla/authorize', { auth: 'session', target: { kind: 'none' } }, (req, res) => {
+providersRouter.get('/tesla/authorize', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
   if (!env.TESLA_CLIENT_ID || !env.TESLA_CLIENT_SECRET) {
     res.status(503).json({ error: { code: 'NOT_CONFIGURED', message: 'Tesla OAuth is not configured. Set TESLA_CLIENT_ID, TESLA_CLIENT_SECRET, and TESLA_REDIRECT_URI (docs/TESLA_SETUP.md).' } });
     return;
   }
-  const state = encodeURIComponent(JSON.stringify({ u: sessionActor(req).userId }));
-  res.json({ data: { url: teslaAuthorizeUrl(state) } });
+  const actor = sessionActor(req);
+  const membership = await prisma.membership.findFirst({ where: { userId: actor.userId, status: 'ACTIVE' }, orderBy: { createdAt: 'asc' } });
+  if (!membership) {
+    res.status(403).json({ error: { code: 'FORBIDDEN', message: 'No organization available.' } });
+    return;
+  }
+  // Z-TESLASTATE: a server-stored random state bound to this user AND this
+  // session; the callback never reads a user id out of the state. PKCE S256.
+  const verifier = randomToken(32);
+  const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+  const state = randomToken(24);
+  await prisma.oAuthState.create({
+    data: {
+      stateHash: sha256hex(state),
+      provider: 'tesla',
+      userId: actor.userId,
+      sessionId: actor.sessionId,
+      organizationId: membership.organizationId,
+      verifierSealed: sealJson({ verifier }).ciphertext,
+      expiresAt: new Date(Date.now() + 600_000),
+    },
+  });
+  res.json({ data: { url: teslaAuthorizeUrl(state, challenge) } });
 });
 
 providersRouter.get('/tesla/callback', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
   const code = String(req.query.code ?? '');
-  const stateRaw = String(req.query.state ?? '{}');
-  let state: { u?: string } = {};
+  const stateRaw = String(req.query.state ?? '');
+  const fail = () => res.redirect(`${env.PUBLIC_URL}/providers?tesla_error=invalid_state`);
+  if (!code || !stateRaw) return fail();
+  // Single-use, session-bound state: an atomic delete makes a foreign session,
+  // a reused state or an expired state fail with no account created.
+  const row = await prisma.oAuthState.findUnique({ where: { stateHash: sha256hex(stateRaw) } });
+  if (!row || row.provider !== 'tesla' || row.sessionId !== sessionActor(req).sessionId || row.expiresAt <= new Date()) return fail();
+  await prisma.oAuthState.delete({ where: { stateHash: row.stateHash } }).catch(() => undefined);
+  // Re-check the org permission: a member who lost providers.manage since
+  // authorize gets no account either.
+  const membership = await prisma.membership.findUnique({ where: { organizationId_userId: { organizationId: row.organizationId, userId: row.userId } } });
+  if (!membership || membership.status !== 'ACTIVE') return fail();
+  const { orgPermissions } = await import('../authz/access');
+  const perms = await orgPermissions(sessionActor(req), row.organizationId);
+  if (!perms.has('providers.manage')) return fail();
   try {
-    state = JSON.parse(decodeURIComponent(stateRaw));
-  } catch {
-    /* invalid state */
-  }
-  if (!code || !state.u) {
-    res.status(400).send('Invalid OAuth callback. Return to the app and try again.');
-    return;
-  }
-  try {
-    const tokens = await teslaExchangeCode(code);
-    const membership = await prisma.membership.findFirst({ where: { userId: state.u, status: 'ACTIVE' }, orderBy: { createdAt: 'asc' } });
-    if (!membership) {
-      res.status(403).send('No organization available for this account. Return to the app and try again.');
-      return;
-    }
+    const verifier = openJson<{ verifier: string }>(row.verifierSealed).verifier;
+    const tokens = await teslaExchangeCode(code, verifier);
     const account = await prisma.providerAccount.create({
       data: {
-        organizationId: membership.organizationId,
-        connectedById: state.u,
+        organizationId: row.organizationId,
+        connectedById: row.userId,
         provider: 'tesla',
         label: 'Tesla',
         status: 'connected',
@@ -116,10 +139,10 @@ providersRouter.get('/tesla/callback', { auth: 'session', target: { kind: 'none'
       scopes: account.scopes as string[],
       regionBase: env.TESLA_BASE_URL,
     });
-    await audit({ actorId: state.u, action: 'provider.connect_tesla', entityType: 'provider', entityId: account.id });
+    await audit({ actorId: row.userId, organizationId: row.organizationId, action: 'provider.connect_tesla', entityType: 'provider', entityId: account.id });
     res.redirect(`/providers?connected=tesla&account=${account.id}`);
-  } catch (err) {
-    res.status(502).send(`Tesla connection failed: ${(err as Error).message}`);
+  } catch {
+    res.redirect(`${env.PUBLIC_URL}/providers?tesla_error=exchange_failed`);
   }
 });
 
@@ -235,9 +258,20 @@ providersRouter.post('/:provider/webhook', { auth: 'session', target: { kind: 'n
 
 // ---- Demo provider degradation toggle (demo/testing) ----
 
-providersRouter.post('/demo/degraded', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
+// Z-DEMOSCOPE: demo degradation is scoped to the provider account's
+// organization, never process-global.
+providersRouter.post('/:accountId/demo-degraded', { auth: 'session', target: { kind: 'resource', resource: 'providerAccount', from: 'param:accountId', perm: 'providers.manage' } }, async (req, res) => {
+  const account = await prisma.providerAccount.findUnique({ where: { id: String(req.params.accountId) } });
+  if (!account || account.provider !== 'demo') {
+    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Demo provider account not found.' } });
+    return;
+  }
   const { degraded } = (req.body ?? {}) as { degraded?: boolean };
-  const { setDemoDegraded } = await import('../providers/demo');
-  setDemoDegraded(!!degraded);
-  res.json({ data: { degraded: !!degraded } });
+  if (typeof degraded !== 'boolean') {
+    res.status(400).json({ error: { code: 'VALIDATION', message: 'degraded boolean required.' } });
+    return;
+  }
+  await prisma.organization.update({ where: { id: account.organizationId }, data: { demoDegraded: degraded } });
+  await audit({ actorId: sessionActor(req).userId, organizationId: account.organizationId, action: 'provider.demo_degraded', entityType: 'provider', entityId: account.id, details: { degraded } });
+  res.json({ data: { degraded } });
 });

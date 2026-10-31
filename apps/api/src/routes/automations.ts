@@ -3,7 +3,10 @@
 import { policyRouter, sessionActor } from '../authz/policy';
 import { z } from 'zod';
 import { prisma } from '../core/db';
-import { dispatchTrigger, runAutomation } from '../automations/engine';
+import { sealJson, randomToken } from '../core/crypto';
+import { audit } from '../core/settings';
+import { env } from '../core/env';
+import { runAutomation } from '../automations/engine';
 import { ACTION_TYPES, CONDITION_TYPES, TRIGGER_TYPES } from '@voltlink/shared';
 
 export const automationsRouter = policyRouter('/api/v1/automations');
@@ -135,13 +138,30 @@ automationsRouter.get('/:id/executions', { auth: 'session', target: { kind: 'res
 });
 
 /** Incoming webhook trigger endpoint for user automations. */
-automationsRouter.post('/webhook/:token', { auth: 'public', target: { kind: 'none' } }, async (req, res) => {
-  const token = String(req.params.token);
-  const row = await prisma.automation.findFirst({ where: { triggerType: 'webhook', triggerParams: { path: ['token'], equals: token } } });
-  if (!row) {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Unknown webhook token.' } });
+// Inbound webhooks (Z-INBOUNDWH): create or rotate a Standard Webhooks hook
+// for a webhook-triggered automation. The secret is shown exactly once.
+automationsRouter.post('/:id/inbound-webhook', { auth: 'session', verifiedEmail: true, target: { kind: 'resource', resource: 'automation', from: 'param:id', perm: 'automations.manage' } }, async (req, res) => {
+  const row = await prisma.automation.findUniqueOrThrow({ where: { id: String(req.params.id) } });
+  if (row.triggerType !== 'webhook') {
+    res.status(400).json({ error: { code: 'NOT_WEBHOOK', message: 'Only webhook-triggered automations can have an inbound hook.' } });
     return;
   }
-  const count = await dispatchTrigger({ type: 'webhook', userId: row.userId, vehicleId: row.vehicleId ?? undefined, data: req.body ?? {} });
-  res.json({ data: { matched: count } });
+  const { generateWebhookSecret } = await import('../webhooks/standardWebhooks');
+  const secret = generateWebhookSecret();
+  const sealed = sealJson({ current: secret });
+  const publicId = `ih_${randomToken(16).replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const hook = await prisma.inboundWebhook.upsert({
+    where: { automationId: row.id },
+    update: { publicId, secretSealed: sealed.ciphertext },
+    create: { automationId: row.id, userId: sessionActor(req).userId, publicId, secretSealed: sealed.ciphertext },
+  });
+  await audit({ actorId: sessionActor(req).userId, organizationId: row.organizationId, action: 'inbound_webhook.create', entityType: 'inboundWebhook', entityId: hook.id });
+  res.status(201).json({ data: { url: `${env.PUBLIC_URL}/api/v1/hooks/automations/${publicId}`, secret, publicId } });
+});
+
+automationsRouter.delete('/:id/inbound-webhook', { auth: 'session', target: { kind: 'resource', resource: 'automation', from: 'param:id', perm: 'automations.manage' } }, async (req, res) => {
+  const row = await prisma.automation.findUniqueOrThrow({ where: { id: String(req.params.id) } });
+  await prisma.inboundWebhook.deleteMany({ where: { automationId: row.id } });
+  await audit({ actorId: sessionActor(req).userId, organizationId: row.organizationId, action: 'inbound_webhook.deleted', entityType: 'inboundWebhook', entityId: row.id });
+  res.json({ data: { ok: true } });
 });

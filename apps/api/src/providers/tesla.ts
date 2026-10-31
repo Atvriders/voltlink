@@ -34,19 +34,21 @@ const TESLA_CAPABILITIES: Capability[] = [
 
 const TESLA_SCOPES = 'openid vehicle_device_data vehicle_cmds vehicle_charging_cmds energy_device_data energy_cmds offline_access';
 
-export function teslaAuthorizeUrl(state: string): string {
+export function teslaAuthorizeUrl(state: string, codeChallenge: string): string {
   const params = new URLSearchParams({
     client_id: env.TESLA_CLIENT_ID,
     redirect_uri: env.TESLA_REDIRECT_URI,
     response_type: 'code',
     scope: TESLA_SCOPES,
     state,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
   });
   return `https://auth.tesla.com/oauth2/v3/authorize?${params.toString()}`;
 }
 
 /** Exchange the authorization code for tokens via the official endpoint. */
-export async function teslaExchangeCode(code: string): Promise<TeslaTokens & { region?: string }> {
+export async function teslaExchangeCode(code: string, codeVerifier?: string): Promise<TeslaTokens & { region?: string }> {
   const res = await fetch('https://auth.tesla.com/oauth2/v3/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -57,6 +59,7 @@ export async function teslaExchangeCode(code: string): Promise<TeslaTokens & { r
       code,
       redirect_uri: env.TESLA_REDIRECT_URI,
       audience: env.TESLA_BASE_URL,
+      ...(codeVerifier ? { code_verifier: codeVerifier } : {}),
     }),
   });
   if (!res.ok) {

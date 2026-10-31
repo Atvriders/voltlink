@@ -4,6 +4,7 @@
 // pure function of time.
 
 import { hashString, seededRng, type CommandDispatchResult, type FetchStateResult, type ProviderContext, type ProviderVehicleDescriptor, type VehicleProvider } from './types';
+import { prisma } from '../core/db';
 import type { Capability, CommandParams, CommandType, VehicleState } from '@voltlink/shared';
 
 // Fictional region: Rivermark County (clearly fictional coordinates).
@@ -50,13 +51,22 @@ export const DEMO_VEHICLES: DemoVehicleSpec[] = [
 
 // Overlays applied by demo commands, kept in memory (re-derivable on restart).
 const overlays = new Map<string, Partial<VehicleState>>();
-let degraded = false;
 
-export function setDemoDegraded(v: boolean): void {
-  degraded = v;
+// Z-DEMOSCOPE: degradation is per organization, never process-global.
+async function orgDegraded(ctx: ProviderContext): Promise<boolean> {
+  if (!ctx.accountId) return false;
+  try {
+    const account = await prisma.providerAccount.findUnique({ where: { id: ctx.accountId }, select: { organizationId: true } });
+    if (!account) return false;
+    const org = await prisma.organization.findUnique({ where: { id: account.organizationId }, select: { demoDegraded: true } });
+    return org?.demoDegraded === true;
+  } catch {
+    return false;
+  }
 }
-export function isDemoDegraded(): boolean {
-  return degraded;
+
+export async function isDemoDegraded(ctx: ProviderContext): Promise<boolean> {
+  return orgDegraded(ctx);
 }
 
 function timeOfDay(now = new Date()): { hour: number; minute: number; dayIndex: number; epoch: number } {
@@ -113,7 +123,7 @@ function commutePosition(hourOfDay: number, towardWork: boolean): { lat: number;
 }
 
 /** Base (non-overlay) simulated state for a demo vehicle at the current time. */
-export function simulatedState(spec: DemoVehicleSpec, now: Date): Omit<VehicleState, 'vehicleId' | 'provider' | 'providerVehicleId'> {
+export function simulatedState(spec: DemoVehicleSpec, now: Date, degraded = false): Omit<VehicleState, 'vehicleId' | 'provider' | 'providerVehicleId'> {
   const t = timeOfDay(now);
   const phase = daySchedule(t);
   const rng = seededRng(hashString(spec.id) ^ t.dayIndex);
@@ -263,9 +273,10 @@ const MINUTE = 60_000;
 class DemoProviderImpl implements VehicleProvider {
   id = 'demo' as const;
 
-  async readiness(): Promise<{ ok: boolean; checks: { name: string; ok: boolean; detail: string }[] }> {
+  async readiness(ctx: ProviderContext): Promise<{ ok: boolean; checks: { name: string; ok: boolean; detail: string }[] }> {
+    const degraded = await orgDegraded(ctx);
     return {
-      ok: true,
+      ok: !degraded,
       checks: [
         { name: 'Fictional data', ok: true, detail: 'All demo vehicles are fictional and deterministic.' },
         { name: 'Network isolation', ok: true, detail: 'Demo commands never contact real services.' },
@@ -292,7 +303,7 @@ class DemoProviderImpl implements VehicleProvider {
   async fetchState(ctx: ProviderContext, providerVehicleId: string): Promise<FetchStateResult> {
     const spec = DEMO_VEHICLES.find((v) => v.id === providerVehicleId);
     if (!spec) throw new Error('Unknown demo vehicle');
-    const state = simulatedState(spec, new Date());
+    const state = simulatedState(spec, new Date(), await orgDegraded(ctx));
     const freshness = state.freshness ?? 'live';
     return { state: { ...state, vehicleId: undefined } as never, live: freshness === 'live', freshForSec: 90 };
   }
@@ -423,7 +434,8 @@ class DemoProviderImpl implements VehicleProvider {
     return { kind: 'accepted', response: 'Demo provider accepted the command.' };
   }
 
-  async health(): Promise<{ ok: boolean; detail: string }> {
+  async health(ctx: ProviderContext): Promise<{ ok: boolean; detail: string }> {
+    const degraded = await orgDegraded(ctx);
     return degraded ? { ok: false, detail: 'Simulated demo-provider degradation.' } : { ok: true, detail: 'Demo provider healthy.' };
   }
 }

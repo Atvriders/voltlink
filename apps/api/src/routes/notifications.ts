@@ -3,8 +3,19 @@
 
 import { policyRouter, sessionActor } from '../authz/policy';
 import { prisma } from '../core/db';
+import { audit } from '../core/settings';
 import { validateWebhookUrl, setUserChannelUrl, userChannelUrl } from '../notifications/simpleWebhooks';
-import { sha256hex, randomToken } from '../core/crypto';
+import { sealJson, openJson, randomToken } from '../core/crypto';
+
+/** G-08: hide token-bearing URL paths; only the scheme and host are shown. */
+function maskUrl(raw: string): string {
+  try {
+    const u = new URL(raw);
+    return `${u.protocol}//${u.host}/…`;
+  } catch {
+    return '(invalid)';
+  }
+}
 
 export const notificationsRouter = policyRouter('/api/v1/notifications');
 
@@ -58,9 +69,12 @@ notificationsRouter.post('/read-all', { auth: 'session', target: { kind: 'none' 
 
 notificationsRouter.get('/preferences', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
   const prefs = await prisma.notificationPreference.findMany({ where: { userId: sessionActor(req).userId } });
+  // G-08: never return raw channel URLs (embedded tokens included) — only
+  // a masked display form.
   const channelUrls: Record<string, string> = {};
   for (const key of ['ntfyUrl', 'gotifyUrl', 'discordWebhook', 'teamsWebhook']) {
-    channelUrls[key] = (await userChannelUrl(sessionActor(req).userId, key)) ?? '';
+    const url = await userChannelUrl(sessionActor(req).userId, key);
+    channelUrls[key] = url ? maskUrl(url) : '';
   }
   res.json({
     data: {
@@ -118,7 +132,8 @@ notificationsRouter.get('/webhooks', { auth: 'session', target: { kind: 'none' }
     data: rows.map((w) => ({
       id: w.id,
       name: w.name,
-      url: w.url,
+      // G-08: never return the raw URL (it may embed a token).
+      displayHint: w.displayHint ?? maskUrl(w.url),
       enabled: w.enabled,
       lastStatus: w.lastStatus ?? undefined,
       lastDeliveryAt: w.lastDeliveryAt?.toISOString(),
@@ -140,11 +155,37 @@ notificationsRouter.post('/webhooks', { auth: 'session', target: { kind: 'none' 
     res.status(422).json({ error: { code: 'URL_BLOCKED', message: (err as Error).message } });
     return;
   }
-  const secret = randomToken(16);
+  const secret = `whsec_${randomToken(24)}`;
+  const events = Array.isArray((req.body as { events?: unknown }).events) ? ((req.body as { events: string[] }).events.slice(0, 64)) : [];
   const w = await prisma.webhookEndpoint.create({
-    data: { userId: sessionActor(req).userId, name: name.slice(0, 60), url, secretHash: sha256hex(secret) },
+    data: { userId: sessionActor(req).userId, name: name.slice(0, 60), url, events: JSON.parse(JSON.stringify(events)), displayHint: maskUrl(url), secretSealed: sealJson({ current: secret }).ciphertext },
   });
-  res.status(201).json({ data: { id: w.id, name: w.name, url: w.url, enabled: w.enabled, secret } });
+  res.status(201).json({ data: { id: w.id, name: w.name, displayHint: w.displayHint, enabled: w.enabled, secret } });
+});
+
+// Rotate the signing secret: the previous one stays valid for 24 h and both
+// signatures are sent meanwhile (Standard Webhooks).
+notificationsRouter.post('/webhooks/:id/rotate-secret', { auth: 'session', stepUp: {}, target: { kind: 'none' } }, async (req, res) => {
+  const w = await prisma.webhookEndpoint.findUnique({ where: { id: String(req.params.id) } });
+  if (!w || w.userId !== sessionActor(req).userId) {
+    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Webhook not found.' } });
+    return;
+  }
+  const previous = (() => {
+    try {
+      return w.secretSealed ? openJson<{ current: string }>(w.secretSealed).current : undefined;
+    } catch {
+      return undefined;
+    }
+  })();
+  const secret = `whsec_${randomToken(24)}`;
+  const sealed = sealJson(previous ? { current: secret, previous } : { current: secret });
+  await prisma.webhookEndpoint.update({
+    where: { id: w.id },
+    data: { secretSealed: sealed.ciphertext, previousSecretSealed: previous ? w.secretSealed : null, previousUntil: previous ? new Date(Date.now() + 86_400_000) : null },
+  });
+  await audit({ actorId: sessionActor(req).userId, action: 'webhook.rotate_secret', entityType: 'webhookEndpoint', entityId: w.id });
+  res.json({ data: { ok: true, secret } });
 });
 
 notificationsRouter.patch('/webhooks/:id', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
@@ -177,7 +218,7 @@ notificationsRouter.put('/push/subscriptions', { auth: 'session', target: { kind
     return;
   }
   await prisma.pushSubscription.upsert({
-    where: { endpoint },
+    where: { userId_endpoint: { userId: sessionActor(req).userId, endpoint } },
     update: { keys: JSON.parse(JSON.stringify(keys)) },
     create: { userId: sessionActor(req).userId, endpoint, keys: JSON.parse(JSON.stringify(keys)) },
   });

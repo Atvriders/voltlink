@@ -5,7 +5,9 @@ export function csv(lines: string[][]): string {
     .map((l) =>
       l
         .map((cell) => {
-          const c = String(cell);
+          let c = String(cell);
+          // N-CSV: neutralize spreadsheet formula injection.
+          if (/^[=+\-@\t\r]/.test(c)) c = `'${c}`;
           if (/[",\n]/.test(c)) {
             return `"${c.replace(/"/g, '""')}"`;
           }

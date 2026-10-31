@@ -259,6 +259,7 @@ const SKIP_ROUTES: ReadonlySet<string> = new Set([
   'PATCH /api/v1/users/retention', // spec: always 404
   'GET /api/v1/status/subscriptions/confirm/:token',
   'POST /api/v1/invitations/:token/accept',
+  'POST /api/v1/automations/webhook/:token', // removed: replaced by inbound hooks
 ]);
 
 function personaHas(policy: RoutePolicy, persona: Persona): boolean {

@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import { env, parseTrustProxy } from './core/env';
 import { requestId, csrf, notFound, errorHandler } from './middleware/core';
 import { authRouter } from './routes/auth';
+import { hooksRouter } from './routes/hooks';
 import { usersRouter } from './routes/users';
 import { providersRouter } from './routes/providers';
 import { vehiclesRouter } from './routes/vehicles';
@@ -62,6 +63,8 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
     }),
   );
   app.use(requestId);
+  // Inbound hooks need the raw body: mount before express.json() and CSRF.
+  app.use('/api/v1/hooks', hooksRouter);
   app.use(express.json({ limit: '2mb' }));
   app.use(cookieParser());
   app.use(

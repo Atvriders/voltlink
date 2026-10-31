@@ -14,10 +14,7 @@ declare global {
 }
 
 export function requestId(req: Request, res: Response, next: NextFunction): void {
-  if (process.env.VL_REQ_DEBUG) {
-    const cookie = (req.headers.cookie ?? '').slice(0, 60);
-    console.log('[req-debug]', req.method, req.path, 'cookie=', cookie || '(none)');
-  }
+  // G-07: no debug flag may log cookies, session ids or token-hash matches.
   const id = req.header('x-request-id') ?? crypto.randomBytes(8).toString('hex');
   req.id = id;
   res.setHeader('X-Request-Id', id);
