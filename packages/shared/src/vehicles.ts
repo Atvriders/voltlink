@@ -69,6 +69,7 @@ export const CAPABILITIES = [
   'speed_limit',
   'send_navigation',
   'schedule_update',
+  'cancel_update',
   'location',
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];

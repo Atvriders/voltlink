@@ -323,11 +323,29 @@ model ProviderAccount {
   commandsEnabled Boolean               @default(true)
   lastSyncAt      DateTime? @db.Timestamptz(3)
   lastError       String?
+  lastErrorCode   String?
+  region          String?
+  fleetApiBaseUrl String?
+  tokenExpiresAt  DateTime? @db.Timestamptz(3)
   createdAt       DateTime  @db.Timestamptz(3) @default(now())
   credential      ProviderCredential?
   vehicles        Vehicle[]
   grants          ProviderAccountGrant[]
   @@index([organizationId])
+}
+
+model VehicleCommandSecret {
+  commandId  String   @id
+  ciphertext String
+  expiresAt  DateTime @db.Timestamptz(3)
+}
+
+model ProviderUsageDaily {
+  accountId String
+  day       DateTime @db.Date
+  category  String
+  count     Int      @default(0)
+  @@id([accountId, day, category])
 }
 
 model ProviderCredential {
@@ -362,6 +380,11 @@ model Vehicle {
   wheelStyle        String?
   vinLast4          String?
   capabilities      Json             @default("[]")
+  capabilityDetails Json             @default("{}")
+  accessType        String?
+  hidePrivate       Boolean          @default(false)
+  userActiveUntil   DateTime? @db.Timestamptz(3)
+  pendingCommandUntil DateTime? @db.Timestamptz(3)
   demo              Boolean          @default(false)
   active            Boolean          @default(true)
   createdAt         DateTime @db.Timestamptz(3)         @default(now())

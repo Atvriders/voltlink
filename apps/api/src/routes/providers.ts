@@ -16,7 +16,7 @@ import {
   listProviders,
 } from '../providers/registry';
 import { env } from '../core/env';
-import { teslaAuthorizeUrl, teslaExchangeCode } from '../providers/tesla';
+import { teslaAuthorizeUrl, teslaExchangeCode } from '../providers/tesla/oauth';
 import { seedDemoWorld } from '../telemetry/seed';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { ingestVehicleState } from '../telemetry/ingest';
@@ -215,6 +215,9 @@ providersRouter.get(
     try {
       const verifier = openJson<{ verifier: string }>(row.verifierSealed).verifier;
       const tokens = await teslaExchangeCode(code, verifier);
+      // P-TESLAREGION: persist the discovered region + base URL per account.
+      const { discoverRegion } = await import('../providers/tesla/region');
+      const region = await discoverRegion(tokens.accessToken).catch(() => null);
       const account = await prisma.providerAccount.create({
         data: {
           organizationId: row.organizationId,
@@ -222,24 +225,17 @@ providersRouter.get(
           provider: 'tesla',
           label: 'Tesla',
           status: 'connected',
-          scopes: JSON.parse(
-            JSON.stringify(
-              tokens.scope
-                ? String(tokens.scope).split(' ')
-                : ['vehicle_device_data', 'vehicle_cmds'],
-            ),
-          ),
+          region: region?.region,
+          fleetApiBaseUrl: region?.baseUrl,
+          tokenExpiresAt: new Date(tokens.expiresAt),
+          scopes: JSON.parse(JSON.stringify(tokens.scopes)),
         },
       });
       await saveCredentials(account.id, {
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token ?? '',
-        tokenType: tokens.token_type,
-        expiresAt: tokens.expires_in
-          ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
-          : undefined,
-        scopes: account.scopes as string[],
-        regionBase: env.TESLA_BASE_URL,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresAt: String(tokens.expiresAt),
+        scopes: tokens.scopes,
       });
       await audit({
         actorId: row.userId,
@@ -463,8 +459,12 @@ providersRouter.post(
   { auth: 'session', target: { kind: 'none' } },
   async (req, res) => {
     const provider = String(req.params.provider);
-    if (!['tesla', 'tessie', 'demo'].includes(provider)) {
-      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Unknown provider webhook.' } });
+    // Z-INBOUNDWH (Tessie part) + guide 01 §14: Tessie has no webhook API
+    // and Tesla telemetry arrives another way — only the demo hook remains.
+    if (!['demo'].includes(provider)) {
+      res
+        .status(404)
+        .json({ error: { code: 'NOT_FOUND', message: 'This provider has no webhook.' } });
       return;
     }
     // Demo webhook: manual state injection for demo/test purposes only.

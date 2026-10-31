@@ -29,6 +29,12 @@ export interface ProviderVehicleDescriptor {
   wheelStyle?: string;
   vinLast4?: string;
   capabilities: Capability[];
+  capabilityDetails?: Record<
+    string,
+    { supported: boolean; usable: boolean; reason?: string; min?: number; max?: number }
+  >;
+  accessType?: string;
+  hidePrivate?: boolean;
 }
 
 export interface FetchStateResult {
@@ -40,10 +46,14 @@ export interface FetchStateResult {
   freshForSec: number;
 }
 
-export type CommandResultKind = 'accepted' | 'rejected' | 'unsupported' | 'timed_out' | 'failed';
+export type CommandResultKind =
+  'accepted' | 'rejected' | 'unsupported' | 'timed_out' | 'failed' | 'outcome_unknown';
 
 export interface CommandDispatchResult {
   kind: CommandResultKind;
+  providerCode?: string;
+  retryable?: boolean;
+  retryAfterSec?: number;
   response?: string;
   category?: string;
   errorMessage?: string;

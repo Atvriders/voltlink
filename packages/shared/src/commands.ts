@@ -31,6 +31,7 @@ export const COMMAND_TYPES = [
   'speed_limit',
   'send_navigation',
   'schedule_update',
+  'cancel_update',
 ] as const;
 export type CommandType = (typeof COMMAND_TYPES)[number];
 
@@ -280,6 +281,11 @@ export interface CommandParams {
   destination?: { name: string; lat: number; lon: number };
   updateDelaySec?: number;
   homelinkName?: string;
+  defrostOn?: boolean;
+  seatPosition?: string;
+  speedLimitOn?: boolean;
+  locale?: string;
+  userLocation?: { lat: number; lon: number };
 }
 
 export interface VehicleCommand {

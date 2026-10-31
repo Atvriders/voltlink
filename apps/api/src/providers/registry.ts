@@ -7,7 +7,7 @@ import type { ProviderAccount } from '@prisma/client';
 import type { ProviderContext, VehicleProvider } from './types';
 import { DemoProvider } from './demo';
 import { MockProvider } from './mock';
-import { TeslaProvider } from './tesla';
+import { TeslaProvider } from './tesla/index';
 import { TessieProvider } from './tessie';
 
 // ---------------------------------------------------------------------------

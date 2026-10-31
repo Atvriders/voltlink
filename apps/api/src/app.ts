@@ -145,6 +145,19 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
   app.use('/api', notFound);
 
   // Built SPA (production) or dev notice.
+  // P-TESLASIGN: Tesla's partner key must be reachable before the SPA
+  // fallback would answer every non-/api GET with index.html.
+  app.get('/.well-known/appspecific/com.tesla.3p.public-key.pem', (_req, res) => {
+    void import('./providers/tesla/partner').then(({ teslaPublicKey }) => {
+      const k = teslaPublicKey();
+      if (!k) {
+        res.status(404).end();
+        return;
+      }
+      res.type('application/x-pem-file').set('Cache-Control', 'public, max-age=300').send(k.pem);
+    });
+  });
+
   if (opts.serveSpa) {
     const spaDir = PATHS.webDist;
     if (fs.existsSync(spaDir)) {
