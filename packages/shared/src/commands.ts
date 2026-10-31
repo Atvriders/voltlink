@@ -266,6 +266,13 @@ export const COMMAND_DEFINITIONS: Record<CommandType, CommandDefinition> = {
     requiresCapability: 'schedule_update',
     description: 'Schedule a software update.',
   },
+  cancel_update: {
+    type: 'cancel_update',
+    label: 'Cancel software update',
+    risk: 'low',
+    requiresCapability: 'cancel_update',
+    description: 'Cancel a pending software update.',
+  },
 };
 
 export interface CommandParams {
@@ -388,6 +395,7 @@ export const COMMAND_PARAM_SCHEMAS: Record<CommandType, z.ZodTypeAny> = {
     })
     .optional(),
   schedule_update: z.object({ updateDelaySec: z.number().int().min(0).max(7200) }).optional(),
+  cancel_update: z.object({}).optional(),
 };
 
 /** Commands with no observable state: they end at `accepted` with confirmation

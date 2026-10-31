@@ -9,6 +9,7 @@ import { audit, getSettingsBundle } from '../core/settings';
 import { sseRevokeUser } from '../core/sse';
 import { getQueue } from '../core/queue';
 import { removeCredentials } from '../providers/registry';
+import { THEME_ID_SET } from '@voltlink/shared';
 import { sha256hex } from '../core/crypto';
 
 export const usersRouter = policyRouter('/api/v1/users');
@@ -95,7 +96,8 @@ usersRouter.patch('/settings', { auth: 'session', target: { kind: 'self' } }, as
   if (['metric', 'imperial'].includes(body.units ?? '')) data.units = body.units;
   if (typeof body.timezone === 'string' && /^[A-Za-z_+\-0-9/]{2,40}$/.test(body.timezone))
     data.timezone = body.timezone;
-  if (typeof body.theme === 'string' && body.theme.length <= 40) data.theme = body.theme;
+  // F-UIMISC: theme ids are validated against the canonical shared list.
+  if (typeof body.theme === 'string' && THEME_ID_SET.has(body.theme)) data.theme = body.theme;
   if (typeof body.presentationMode === 'boolean') data.presentationMode = body.presentationMode;
   await prisma.user.update({ where: { id: sessionActor(req).userId }, data });
   res.json({ data: { ok: true } });

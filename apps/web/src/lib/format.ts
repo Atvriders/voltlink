@@ -54,10 +54,40 @@ export function fmtClock(iso: string | undefined, tz?: string): string {
   }
 }
 
-export function fmtDateTime(iso: string | undefined): string {
+export function fmtDateTime(iso: string | undefined, tz?: string): string {
   if (!iso) return '—';
-  const d = new Date(iso);
-  return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  try {
+    // F-UIMISC: medium date + short time in the user's time zone; the wrapper
+    // column gets whitespace-nowrap tabular-nums so times never wrap.
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: tz,
+    }).format(new Date(iso));
+  } catch {
+    return new Date(iso).toLocaleString();
+  }
+}
+
+/** Wh/km (metric) or Wh/mi (imperial); 0 means unknown. */
+export function fmtEfficiency(whPerKm: number | undefined, units: Units): string {
+  if (whPerKm === undefined || whPerKm === null || whPerKm <= 0) return '—';
+  if (units === 'imperial') return `${Math.round(whPerKm * 1.609344)} Wh/mi`;
+  return `${Math.round(whPerKm)} Wh/km`;
+}
+
+/** kPa (metric) or psi (imperial). */
+export function fmtPressure(kpa: number | undefined, units: Units): string {
+  if (kpa === undefined || kpa === null) return '—';
+  if (units === 'imperial') return `${Math.round(kpa * 0.1450377)} psi`;
+  return `${Math.round(kpa)} kPa`;
+}
+
+/** Metres (metric) or feet (imperial). */
+export function fmtElevation(m: number | undefined, units: Units): string {
+  if (m === undefined || m === null) return '—';
+  if (units === 'imperial') return `${Math.round(m * 3.28084).toLocaleString()} ft`;
+  return `${Math.round(m).toLocaleString()} m`;
 }
 
 export function fmtMoney(n: number | undefined, currency = 'USD'): string {

@@ -190,6 +190,11 @@ function ThemeMenu() {
               onClick={() => {
                 setTheme(t.id);
                 setOpen(false);
+                // F-UIMISC: the choice is persisted on the server too.
+                void api('/api/v1/users/settings', {
+                  method: 'PATCH',
+                  body: { theme: t.id },
+                }).catch(() => undefined);
               }}
               className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-panel2"
             >

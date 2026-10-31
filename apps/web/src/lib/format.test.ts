@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  fmtDateTime,
   fmtDist,
   fmtDuration,
+  fmtEfficiency,
+  fmtElevation,
   fmtEnergy,
   fmtKm,
   fmtMoney,
   fmtPower,
+  fmtPressure,
   fmtSpeed,
   fmtTemp,
   timeAgo,
@@ -124,5 +128,26 @@ describe('map geometry helpers', () => {
 describe('distance formatting edge cases', () => {
   it('fmtDist rounds to digits', () => {
     expect(fmtDist(1.23456, 'metric', 2)).toContain('1.23');
+  });
+});
+
+describe('F-UIMISC unit formatting', () => {
+  it('fmtPressure converts kPa to psi for imperial', () => {
+    expect(fmtPressure(100, 'metric')).toBe('100 kPa');
+    expect(fmtPressure(100, 'imperial')).toBe('15 psi');
+  });
+  it('fmtEfficiency converts Wh/km to Wh/mi', () => {
+    expect(fmtEfficiency(100, 'metric')).toBe('100 Wh/km');
+    expect(fmtEfficiency(100, 'imperial')).toBe('161 Wh/mi');
+    expect(fmtEfficiency(0, 'metric')).toBe('—');
+  });
+  it('fmtElevation converts metres to feet', () => {
+    expect(fmtElevation(1000, 'metric')).toBe('1,000 m');
+    expect(fmtElevation(1000, 'imperial')).toBe('3,281 ft');
+  });
+  it('fmtDateTime formats in the requested time zone', () => {
+    const iso = '2025-01-02T12:00:00.000Z';
+    expect(fmtDateTime(iso, 'UTC')).toContain('2025');
+    expect(fmtDateTime(iso, 'UTC')).toContain('12:00');
   });
 });

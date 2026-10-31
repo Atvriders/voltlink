@@ -5,8 +5,9 @@ import { describe, expect, it } from 'vitest';
 import { normalizeThemeId, THEMES } from './themes';
 
 describe('theme id normalization', () => {
-  it('keeps every known theme id', () => {
+  it('keeps every known rendered theme id', () => {
     for (const t of THEMES) {
+      if (t.id === 'system') continue; // resolved via prefers-color-scheme
       expect(normalizeThemeId(t.id)).toBe(t.id);
     }
   });

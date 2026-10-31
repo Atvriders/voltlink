@@ -15,7 +15,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { api, resetCsrf } from '../api/client';
 import { realtimeStop } from '../lib/realtime';
 import type { UserPublic } from '@voltlink/shared';
-import { normalizeThemeId } from './themes';
+import { normalizeThemeId, type ThemeId } from './themes';
 
 export { THEMES, normalizeThemeId } from './themes';
 
@@ -113,14 +113,33 @@ export function useAuth(): AuthState {
   return ctx;
 }
 
+let mediaListenerAttached = false;
+
+function systemDark(): boolean {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+/** Resolve the stored id (which may be 'system') to a rendered theme id. */
+export function resolveTheme(stored: string | null | undefined): ThemeId {
+  if (stored === 'system') return systemDark() ? 'voltlink-dark' : 'voltlink-light';
+  return normalizeThemeId(stored);
+}
+
 export function applyTheme(user?: UserPublic | null): void {
   const saved = localStorage.getItem('voltlink-theme');
-  const theme = normalizeThemeId(saved || (user ? user.theme : null));
+  const theme = resolveTheme(saved || (user ? user.theme : null));
   document.documentElement.setAttribute('data-theme', theme);
+  // F-UIMISC: System follows the OS setting while the page is open.
+  if (!mediaListenerAttached) {
+    mediaListenerAttached = true;
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (localStorage.getItem('voltlink-theme') === 'system') applyTheme();
+    });
+  }
 }
 
 export function setTheme(theme: string): void {
-  const id = normalizeThemeId(theme);
-  localStorage.setItem('voltlink-theme', id);
-  document.documentElement.setAttribute('data-theme', id);
+  localStorage.setItem('voltlink-theme', theme);
+  const resolved = resolveTheme(theme);
+  document.documentElement.setAttribute('data-theme', resolved);
 }

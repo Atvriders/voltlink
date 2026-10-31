@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Download, Gauge } from 'lucide-react';
 import { api, apiCsv } from '../api/client';
 import { Badge, Button, Card, EmptyState, Input, Select, Spinner } from '../components/ui';
-import { fmtClock, fmtDist, fmtDuration, fmtEnergy } from '../lib/format';
+import { fmtClock, fmtDist, fmtDuration, fmtEfficiency, fmtEnergy } from '../lib/format';
 import { useAuth } from '../auth/AuthContext';
 import type { Drive } from '@voltlink/shared';
 
@@ -156,14 +156,14 @@ export default function DrivesPage() {
                     className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm hover:bg-panel2"
                   >
                     <span className="w-32 shrink-0 font-medium">{d.vehicleName}</span>
-                    <span className="w-36 text-subtle">
+                    <span className="w-36 whitespace-nowrap text-subtle tabular-nums">
                       {fmtClock(d.startAt, user?.timezone)} → {fmtClock(d.endAt, user?.timezone)}
                     </span>
                     <span className="w-24">{fmtDist(d.distanceKm, units)}</span>
                     <span className="w-20 text-subtle">{fmtDuration(d.durationSec)}</span>
                     <span className="w-24 text-subtle">{fmtEnergy(d.energyKwh)}</span>
                     <span className="w-24 text-subtle">
-                      {Math.round(d.efficiencyWhPerKm)} Wh/km
+                      {fmtEfficiency(d.efficiencyWhPerKm, units)}
                     </span>
                     <Badge
                       tone={

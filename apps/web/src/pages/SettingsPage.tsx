@@ -156,7 +156,10 @@ function ProfileTab() {
 
 function useMemoTimezones(): string[] {
   try {
-    return Intl.supportedValuesOf('timeZone');
+    // F-UIMISC: V8's list has no 'UTC' (Africa/Abidjan is not a substitute) —
+    // always show UTC first.
+    const zones = Intl.supportedValuesOf('timeZone');
+    return zones.includes('UTC') ? zones : ['UTC', ...zones];
   } catch {
     return [
       'UTC',
@@ -286,7 +289,9 @@ function SecurityTab() {
               >
                 <span className="flex items-center gap-2">
                   <KeyRound size={13} className="text-accent" /> {p.name}{' '}
-                  <span className="text-xs text-faint">{fmtDateTime(p.createdAt)}</span>
+                  <span className="text-xs text-faint">
+                    {fmtDateTime(p.createdAt, user?.timezone)}
+                  </span>
                 </span>
                 <Button
                   variant="ghost"
@@ -479,7 +484,7 @@ function TotpModal({ open, onClose }: { open: boolean; onClose: () => void }) {
 
 function SessionsTab() {
   const qc = useQueryClient();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const {
     data: sessions,
     isError: sessionsError,
@@ -519,8 +524,8 @@ function SessionsTab() {
               <div className="min-w-0 flex-1">
                 <p className="truncate">{s.userAgent || 'Unknown device'}</p>
                 <p className="text-xs text-faint">
-                  {s.ip} · created {fmtDateTime(s.createdAt)} ·{' '}
-                  {s.lastSeenAt ? `last seen ${fmtDateTime(s.lastSeenAt)}` : ''}
+                  {s.ip} · created {fmtDateTime(s.createdAt, user?.timezone)} ·{' '}
+                  {s.lastSeenAt ? `last seen ${fmtDateTime(s.lastSeenAt, user?.timezone)}` : ''}
                 </p>
               </div>
               {s.current ? (

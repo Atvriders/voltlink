@@ -54,6 +54,7 @@ import {
   FRESHNESS_LABEL,
   STATUS_LABEL,
   timeAgo,
+  fmtPressure,
 } from '../lib/format';
 import {
   COMMAND_DEFINITIONS,
@@ -727,12 +728,12 @@ function StateDetails({
       </Card>
 
       {tire && (
-        <Card title="Tire pressure (kPa)">
+        <Card title="Tire pressure">
           <dl className="grid grid-cols-2 gap-2 text-sm">
-            <Row k="Front L" v={String(Math.round(tire.frontLeft))} />
-            <Row k="Front R" v={String(Math.round(tire.frontRight))} />
-            <Row k="Rear L" v={String(Math.round(tire.rearLeft))} />
-            <Row k="Rear R" v={String(Math.round(tire.rearRight))} />
+            <Row k="Front L" v={fmtPressure(tire.frontLeft, units)} />
+            <Row k="Front R" v={fmtPressure(tire.frontRight, units)} />
+            <Row k="Rear L" v={fmtPressure(tire.rearLeft, units)} />
+            <Row k="Rear R" v={fmtPressure(tire.rearRight, units)} />
           </dl>
         </Card>
       )}

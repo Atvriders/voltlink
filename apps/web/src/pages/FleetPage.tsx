@@ -5,6 +5,8 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Download, Plus, Trash2, Users } from 'lucide-react';
 import { api } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
+import { fmtDateTime, fmtKm } from '../lib/format';
 import {
   Badge,
   Button,
@@ -27,6 +29,9 @@ import type {
 } from '@voltlink/shared';
 
 export default function FleetPage() {
+  const { user } = useAuth();
+  const units = user?.units ?? 'metric';
+  const tz = user?.timezone;
   const [tab, setTab] = useState<'overview' | 'groups' | 'drivers' | 'maintenance'>('overview');
   const { data: overview, isLoading } = useQuery({
     queryKey: ['fleet-overview'],
@@ -135,7 +140,7 @@ export default function FleetPage() {
                         {r.batteryPct !== undefined ? `${Math.round(r.batteryPct)}%` : '—'}
                       </td>
                       <td className="px-3 py-2.5">
-                        {r.odometerKm ? `${Math.round(r.odometerKm).toLocaleString()} km` : '—'}
+                        {r.odometerKm ? fmtKm(r.odometerKm, units) : '—'}
                       </td>
                       <td className="px-3 py-2.5 text-subtle">{r.driver ?? '—'}</td>
                       <td className="px-3 py-2.5 text-subtle">{r.department ?? '—'}</td>
@@ -455,6 +460,9 @@ function DriversTab() {
 
 function MaintenanceTab() {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const units = user?.units ?? 'metric';
+  const tz = user?.timezone;
   const { data: records } = useQuery({
     queryKey: ['maintenance'],
     queryFn: () =>
@@ -504,12 +512,10 @@ function MaintenanceTab() {
               <span className="text-subtle">{m.title}</span>
               <Badge tone="neutral">{m.kind}</Badge>
               {m.dueAt && (
-                <span className="text-xs text-faint">
-                  due {new Date(m.dueAt).toLocaleDateString()}
-                </span>
+                <span className="text-xs text-faint">due {fmtDateTime(m.dueAt, tz)}</span>
               )}
               {m.dueOdometerKm && (
-                <span className="text-xs text-faint">at {m.dueOdometerKm} km</span>
+                <span className="text-xs text-faint">at {fmtKm(m.dueOdometerKm, units)}</span>
               )}
               <Button
                 variant="secondary"

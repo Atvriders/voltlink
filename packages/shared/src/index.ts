@@ -1,5 +1,6 @@
 export * from './roles';
 export * from './vehicles';
+export * from './theme';
 export * from './commands';
 export * from './history';
 export * from './automations';
