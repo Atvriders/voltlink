@@ -73,3 +73,32 @@ and status-page branding.
 Boot fails fast when a required secret is missing, too short, or looks like a
 placeholder (`secret`, `change-me`, …), and when `PUBLIC_URL` is not HTTPS in
 production. That is intentional: never deploy with a published default key.
+
+## Basemaps (F-MAPGRID)
+
+`VL_MAP_MODE` selects the basemap style:
+
+| Value            | Style                                                                                              | Use                                                                                       |
+| ---------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `demo` (default) | Fictional grid from the `--vl-map-*` theme tokens, no network                                      | Demo, CI, air-gapped installs                                                             |
+| `pmtiles`        | Protomaps style over `VL_MAP_PMTILES_URL`; glyphs and sprites from `VL_MAP_ASSETS_URL`             | Recommended self-host: one file, served by the app from `VL_MAP_TILES_DIR` under `/tiles` |
+| `style`          | `VL_MAP_STYLE_URL` as-is, e.g. OpenFreeMap `https://tiles.openfreemap.org/styles/liberty` (no key) | The operator already runs a tile provider                                                 |
+
+- `VL_MAP_ATTRIBUTION` — attribution text shown for the basemap.
+- `VL_CSP_CONNECT_ORIGINS` — comma-separated extra https origins that tiles,
+  glyphs or sprites load from; the CSP is extended automatically with the
+  origins of the configured style, PMTiles and asset URLs.
+
+Self-host recipe (extract once, serve forever):
+
+```bash
+pmtiles extract https://build.protomaps.com/<YYYYMMDD>.pmtiles ./tiles/region.pmtiles --bbox=-105.2,38.6,-104.0,39.5 --maxzoom=15
+# copy fonts/ and sprites/ from github.com/protomaps/basemaps-assets into ./tiles/assets (check its LICENSE files first)
+docker run -v "$PWD/tiles:/data/tiles:ro" -e VL_MAP_MODE=pmtiles -e VL_MAP_TILES_DIR=/data/tiles   -e VL_MAP_PMTILES_URL=/tiles/region.pmtiles ghcr.io/atvriders/voltlink:latest
+```
+
+Never commit a provider key and never default to a keyed provider: a keyed tile
+URL is visible to every signed-in browser. If you use MapTiler, restrict the key
+with its "Allowed HTTP origins" setting. In `demo` mode the app shows a
+"Fictional demo map" badge, and a notice whenever real vehicles appear on the
+fictional basemap.

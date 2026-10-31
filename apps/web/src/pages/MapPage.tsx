@@ -10,6 +10,7 @@ import { api } from '../api/client';
 import { useAnnounce } from '../lib/announcer';
 import { ErrorState } from '../components/QueryState';
 import MapView, { circleGeoJson } from '../components/MapView';
+import { useMapStyle, useClientConfig } from '../components/map/useMapStyle';
 import { Badge, Button, Card, Field, Input, Modal, Select } from '../components/ui';
 import type { Geofence, Place, PrivacyZone, VehicleWithState } from '@voltlink/shared';
 
@@ -73,6 +74,10 @@ export default function MapPage() {
     vehiclesError || placesError || fencesError || zonesError
       ? (vehiclesErr ?? placesErr ?? fencesErr ?? zonesErr)
       : null;
+
+  // F-MAPGRID: the basemap comes from the instance configuration.
+  const mapStyle = useMapStyle();
+  const { data: clientConfig } = useClientConfig();
 
   const layers = useMemo(() => {
     const out: {
@@ -155,8 +160,17 @@ export default function MapPage() {
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-lg font-extrabold">Map</h1>
         <span className="text-xs text-faint">
-          Fictional demo region — configure real tiles in production
+          {mapStyle?.mode === 'demo'
+            ? 'Fictional demo map — configure real tiles via VL_MAP_MODE'
+            : mapStyle?.mode === 'pmtiles'
+              ? 'Self-hosted tiles (PMTiles)'
+              : 'Operator map style'}
         </span>
+        {mapStyle?.mode === 'demo' && (vehicles ?? []).length > 0 && (
+          <span className="text-xs text-warn">
+            Demo basemap — VL_MAP_MODE=demo shows real vehicles on fictional tiles
+          </span>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <Select
             aria-label="Vehicle filter"
@@ -205,6 +219,7 @@ export default function MapPage() {
         onReady={setMap}
         onPointPick={(lat, lon) => addPlace && setPick({ lat, lon })}
         height={520}
+        mapStyle={mapStyle}
       />
 
       <div className="grid gap-4 md:grid-cols-3">

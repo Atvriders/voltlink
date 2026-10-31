@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import type * as maplibregl from 'maplibre-gl';
 import { circleGeoJson, createMap, routeGeoJson } from '../lib/map';
 import { hasWebGL2 } from '../lib/webgl';
+import type { MapStyleRef } from './map/useMapStyle';
 
 export interface MapLayer {
   id: string;
@@ -20,12 +21,14 @@ export default function MapView({
   onPointPick,
   height = 420,
   className = '',
+  mapStyle,
 }: {
   layers?: MapLayer[];
   onReady?: (map: maplibregl.Map) => void;
   onPointPick?: (lat: number, lon: number) => void;
   height?: number;
   className?: string;
+  mapStyle?: MapStyleRef | null;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -35,6 +38,8 @@ export default function MapView({
   onReadyRef.current = onReady;
   const onPointPickRef = useRef(onPointPick);
   onPointPickRef.current = onPointPick;
+  const mapStyleRef = useRef(mapStyle);
+  mapStyleRef.current = mapStyle;
   const [unavailable, setUnavailable] = useState(false);
 
   // F-MAPLOOP: this effect depends on nothing — callbacks live in refs, so the
@@ -47,7 +52,7 @@ export default function MapView({
     }
     let map: maplibregl.Map;
     try {
-      map = createMap(container.current);
+      map = createMap(container.current, true, mapStyleRef.current?.style);
     } catch (err) {
       // F-WEBGLBLANK: GPUInitializationError / context loss never blanks the
       // app — show the fallback card and keep the page usable.

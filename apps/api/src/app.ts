@@ -9,6 +9,8 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { env, parseTrustProxy } from './core/env';
 import { requestId, csrf, notFound, errorHandler } from './middleware/core';
+import { loadMapConfig } from './core/mapConfig';
+import { policyRouter } from './authz/policy';
 import { authRouter } from './routes/auth';
 import { hooksRouter } from './routes/hooks';
 import { usersRouter } from './routes/users';
@@ -52,8 +54,22 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
   const trust = parseTrustProxy(env.TRUST_PROXY);
   if (trust !== false) app.set('trust proxy', trust);
 
-  app.use(securityHeaders(env.PUBLIC_URL, cspExtraOrigins(env.CSP_CONNECT_ORIGINS)));
+  const mapCfg = loadMapConfig(process.env);
+  app.use(
+    securityHeaders(env.PUBLIC_URL, [
+      ...cspExtraOrigins(env.CSP_CONNECT_ORIGINS),
+      ...mapCfg.cspOrigins,
+    ]),
+  );
   app.use(requestId);
+  // F-MAPGRID: self-hosted tiles mount, before any SPA fallback. Missing
+  // tiles are 404, never index.html. serve-static accepts Range requests.
+  if (mapCfg.tilesDir) {
+    app.use(
+      '/tiles',
+      express.static(mapCfg.tilesDir, { index: false, maxAge: '1d', fallthrough: false }),
+    );
+  }
   // Inbound hooks need the raw body: mount before express.json() and CSRF.
   app.use('/api/v1/hooks', hooksRouter);
   app.use(express.json({ limit: '2mb' }));
@@ -142,6 +158,21 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
     req.actor = actor;
     await sseHandler(req, res);
   });
+
+  // F-MAPGRID: SPA-visible instance configuration (basemap + geocoder).
+  const config = policyRouter('/api/v1/config');
+  config.get('/client', { auth: 'session', target: { kind: 'none' } }, (_req, res) => {
+    res.json({
+      data: {
+        map: mapCfg.client,
+        geocoder: {
+          enabled: env.VL_GEOCODER !== 'off',
+          autocomplete: env.VL_GEOCODER === 'photon',
+        },
+      },
+    });
+  });
+  app.use(config.prefix, config.router);
 
   // API root / 404.
   app.use('/api', notFound);

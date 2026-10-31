@@ -87,6 +87,10 @@ export function fictionalCityGeoJson(): { type: 'FeatureCollection'; features: u
   return { type: 'FeatureCollection', features };
 }
 
+export function buildDemoStyle(): ReturnType<typeof buildStyle> {
+  return buildStyle();
+}
+
 export function buildStyle(): {
   version: number;
   sources: Record<string, unknown>;
@@ -131,12 +135,16 @@ export function buildStyle(): {
   };
 }
 
-export function createMap(container: HTMLElement, interactive = true): maplibregl.Map {
+export function createMap(
+  container: HTMLElement,
+  interactive = true,
+  styleOverride?: unknown,
+): maplibregl.Map {
   // NEW-11: the worker must be a real asset URL before any map is created.
   configureMapLibre();
   const map = new maplibregl.Map({
     container,
-    style: buildStyle() as never,
+    style: (styleOverride ?? buildStyle()) as never,
     center: [-104.6211, 39.0734],
     zoom: 12.2,
     interactive,
