@@ -34,7 +34,8 @@
     "e2e": "playwright test",
     "naming:scan": "tsx scripts/naming-scan.ts",
     "prisma:generate": "prisma generate --schema apps/api/prisma/schema.prisma",
-    "check:compose": "tsx scripts/check-compose.ts"
+    "check:compose": "tsx scripts/check-compose.ts",
+    "check:bundle": "tsx scripts/check-bundle.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",

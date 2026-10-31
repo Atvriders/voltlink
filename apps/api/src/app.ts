@@ -167,6 +167,11 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
           next();
           return;
         }
+        // G-13: missing asset or 3D files are 404, never index.html with 200.
+        if (req.path.startsWith('/assets/') || req.path.startsWith('/3d/')) {
+          res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Asset not found.' } });
+          return;
+        }
         res.sendFile(path.join(spaDir, 'index.html'));
       });
     }

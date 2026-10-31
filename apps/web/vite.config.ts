@@ -11,12 +11,20 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 1600,
+    modulePreload: {
+      // G-06: never preload the route-lazy heavy chunks from index.html.
+      resolveDependencies: (_filename, deps) =>
+        deps.filter((d) => !/(three|map|charts)-[\w-]+\.js/.test(d)),
+    },
     rollupOptions: {
       output: {
-        manualChunks: {
-          three: ['three', '@react-three/fiber', '@react-three/drei'],
-          map: ['maplibre-gl'],
-          charts: ['recharts'],
+        // G-06: only three/@react-three code may join the 'three' chunk — an
+        // object-form manualChunks also captured React into it, forcing every
+        // page to download the 1.1 MB viewer.
+        manualChunks(id) {
+          if (id.includes('three') || id.includes('@react-three')) return 'three';
+          if (id.includes('maplibre-gl')) return 'map';
+          if (id.includes('recharts')) return 'charts';
         },
       },
     },

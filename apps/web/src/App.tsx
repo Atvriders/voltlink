@@ -20,7 +20,7 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import { ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from './pages/ResetPasswordPage';
 import PublicStatusPage from './pages/PublicStatusPage';
-import PresentationPage from './pages/PresentationPage';
+const PresentationPage = lazy(() => import('./pages/PresentationPage'));
 
 const OverviewPage = lazy(() => import('./pages/OverviewPage'));
 const LiveVehiclePage = lazy(() => import('./pages/LiveVehiclePage'));
@@ -136,7 +136,14 @@ function AppRoutes() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/status" element={<PublicStatusPage />} />
-      <Route path="/presentation" element={<PresentationPage />} />
+      <Route
+        path="/presentation"
+        element={
+          <Protected>
+            <PresentationPage />
+          </Protected>
+        }
+      />
       <Route
         path="*"
         element={
