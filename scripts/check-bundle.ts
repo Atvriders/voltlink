@@ -22,3 +22,22 @@ if (bad.length > 0) {
   process.exit(1);
 }
 console.log('✓ index.html preloads no three/map/charts chunk');
+
+// NEW-11: the MapLibre worker must be emitted as its own asset.
+const assetsDir = path.join(dist, 'assets');
+const assetFiles = fs.readdirSync(assetsDir);
+if (!assetFiles.some((f) => /^maplibre-gl-worker-.+\.js$/.test(f))) {
+  console.error('Maplibre worker asset not emitted (NEW-11)');
+  process.exit(1);
+}
+
+// Keep the eagerly loaded entry lean: the heavy chunks are route-lazy.
+const entry = text.match(/src="\/assets\/(index-[^"]+\.js)"/)?.[1];
+if (entry) {
+  const size = fs.statSync(path.join(assetsDir, entry)).size;
+  if (size > 250_000) {
+    console.error(`entry ${entry} exceeds 250 kB`);
+    process.exit(1);
+  }
+}
+console.log('✓ worker asset present and entry under 250 kB');

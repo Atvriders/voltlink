@@ -1,7 +1,7 @@
 // Live vehicle page: state-aware 3D view, detailed telemetry, and secure
 // remote controls with the full command lifecycle.
 
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -42,7 +42,8 @@ import {
   Spinner,
 } from '../components/ui';
 import { useAuth } from '../auth/AuthContext';
-import VehicleViewer, { autoPreset, type GraphicsPreset } from '../webgl/VehicleViewer';
+import { autoPreset, type GraphicsPreset } from '../webgl/preset';
+const VehicleViewer = lazy(() => import('../webgl/VehicleViewer'));
 import {
   batteryTone,
   COMMAND_STATUS_LABEL,
@@ -191,7 +192,16 @@ export default function LiveVehiclePage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
-          <VehicleViewer vehicle={vehicle} state={state ?? null} preset={preset} height={420} />
+          <Suspense
+            fallback={
+              <div role="status" className="flex h-[420px] items-center justify-center">
+                <Spinner />
+                <span className="sr-only">Loading 3D viewer…</span>
+              </div>
+            }
+          >
+            <VehicleViewer vehicle={vehicle} state={state ?? null} preset={preset} height={420} />
+          </Suspense>
 
           {/* Controls */}
           <Card
