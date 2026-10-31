@@ -37,17 +37,34 @@ export default function FleetPage() {
     queryKey: ['fleet-overview'],
     queryFn: () =>
       api<{
-        rows: FleetVehicleRow[];
-        summary: {
-          vehicles: number;
-          charging: number;
-          offline: number;
-          attention: number;
-          avgBatteryPct: number | null;
-        };
+        vehicles: {
+          id: string;
+          displayName: string;
+          make: string | null;
+          model: string | null;
+          vehicleClass: string;
+          batteryPct: number | null;
+          charging: boolean;
+          offline: boolean;
+          demo: boolean;
+          fetchedAt: string | null;
+        }[];
+        driverCount: number;
+        departmentCount: number;
+        costCenterCount: number;
+        groupCount: number;
+        maintenanceDue: number;
       }>('/api/v1/fleet/overview'),
     refetchInterval: 20000,
   });
+  const summary = overview
+    ? {
+        vehicles: overview.vehicles.length,
+        charging: overview.vehicles.filter((v) => v.charging).length,
+        offline: overview.vehicles.filter((v) => v.offline).length,
+        attention: overview.maintenanceDue,
+      }
+    : null;
 
   const report = async () => {
     const res = await fetch('/api/v1/fleet/report', { credentials: 'same-origin' });
@@ -62,10 +79,10 @@ export default function FleetPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-lg font-extrabold">Fleet</h1>
-        {overview?.summary && (
+        {summary && (
           <span className="text-xs text-subtle">
-            {overview.summary.vehicles} vehicles · {overview.summary.charging} charging ·{' '}
-            {overview.summary.offline} offline · {overview.summary.attention} need attention
+            {summary.vehicles} vehicles · {summary.charging} charging · {summary.offline} offline ·{' '}
+            {summary.attention} need attention
           </span>
         )}
         <div className="ml-auto flex gap-2">
@@ -92,7 +109,7 @@ export default function FleetPage() {
             <div className="flex h-40 items-center justify-center">
               <Spinner size={22} />
             </div>
-          ) : (overview?.rows.length ?? 0) === 0 ? (
+          ) : (overview?.vehicles.length ?? 0) === 0 ? (
             <div className="p-4">
               <EmptyState
                 icon={<Users size={28} className="text-faint" />}
@@ -107,55 +124,31 @@ export default function FleetPage() {
                     <th className="px-4 py-2.5">Vehicle</th>
                     <th className="px-3 py-2.5">Status</th>
                     <th className="px-3 py-2.5">Battery</th>
-                    <th className="px-3 py-2.5">Odometer</th>
-                    <th className="px-3 py-2.5">Driver</th>
-                    <th className="px-3 py-2.5">Department</th>
-                    <th className="px-3 py-2.5">Cost center</th>
-                    <th className="px-3 py-2.5">Attention</th>
+                    <th className="px-3 py-2.5">Class</th>
+                    <th className="px-3 py-2.5">Demo</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {overview!.rows.map((r) => (
-                    <tr
-                      key={r.vehicle.id}
-                      className="border-b border-line last:border-0 hover:bg-panel2"
-                    >
-                      <td className="px-4 py-2.5 font-medium">{r.vehicle.name}</td>
+                  {overview!.vehicles.map((v) => (
+                    <tr key={v.id} className="border-b border-line last:border-0 hover:bg-panel2">
+                      <td className="px-4 py-2.5 font-medium">
+                        {v.displayName}
+                        <span className="ml-1.5 text-xs text-faint">
+                          {v.make} {v.model}
+                        </span>
+                      </td>
                       <td className="px-3 py-2.5">
-                        <Badge
-                          tone={
-                            r.status === 'offline'
-                              ? 'danger'
-                              : r.charging
-                                ? 'charging'
-                                : r.status === 'asleep'
-                                  ? 'info'
-                                  : 'ok'
-                          }
-                        >
-                          {r.charging ? 'charging' : r.status}
+                        <Badge tone={v.offline ? 'danger' : v.charging ? 'charging' : 'ok'}>
+                          {v.charging ? 'charging' : v.offline ? 'offline' : 'ready'}
                         </Badge>
                       </td>
                       <td className="px-3 py-2.5">
-                        {r.batteryPct !== undefined ? `${Math.round(r.batteryPct)}%` : '—'}
+                        {v.batteryPct !== null && v.batteryPct !== undefined
+                          ? `${Math.round(v.batteryPct)}%`
+                          : '—'}
                       </td>
-                      <td className="px-3 py-2.5">
-                        {r.odometerKm ? fmtKm(r.odometerKm, units) : '—'}
-                      </td>
-                      <td className="px-3 py-2.5 text-subtle">{r.driver ?? '—'}</td>
-                      <td className="px-3 py-2.5 text-subtle">{r.department ?? '—'}</td>
-                      <td className="px-3 py-2.5 text-subtle">{r.costCenter ?? '—'}</td>
-                      <td className="px-3 py-2.5">
-                        {r.attention.length > 0 ? (
-                          r.attention.map((a) => (
-                            <Badge key={a} tone="warn">
-                              {a}
-                            </Badge>
-                          ))
-                        ) : (
-                          <span className="text-faint">—</span>
-                        )}
-                      </td>
+                      <td className="px-3 py-2.5 capitalize">{v.vehicleClass.replace('_', ' ')}</td>
+                      <td className="px-3 py-2.5">{v.demo && <Badge tone="accent">demo</Badge>}</td>
                     </tr>
                   ))}
                 </tbody>

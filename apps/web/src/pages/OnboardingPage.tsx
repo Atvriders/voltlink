@@ -15,11 +15,13 @@ import {
   PlugZap,
   ShieldCheck,
   Sparkles,
+  Users,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { Badge, Button, Card, Field, ProgressBar, Select, Spinner } from '../components/ui';
 
+// Mirrors the server's 16 validated ids (GET/PUT /api/v1/users/onboarding).
 const STEPS = [
   { id: 'welcome', title: 'Welcome to VoltLink' },
   { id: 'privacy', title: 'Your data stays yours' },
@@ -27,15 +29,18 @@ const STEPS = [
   { id: 'email', title: 'Verify your email' },
   { id: 'security', title: 'Secure your account' },
   { id: 'provider', title: 'Vehicles' },
-  { id: 'units', title: 'Units & time zone' },
+  { id: 'units', title: 'Units' },
+  { id: 'timezone', title: 'Time zone' },
   { id: 'retention', title: 'Data retention' },
   { id: 'privacy-zone', title: 'Privacy zone' },
   { id: 'notifications', title: 'Notifications' },
+  { id: 'import', title: 'Import your vehicles' },
+  { id: 'sharing', title: 'Sharing & access' },
   { id: 'freshness', title: 'How data freshness works' },
   { id: 'controls', title: 'Control safety' },
-  { id: 'webgl', title: 'Your vehicle in 3D' },
   { id: 'done', title: 'You’re all set' },
 ] as const;
+const stepId = (i: number) => STEPS[i]?.id;
 
 export default function OnboardingPage() {
   const { user } = useAuth();
@@ -69,8 +74,8 @@ export default function OnboardingPage() {
     await api('/api/v1/auth/resend-verification', { method: 'POST' });
     for (let i = 0; i < 12; i++) {
       await new Promise((r) => setTimeout(r, 5000));
-      const me = await api<{ emailVerified: boolean }>('/api/v1/auth/me');
-      if (me.emailVerified) {
+      const me = await api<{ user: { emailVerified: boolean } }>('/api/v1/auth/me');
+      if (me.user.emailVerified) {
         setVerified(true);
         return;
       }
@@ -85,11 +90,19 @@ export default function OnboardingPage() {
     mutationFn: () => api('/api/v1/users/settings', { method: 'PATCH', body: { units, timezone } }),
   });
   const saveRetention = useMutation({
-    mutationFn: () =>
-      api('/api/v1/users/retention', {
+    mutationFn: async () => {
+      // Z-RETENTION: retention is per organization now (guide 07 §2.9 step 9).
+      const me = await api<{ memberships: { organizationId: string }[] }>('/api/v1/auth/me');
+      const orgId = me.memberships[0]?.organizationId;
+      if (!orgId) throw new Error('No organization');
+      // Only telemetry is touched during onboarding: lowering location
+      // retention would demand step-up (Z-RETENTION), which onboarding must
+      // never force on a fresh account.
+      await api(`/api/v1/orgs/${orgId}/settings/retention`, {
         method: 'PATCH',
-        body: { telemetryRetentionDays: retentionDays, locationRetentionDays: 90 },
-      }),
+        body: { telemetryRetentionDays: retentionDays },
+      });
+    },
   });
   const connectDemo = useMutation({
     mutationFn: () =>
@@ -122,6 +135,7 @@ export default function OnboardingPage() {
       return;
     }
     if (STEPS[step]!.id === 'units') await saveSettings.mutateAsync();
+    if (STEPS[step]!.id === 'timezone') await saveSettings.mutateAsync();
     if (STEPS[step]!.id === 'retention') await saveRetention.mutateAsync();
     setStep((s) => s + 1);
   };
@@ -141,7 +155,7 @@ export default function OnboardingPage() {
       <ProgressBar value={(step + 1) * (100 / STEPS.length)} />
       <Card title={STEPS[step]!.title}>
         <div className="min-h-64 space-y-4">
-          {step === 2 && (
+          {stepId(step) === 'account' && (
             <div className="space-y-3">
               <p className="text-sm text-subtle">
                 Signed in as <strong>{user?.email}</strong>.
@@ -151,7 +165,7 @@ export default function OnboardingPage() {
               </p>
             </div>
           )}
-          {step === 3 && (
+          {stepId(step) === 'email' && (
             <div className="space-y-3">
               <p className="text-sm text-subtle">
                 {verified
@@ -163,7 +177,7 @@ export default function OnboardingPage() {
               )}
             </div>
           )}
-          {step === 0 && (
+          {stepId(step) === 'welcome' && (
             <Intro
               body={
                 <p className="text-sm text-subtle">
@@ -174,7 +188,7 @@ export default function OnboardingPage() {
               }
             />
           )}
-          {step === 1 && (
+          {stepId(step) === 'privacy' && (
             <Intro
               icon={<Lock className="text-ok" size={30} />}
               body={
@@ -190,7 +204,7 @@ export default function OnboardingPage() {
               }
             />
           )}
-          {step === 2 && (
+          {stepId(step) === 'security' && (
             <Intro
               icon={<ShieldCheck className="text-accent" size={30} />}
               body={
@@ -205,7 +219,7 @@ export default function OnboardingPage() {
               }
             />
           )}
-          {step === 3 && (
+          {stepId(step) === 'provider' && (
             <div className="space-y-3">
               <p className="text-sm text-subtle">
                 Connect a real provider (Tesla official API or optional Tessie token) or explore
@@ -238,7 +252,7 @@ export default function OnboardingPage() {
               </Button>
             </div>
           )}
-          {step === 4 && (
+          {stepId(step) === 'units' && (
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Units">
                 <Select
@@ -249,6 +263,13 @@ export default function OnboardingPage() {
                   <option value="imperial">Imperial (mi, °F)</option>
                 </Select>
               </Field>
+            </div>
+          )}
+          {stepId(step) === 'timezone' && (
+            <div className="space-y-3">
+              <p className="text-sm text-subtle">
+                Times and dates follow your zone. UTC always comes first.
+              </p>
               <Field label="Time zone">
                 <Select value={timezone} onChange={(e) => setTimezone(e.target.value)}>
                   {timezoneList().map((t) => (
@@ -260,7 +281,7 @@ export default function OnboardingPage() {
               </Field>
             </div>
           )}
-          {step === 5 && (
+          {stepId(step) === 'retention' && (
             <div className="space-y-3">
               <p className="text-sm text-subtle">
                 How long should raw telemetry be kept? Location history can be retained separately
@@ -279,7 +300,7 @@ export default function OnboardingPage() {
               </Field>
             </div>
           )}
-          {step === 6 && (
+          {stepId(step) === 'privacy-zone' && (
             <Intro
               icon={<Lock className="text-info" size={30} />}
               body={
@@ -290,7 +311,7 @@ export default function OnboardingPage() {
               }
             />
           )}
-          {step === 7 && (
+          {stepId(step) === 'notifications' && (
             <div className="space-y-2">
               <p className="text-sm text-subtle">
                 Choose how VoltLink reaches you. Every channel can be fine-tuned per event later.
@@ -306,7 +327,15 @@ export default function OnboardingPage() {
               </label>
             </div>
           )}
-          {step === 8 && (
+          {stepId(step) === 'import' && (
+            <div className="space-y-3">
+              <p className="text-sm text-subtle">
+                Your provider's vehicles are listed here for confirmation before they appear in
+                VoltLink. Demo vehicles import automatically the moment you enable the demo fleet.
+              </p>
+            </div>
+          )}
+          {stepId(step) === 'freshness' && (
             <Intro
               icon={<Sparkles className="text-accent" size={30} />}
               body={
@@ -328,7 +357,7 @@ export default function OnboardingPage() {
               }
             />
           )}
-          {step === 9 && (
+          {stepId(step) === 'controls' && (
             <Intro
               icon={<ShieldCheck className="text-warn" size={30} />}
               body={
@@ -340,19 +369,19 @@ export default function OnboardingPage() {
               }
             />
           )}
-          {step === 10 && (
+          {stepId(step) === 'sharing' && (
             <Intro
-              icon={<Boxes className="text-accent" size={30} />}
+              icon={<Users className="text-accent" size={30} />}
               body={
                 <p className="text-sm text-subtle">
-                  Your vehicle appears as a real-time 3D model that reflects its actual state —
-                  doors, trunk, charge port, charging pulse, and lights. Rotate, zoom, and explore
-                  in the showroom.
+                  Invite teammates from Settings → Privacy & data. Every member has a role with
+                  explicit permissions — viewers never issue vehicle commands, and only the owner
+                  can invite or remove people.
                 </p>
               }
             />
           )}
-          {step === 11 && (
+          {stepId(step) === 'done' && (
             <div className="space-y-2 text-center">
               <Check className="mx-auto text-ok" size={36} />
               <h2 className="text-lg font-extrabold">You’re all set</h2>

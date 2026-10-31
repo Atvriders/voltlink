@@ -16,8 +16,14 @@ export default defineConfig({
   },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
-    // Visual snapshots are desktop-only (mobile viewport coverage lives in the
-    // acceptance spec, which asserts layout on a Pixel 7 profile).
+    // Gate 7: every page is exercised at desktop, tablet and mobile sizes.
+    // Visual snapshots are desktop-only (viewport coverage lives in the
+    // acceptance spec, which asserts layout on Pixel 7 and iPad profiles).
+    {
+      name: 'tablet',
+      use: { ...devices['iPad Pro 11'], defaultBrowserType: 'chromium', browserName: 'chromium' },
+      testIgnore: /visual\.spec\.ts/,
+    },
     { name: 'mobile', use: { ...devices['Pixel 7'] }, testIgnore: /visual\.spec\.ts/ },
   ],
 });

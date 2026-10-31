@@ -46,9 +46,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const me = await api<UserPublic>('/api/v1/auth/me');
-      setUser(me);
-      applyTheme(me);
+      const payload = await api<{ user: UserPublic }>('/api/v1/auth/me');
+      setUser(payload.user);
+      applyTheme(payload.user);
     } catch {
       setUser(null);
     } finally {

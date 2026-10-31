@@ -59,7 +59,8 @@ export const env = {
   STEPUP_WINDOW_SEC: Math.min(900, Math.max(60, numberOpt('VL_STEPUP_WINDOW_SEC', 300))),
   WEBAUTHN_RP_ID: optional('VL_WEBAUTHN_RP_ID', publicHost),
   TRUST_PROXY: optional('TRUST_PROXY', 'false'),
-  DEV_ECHO_TOKENS: process.env.VL_DEV_ECHO_TOKENS === '1',
+  DEV_ECHO_TOKENS:
+    process.env.VL_DEV_ECHO_TOKENS === '1' || process.env.VL_DEV_ECHO_TOKENS === 'true',
 
   DATABASE_URL: process.env.DATABASE_URL,
   REDIS_URL: process.env.REDIS_URL || '',
