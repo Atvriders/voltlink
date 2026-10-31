@@ -1,25 +1,22 @@
 #!/bin/sh
-# VoltLink role-aware container healthcheck.
-# web/status: probe the HTTP healthz endpoint. worker/scheduler: process liveness.
+# voltlink-healthcheck — probes the readiness of the role that is actually running.
 set -eu
-
-role="${VL_ROLE:-web}"
-port="${PORT:-3000}"
-
+role="$(cat /tmp/voltlink/role 2>/dev/null || printf '%s' "${VL_ROLE:-web}")"
+probe() {
+  node -e "fetch('http://127.0.0.1:'+process.argv[1]+process.argv[2],{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))" "$1" "$2"
+}
 case "$role" in
-  web|status)
-    node -e "fetch('http://127.0.0.1:'+process.argv[1]+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" "$port"
-    ;;
+  web) probe "${PORT:-3000}" /readyz ;;
+  status) probe "${STATUS_PORT:-3001}" /healthz ;;
   worker|scheduler)
-    # Liveness: this script only runs while the main process is alive;
-    # also verify the queue backend is reachable when Redis is configured.
+    # Liveness: this script only runs while the main process is alive; also
+    # verify Redis is reachable when configured.
     if [ -n "${REDIS_URL:-}" ]; then
       node -e "const R=require('ioredis');const c=new R(process.env.REDIS_URL,{lazyConnect:true,maxRetriesPerRequest:1});c.ping().then(()=>{c.disconnect();process.exit(0)}).catch(()=>process.exit(1))"
     else
-      node -e "process.exit(0)"
+      exit 0
     fi
     ;;
-  *)
-    exit 0
-    ;;
+  migrate|selftest) exit 0 ;;
+  *) exit 1 ;;
 esac

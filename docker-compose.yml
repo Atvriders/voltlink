@@ -2,10 +2,58 @@
 # Production should use compose.production.yml with the published GHCR image.
 #
 #   docker compose up -d
-#   # first-run admin: open http://localhost:3110 and register (first account
-#   # becomes the owner); demo mode is one click on the Providers page.
+#   # first account to register becomes the owner; demo mode is one click
+#   # on the Providers page.
 
 name: voltlink
+
+x-voltlink-common: &voltlink
+  build: .
+  restart: unless-stopped
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  networks: [internal]
+  environment: &app_env
+    NODE_ENV: production
+    PORT: "3000"
+    HOST: 0.0.0.0
+    DATABASE_URL: "postgresql://voltlink:${POSTGRES_PASSWORD:-voltlink}@postgres:5432/voltlink"
+    REDIS_URL: "redis://redis:6379"
+    PUBLIC_URL: "${PUBLIC_URL:-http://localhost:3110}"
+    VL_ALLOW_INSECURE_HTTP: "${VL_ALLOW_INSECURE_HTTP:-false}"
+    TRUST_PROXY: "${TRUST_PROXY:-false}"
+    VL_WEBAUTHN_RP_ID: "${VL_WEBAUTHN_RP_ID:-}"
+    VL_CSP_CONNECT_ORIGINS: "${VL_CSP_CONNECT_ORIGINS:-}"
+    STATUS_PORT: "3001"
+    JWT_SECRET: "${JWT_SECRET:-}"
+    JWT_EXPIRES_SEC: "${JWT_EXPIRES_SEC:-1209600}"
+    VL_MASTER_KEY: "${VL_MASTER_KEY:-}"
+    VL_MASTER_KEYS: "${VL_MASTER_KEYS:-}"
+    VL_RATE_LIMIT_PER_MIN: "${VL_RATE_LIMIT_PER_MIN:-900}"
+    VL_STEPUP_WINDOW_SEC: "${VL_STEPUP_WINDOW_SEC:-300}"
+    VL_SETUP_TOKEN: "${VL_SETUP_TOKEN:-}"
+    SMTP_URL: "${SMTP_URL:-}"
+    MAIL_FROM: "${MAIL_FROM:-VoltLink <no-reply@voltlink.local>}"
+    MAIL_TO_CONSOLE: "${MAIL_TO_CONSOLE:-true}"
+    VL_TOTP_ISSUER: "${VL_TOTP_ISSUER:-VoltLink}"
+    VL_WEBAUTHN_RP_NAME: "${VL_WEBAUTHN_RP_NAME:-VoltLink}"
+    TESLA_CLIENT_ID: "${TESLA_CLIENT_ID:-}"
+    TESLA_CLIENT_SECRET: "${TESLA_CLIENT_SECRET:-}"
+    TESLA_REDIRECT_URI: "${TESLA_REDIRECT_URI:-http://localhost:3110/api/v1/providers/tesla/callback}"
+    TESLA_BASE_URL: "${TESLA_BASE_URL:-https://fleet-api.prd.na.vn.cloud.tesla.com}"
+    TESSIE_BASE_URL: "${TESSIE_BASE_URL:-https://api.tessie.com}"
+    VAPID_PUBLIC_KEY: "${VAPID_PUBLIC_KEY:-}"
+    VAPID_PRIVATE_KEY: "${VAPID_PRIVATE_KEY:-}"
+    VAPID_SUBJECT: "${VAPID_SUBJECT:-}"
+    VL_DEMO_DEFAULT_ENABLED: "${VL_DEMO_DEFAULT_ENABLED:-false}"
+    VL_OUTBOUND_ALLOW: "${VL_OUTBOUND_ALLOW:-}"
+    VL_PUSH_SERVICE_HOSTS: "${VL_PUSH_SERVICE_HOSTS:-}"
+    VL_DEV_ECHO_TOKENS: "false"
+    LOG_LEVEL: "${LOG_LEVEL:-info}"
 
 services:
   postgres:
@@ -13,10 +61,11 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: voltlink
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-voltlink}
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-voltlink}"
       POSTGRES_DB: voltlink
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks: [internal]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U voltlink -d voltlink"]
       interval: 10s
@@ -26,46 +75,40 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    networks: [internal]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 10
 
+  migrate:
+    <<: *voltlink
+    environment:
+      <<: *app_env
+      VL_ROLE: migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   web:
-    build: .
-    restart: unless-stopped
-    environment: &app_env
-      NODE_ENV: production
+    <<: *voltlink
+    environment:
+      <<: *app_env
       VL_ROLE: web
-      PORT: 3000
-      HOST: 0.0.0.0
-      DATABASE_URL: postgresql://voltlink:${POSTGRES_PASSWORD:-voltlink}@postgres:5432/voltlink
-      REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:?generate one: openssl rand -hex 32}
-      VL_MASTER_KEY: ${VL_MASTER_KEY:?generate one: openssl rand -base64 32}
-      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3110}
-      TRUST_PROXY: ${TRUST_PROXY:-false}
-      SMTP_URL: ${SMTP_URL:-}
-      MAIL_FROM: ${MAIL_FROM:-VoltLink <no-reply@voltlink.local>}
-      MAIL_TO_CONSOLE: ${MAIL_TO_CONSOLE:-true}
-      TESLA_CLIENT_ID: ${TESLA_CLIENT_ID:-}
-      TESLA_CLIENT_SECRET: ${TESLA_CLIENT_SECRET:-}
-      TESLA_REDIRECT_URI: ${TESLA_REDIRECT_URI:-http://localhost:3110/api/v1/providers/tesla/callback}
-      TESSIE_BASE_URL: ${TESSIE_BASE_URL:-https://api.tessie.com}
-      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
-      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     ports:
-      - "${WEB_PORT:-3110}:3000"
+      - "127.0.0.1:${WEB_PORT:-3110}:3000"
 
   worker:
-    build: .
-    restart: unless-stopped
+    <<: *voltlink
     environment:
       <<: *app_env
       VL_ROLE: worker
@@ -74,10 +117,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   scheduler:
-    build: .
-    restart: unless-stopped
+    <<: *voltlink
     environment:
       <<: *app_env
       VL_ROLE: scheduler
@@ -86,6 +130,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+networks:
+  internal:
 
 volumes:
   pgdata:

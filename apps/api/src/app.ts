@@ -28,6 +28,7 @@ import { sseAddClient } from './core/sse';
 import { authenticate } from './authz/authenticate';
 import { AccessDenied } from './authz/errors';
 import { getQueue } from './core/queue';
+import { prisma } from './core/db';
 import { PATHS } from './core/paths';
 import { APP_VERSION } from '@voltlink/shared';
 
@@ -69,9 +70,21 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
   });
 
   app.get('/healthz', (_req, res) => res.json({ ok: true, version: APP_VERSION, uptimeSec: Math.round(process.uptime()) }));
+  // Readiness: the container healthcheck probes this after the DB is
+  // reachable and every shipped migration is applied.
   app.get('/readyz', async (_req, res) => {
-    const ready = await getQueue().ping().catch(() => false);
-    res.status(ready ? 200 : 503).json({ ready, version: APP_VERSION });
+    try {
+      await prisma.$queryRawUnsafe('SELECT 1');
+      const { pendingMigrations } = await import('./cli/migrate');
+      const queueOk = await getQueue().ping().catch(() => false);
+      if ((await pendingMigrations()).length > 0) {
+        res.status(503).json({ ready: false, reason: 'migrations_pending', version: APP_VERSION });
+        return;
+      }
+      res.status(queueOk ? 200 : 503).json({ ready: queueOk, reason: queueOk ? undefined : 'queue_unavailable', version: APP_VERSION });
+    } catch {
+      res.status(503).json({ ready: false, reason: 'database_unavailable', version: APP_VERSION });
+    }
   });
   app.get('/metrics', (_req, res) => {
     const body = [
