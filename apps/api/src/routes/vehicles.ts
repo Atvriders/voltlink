@@ -42,7 +42,10 @@ function toVehicleWithState(v: {
     id: v.id,
     displayName: v.displayName,
     provider: v.provider,
-    providerVehicleId: v.providerVehicleId,
+    // G-12: a 17-character VIN never reaches browsers — only its last four.
+    providerVehicleId: /^[A-HJ-NPR-Z0-9]{17}$/i.test(v.providerVehicleId)
+      ? `VIN…${v.providerVehicleId.slice(-4)}`
+      : v.providerVehicleId,
     vehicleClass: v.vehicleClass,
     make: v.make ?? undefined,
     model: v.model ?? undefined,

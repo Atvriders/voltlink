@@ -273,13 +273,36 @@ providersRouter.post(
       res.status(403).json({ error: { code: 'FORBIDDEN', message: 'No organization available.' } });
       return;
     }
+    // G-05: verify the token against Tessie before storing it, and store the
+    // account as 'connected' so Import is available right away.
+    const tessieBase = process.env.TESSIE_BASE_URL || 'https://api.tessie.com';
+    try {
+      const check = await fetch(`${tessieBase}/vins`, {
+        signal: AbortSignal.timeout(15_000),
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!check.ok) {
+        res.status(400).json({
+          error: { code: 'INVALID_TOKEN', message: `Tessie rejected the token (${check.status}).` },
+        });
+        return;
+      }
+    } catch (err) {
+      res.status(502).json({
+        error: {
+          code: 'UNREACHABLE',
+          message: `Could not reach Tessie: ${(err as Error).message.slice(0, 100)}`,
+        },
+      });
+      return;
+    }
     const account = await prisma.providerAccount.create({
       data: {
         organizationId: membership.organizationId,
         connectedById: actor.userId,
         provider: 'tessie',
         label: label?.slice(0, 60) || 'Tessie',
-        status: 'pending',
+        status: 'connected',
         scopes: JSON.parse('["user_token"]'),
       },
     });
@@ -290,7 +313,7 @@ providersRouter.post(
       entityType: 'provider',
       entityId: account.id,
     });
-    res.status(201).json({ data: { accountId: account.id, status: 'pending' } });
+    res.status(201).json({ data: { accountId: account.id, status: 'connected' } });
   },
 );
 

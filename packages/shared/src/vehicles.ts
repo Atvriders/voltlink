@@ -106,6 +106,7 @@ export interface VehicleState {
   chargingState?: ChargeState;
   chargePowerKw?: number;
   chargeCurrentA?: number;
+  chargeAmpsRequest?: number;
   chargeVoltageV?: number;
   chargerPhases?: number;
   timeToFullChargeMin?: number;
@@ -144,6 +145,7 @@ export interface VehicleState {
   // Vehicle info
   odometerKm?: number;
   softwareVersion?: string;
+  softwareUpdate?: { status: string; version?: string };
   tirePressureKpa?: TirePressures;
   updatedSecAgo?: number;
 }
