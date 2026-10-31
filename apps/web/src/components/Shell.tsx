@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { prepare } from '../lib/push';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity, Bell, Battery, BatteryCharging, Boxes, Car, ChevronDown, CircleUserRound, Gauge, LayoutDashboard,
@@ -140,6 +141,12 @@ export function Shell({ user, children }: { user: UserPublic | null; children: R
   const qc = useQueryClient();
   const { data: unreadData } = useUnread();
   const unread = unreadData?.unread ?? 0;
+
+  // N-PUSH: register the service worker + load VAPID config for signed-in users.
+  useEffect(() => {
+    if (!user) return;
+    prepare().catch(() => undefined);
+  }, [user]);
 
   // Real-time SSE: refresh vehicles + notifications on events.
   useEffect(() => {

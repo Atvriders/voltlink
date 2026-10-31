@@ -61,11 +61,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
+      const { unsubscribePush } = await import('../lib/push');
+      await unsubscribePush();
+    } catch { /* best-effort */ }
+    try {
       await api('/api/v1/auth/logout', { method: 'POST' });
     } finally {
       setUser(null);
     }
   }, []);
+
+
 
   const value = useMemo(() => ({ user, loading, login, logout, refresh }), [user, loading, login, logout, refresh]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

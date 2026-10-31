@@ -13,8 +13,12 @@ detail. When a telemetry sample lands inside an enabled privacy zone:
 - Location history rows are trimmed to the zone centre
 - Drives that start or end inside a zone show the zone instead of the point
 
-Privacy zones apply retroactively to new samples only; enabling one does not
-rewrite old rows — export and delete them if needed (see retention).
+Privacy zones apply to new samples immediately. Enabling a zone (or moving a
+vehicle into one) also triggers a retroactive redaction job: existing drives,
+drive route points, charging sessions, location rows and telemetry snapshots
+falling inside the zone are redacted within a few minutes — no manual export
+and delete is needed. The redaction is irreversible for raw coordinates (only
+the zone reference is kept).
 
 ## Retention
 

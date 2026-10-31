@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FlaskConical, Plus, Power, Trash2, Zap } from 'lucide-react';
 import { api } from '../api/client';
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, Select, Spinner } from '../components/ui';
+import { Webhook as WebhookIcon } from 'lucide-react';
 import { fmtClock } from '../lib/format';
 import { ACTION_TYPES, TRIGGER_TYPES, type ActionType, type Automation, type AutomationExecution, type TriggerType } from '@voltlink/shared';
 
@@ -30,6 +31,7 @@ export default function AutomationsPage() {
   const qc = useQueryClient();
   const { data: automations, isLoading } = useQuery({ queryKey: ['automations'], queryFn: () => api<Automation[]>('/api/v1/automations') });
   const [editor, setEditor] = useState<{ mode: 'new'; automation?: Automation } | { mode: 'executions'; automation: Automation } | null>(null);
+  const [hookFor, setHookFor] = useState<Automation | null>(null);
 
   const toggle = useMutation({
     mutationFn: (a: Automation) => api(`/api/v1/automations/${a.id}`, { method: 'PATCH', body: { enabled: !a.enabled } }),
@@ -81,6 +83,11 @@ export default function AutomationsPage() {
                 <Button variant="secondary" className="px-2.5 py-1.5 text-xs" onClick={() => setEditor({ mode: 'executions', automation: a })}>
                   History
                 </Button>
+                {a.trigger.type === 'webhook' && (
+                  <Button variant="secondary" className="px-2.5 py-1.5 text-xs" onClick={() => setHookFor(a)}>
+                    <WebhookIcon size={12} /> Inbound URL
+                  </Button>
+                )}
                 <Button variant="ghost" className="ml-auto px-2.5 py-1.5 text-xs text-danger" onClick={() => { if (confirm(`Delete automation "${a.name}"?`)) remove.mutate(a.id); }} aria-label={`Delete ${a.name}`}>
                   <Trash2 size={12} />
                 </Button>
@@ -92,6 +99,7 @@ export default function AutomationsPage() {
 
       <AutomationEditor key={editor?.automation?.id ?? editor?.mode ?? 'new'} open={!!editor && editor.mode === 'new'} automation={editor?.mode === 'new' ? editor.automation : undefined} onClose={() => setEditor(null)} />
       <ExecutionsModal automation={editor?.mode === 'executions' ? editor.automation : null} onClose={() => setEditor(null)} />
+      <InboundHookModal automation={hookFor} onClose={() => setHookFor(null)} />
     </div>
   );
 }
@@ -108,9 +116,11 @@ function AutomationEditor({ open, automation, onClose }: { open: boolean; automa
   const [vehicleId, setVehicleId] = useState(automation?.vehicleId ?? '');
   const [actionType, setActionType] = useState<ActionType>(automation?.actions[0]?.type ?? 'notify_app');
   const [actionMessage, setActionMessage] = useState(String((automation?.actions[0]?.params as Record<string, unknown>)?.message ?? ''));
+  const [actionEndpoint, setActionEndpoint] = useState(String((automation?.actions[0]?.params as Record<string, unknown>)?.endpointId ?? ''));
   const [cooldownSec, setCooldownSec] = useState(automation?.cooldownSec ?? 0);
   const [dryResult, setDryResult] = useState<{ result: string; actionResults: { action: string; ok: boolean; detail: string }[] } | null>(null);
   const { data: vehicles } = useQuery({ queryKey: ['vehicles'], queryFn: () => api<{ id: string; displayName: string }[]>('/api/v1/vehicles') });
+  const { data: webhooks } = useQuery({ queryKey: ['webhooks'], queryFn: () => api<{ id: string; name: string; displayHint: string }[]>('/api/v1/notifications/webhooks') });
 
   const save = useMutation({
     mutationFn: () =>
@@ -123,7 +133,7 @@ function AutomationEditor({ open, automation, onClose }: { open: boolean; automa
           vehicleId: vehicleId || null,
           trigger: { type: trigger, params: trigger === 'battery_threshold' ? { pct: 20 } : {} },
           conditions: [],
-          actions: [{ type: actionType, params: { message: actionMessage } }],
+          actions: [{ type: actionType, params: { message: actionMessage, endpointId: actionEndpoint } }],
           cooldownSec,
           maxRetries: 1,
         },
@@ -164,6 +174,14 @@ function AutomationEditor({ open, automation, onClose }: { open: boolean; automa
         </div>
         {(actionType === 'notify_app' || actionType === 'notify_email' || actionType === 'notify_push' || actionType === 'webhook') && (
           <Field label="Message"><Input value={actionMessage} onChange={(e) => setActionMessage(e.target.value)} placeholder="Your vehicle finished charging." /></Field>
+        )}
+        {actionType === 'webhook' && (
+          <Field label="Webhook endpoint">
+            <Select value={actionEndpoint} onChange={(e) => setActionEndpoint(e.target.value)}>
+              <option value="">Select an endpoint…</option>
+              {(webhooks ?? []).filter((w) => w.id).map((w) => <option key={w.id} value={w.id}>{w.name} ({w.displayHint})</option>)}
+            </Select>
+          </Field>
         )}
         <p className="rounded-lg border border-line bg-panel2 px-3 py-2 text-xs text-subtle" aria-live="polite">
           {name ? summarizeDraft({ trigger, actionType, name }) : 'Human-readable summary appears here.'}
@@ -224,6 +242,48 @@ function ExecutionsModal({ automation, onClose }: { automation: Automation | nul
           {(executions ?? []).length === 0 && <p className="py-3 text-sm text-faint">No executions recorded yet.</p>}
         </ul>
       )}
+    </Modal>
+  );
+}
+
+
+function InboundHookModal({ automation, onClose }: { automation: Automation | null; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [created, setCreated] = useState<{ url: string; secret: string; publicId: string } | null>(null);
+  const create = useMutation({
+    mutationFn: () => api<{ url: string; secret: string; publicId: string }>(`/api/v1/automations/${automation!.id}/inbound-webhook`, { method: 'POST', body: {} }),
+    onSuccess: (d) => { setCreated(d); qc.invalidateQueries({ queryKey: ['automations'] }); },
+  });
+  const remove = useMutation({
+    mutationFn: () => api(`/api/v1/automations/${automation!.id}/inbound-webhook`, { method: 'DELETE' }),
+    onSuccess: () => { setCreated(null); qc.invalidateQueries({ queryKey: ['automations'] }); },
+  });
+  return (
+    <Modal open={!!automation} onClose={onClose} title={`Inbound webhook — ${automation?.name ?? ''}`}>
+      <div className="space-y-3">
+        <p className="text-xs text-subtle">
+          An inbound webhook lets external systems trigger this automation. Sign POST bodies with the Standard Webhooks scheme
+          (webhook-id, webhook-timestamp, webhook-signature) using the secret below.
+        </p>
+        {!created ? (
+          <div className="flex justify-end">
+            <Button loading={create.isPending} onClick={() => create.mutate()}><WebhookIcon size={13} /> Create inbound webhook</Button>
+          </div>
+        ) : (
+          <>
+            <Field label="Endpoint URL"><Input readOnly value={created.url} onFocus={(e) => e.currentTarget.select()} /></Field>
+            <div className="rounded-lg border border-warn/50 bg-warn/10 px-3 py-2 text-xs text-warn">
+              Store this secret — it is shown only once: <code className="break-all">{created.secret}</code>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => { navigator.clipboard?.writeText(created.url).catch(() => undefined); }}>Copy URL</Button>
+              <Button variant="ghost" className="text-danger" loading={remove.isPending} onClick={() => { if (confirm('Delete this inbound webhook? External callers will get 404.')) remove.mutate(); }}>
+                Delete
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
     </Modal>
   );
 }

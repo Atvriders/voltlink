@@ -57,5 +57,45 @@ per-action outcomes, and errors.
 ## Webhook payload
 
 Webhook actions deliver a signed JSON body (trigger, vehicle, event data,
-timestamp) to your endpoint. An optional `X-VoltLink-Signature` header uses
-HMAC-SHA256 so receivers can verify the call.
+timestamp) to your endpoint. Outbound webhooks are signed per the
+[Standard Webhooks](https://www.standardwebhooks.com/) scheme: the
+`webhook-id`, `webhook-timestamp` and `webhook-signature` (`v1,<base64>`) headers
+carry an HMAC-SHA256 over `<id>.<timestamp>.<body>`, and the signing secret is
+the `whsec_…` value shown once at endpoint creation. Verify with the official
+library:
+
+```ts
+import { Webhook } from 'standardwebhooks';
+const secret = process.env.VL_WEBHOOK_SECRET; // whsec_… from endpoint creation
+const wh = new Webhook(secret);
+wh.verify(JSON.stringify(payload), headers); // throws on failure
+```
+
+(Plain `superagent`-style receivers can reconstruct the signature as
+`v1,base64(hmac_sha256(secret, webhookId + "." + webhookTimestamp + "." + rawBody))`.)
+
+## Inbound webhooks
+
+A webhook-triggered automation exposes an inbound URL at
+`POST /api/v1/hooks/automations/:publicId` (no session, no CSRF). Sign requests
+with the same Standard Webhooks scheme using the `whsec_…` secret shown once at
+hook creation:
+
+```ts
+import { Webhook } from 'standardwebhooks';
+const wh = new Webhook(secret);
+const body = JSON.stringify({ state: 'occupied' });
+const headers = {
+  'webhook-id': crypto.randomUUID(),
+  'webhook-timestamp': String(Math.floor(Date.now() / 1000)),
+  'webhook-signature': `v1,${base64HmacSha256(secret, `${headersId}.${headersTs}.${body}`)}`,
+};
+await fetch(`https://voltlink.example.com/api/v1/hooks/automations/${publicId}`, {
+  method: 'POST', headers, body,
+});
+```
+
+Deliveries are deduplicated by `webhook-id` (replays answer `{ ok: true,
+replayed: true }`); a bad signature is rejected with `401 SIGNATURE`.
+[Test receivers in the official playground](https://www.standardwebhooks.com/)
+or use the `wh.verify` example above.

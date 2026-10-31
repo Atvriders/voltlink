@@ -7,6 +7,7 @@ import { Bell, BellRing, CheckCheck, Plus, Trash2 } from 'lucide-react';
 import { api } from '../api/client';
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, Spinner } from '../components/ui';
 import { fmtDateTime } from '../lib/format';
+import { enable, pushSupport } from '../lib/push';
 import { EVENT_TYPES, type AppNotification, type NotificationPreference } from '@voltlink/shared';
 
 const SEVERITY_TONE: Record<string, 'ok' | 'warn' | 'danger' | 'info'> = { info: 'info', success: 'ok', warning: 'warn', critical: 'danger' };
@@ -84,6 +85,9 @@ const CHANNELS = ['in_app', 'email', 'push', 'webhook', 'ntfy', 'gotify', 'disco
 
 function PreferencesTab() {
   const qc = useQueryClient();
+  const [pushMsg, setPushMsg] = useState<string>('');
+  const [pushBusy, setPushBusy] = useState(false);
+  const [support] = useState(() => pushSupport());
   const { data, isLoading } = useQuery({
     queryKey: ['notification-preferences'],
     queryFn: () => api<{ prefs: NotificationPreference[]; channelUrls: Record<string, string> }>('/api/v1/notifications/preferences'),
@@ -138,6 +142,44 @@ function PreferencesTab() {
         </div>
       </Card>
 
+      <Card title="Browser push notifications" subtitle="Web Push (N-PUSH)">
+        <div className="space-y-3">
+          {support === 'insecure-context' && (
+            <p className="rounded-lg border border-warn/50 bg-warn/10 px-3 py-2 text-xs text-warn">
+              Push notifications require HTTPS. This instance is served over plain http, so browser push is unavailable here.
+            </p>
+          )}
+          {support === 'needs-home-screen' && (
+            <p className="rounded-lg border border-warn/50 bg-warn/10 px-3 py-2 text-xs text-warn">
+              On iPhone/iPad: Share → Add to Home Screen, then open VoltLink from the Home Screen and enable notifications here.
+            </p>
+          )}
+          {support === 'unsupported' && (
+            <p className="text-xs text-faint">This browser does not support push notifications.</p>
+          )}
+          {support === 'supported' && (
+            <>
+              <p className="text-xs text-subtle">Receive vehicle alerts even when VoltLink is closed. Subscriptions are per-device and per-user.</p>
+              {pushMsg && <p className="text-xs text-ok">{pushMsg}</p>}
+              <div className="flex justify-end">
+                <Button
+                  loading={pushBusy}
+                  onClick={() => {
+                    setPushBusy(true);
+                    enable()
+                      .then(() => setPushMsg('Push notifications enabled.'))
+                      .catch((err: Error) => setPushMsg(err.message))
+                      .finally(() => setPushBusy(false));
+                  }}
+                >
+                  Enable push notifications
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </Card>
+
       <Card title="External channels" subtitle="ntfy, Gotify, Discord and Teams endpoints">
         <div className="space-y-3">
           {(['ntfyUrl', 'gotifyUrl', 'discordWebhook', 'teamsWebhook'] as const).map((key) => (
@@ -163,15 +205,20 @@ function WebhooksTab() {
   const qc = useQueryClient();
   const { data: webhooks } = useQuery({
     queryKey: ['webhooks'],
-    queryFn: () => api<{ id: string; name: string; url: string; enabled: boolean; lastStatus?: number }[]>('/api/v1/notifications/webhooks'),
+    queryFn: () => api<{ id: string; name: string; displayHint: string; enabled: boolean; lastStatus?: number }[]>('/api/v1/notifications/webhooks'),
   });
   const [add, setAdd] = useState(false);
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
   const [secret, setSecret] = useState('');
+  const [rotatingId, setRotatingId] = useState('');
   const create = useMutation({
     mutationFn: () => api<{ secret: string }>('/api/v1/notifications/webhooks', { method: 'POST', body: { name, url } }),
     onSuccess: (d) => { setSecret(d.secret ?? ''); qc.invalidateQueries({ queryKey: ['webhooks'] }); },
+  });
+  const rotate = useMutation({
+    mutationFn: (id: string) => api<{ secret: string }>(`/api/v1/notifications/webhooks/${id}/rotate-secret`, { method: 'POST', body: {} }),
+    onSuccess: (d) => { setRotatingId(''); setSecret(d.secret ?? ''); qc.invalidateQueries({ queryKey: ['webhooks'] }); },
   });
   const toggle = useMutation({
     mutationFn: (w: { id: string; enabled: boolean }) => api(`/api/v1/notifications/webhooks/${w.id}`, { method: 'PATCH', body: { enabled: !w.enabled } }),
@@ -188,10 +235,11 @@ function WebhooksTab() {
         {(webhooks ?? []).map((w) => (
           <li key={w.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-panel2 px-3 py-2 text-sm">
             <span className="font-medium">{w.name}</span>
-            <span className="max-w-xs truncate text-xs text-subtle">{w.url}</span>
+            <span className="max-w-xs truncate text-xs text-subtle">{w.displayHint}</span>
             {w.lastStatus !== undefined && <Badge tone={w.lastStatus >= 200 && w.lastStatus < 300 ? 'ok' : 'danger'}>HTTP {w.lastStatus}</Badge>}
             <div className="ml-auto flex gap-2">
               <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => toggle.mutate(w)}>{w.enabled ? 'Disable' : 'Enable'}</Button>
+              <Button variant="secondary" className="px-2 py-1 text-xs" loading={rotate.isPending && rotatingId === w.id} onClick={() => { setRotatingId(w.id); rotate.mutate(w.id); }}>Rotate secret</Button>
               <Button variant="ghost" className="px-2 py-1 text-xs text-danger" onClick={() => { if (confirm('Delete webhook?')) remove.mutate(w.id); }}><Trash2 size={12} /></Button>
             </div>
           </li>

@@ -1,7 +1,7 @@
 // VoltLink application shell and router.
 
 import { lazy, Suspense, useEffect } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Shell } from './components/Shell';
@@ -82,9 +82,21 @@ function AuthenticatedLayout() {
 
 function AppRoutes() {
   const location = useLocation();
+  const navigate = useNavigate();
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [location.pathname]);
+
+  // N-PUSH: the service worker routes notification clicks back into the SPA.
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === 'voltlink:navigate' && typeof event.data.path === 'string') {
+        navigate(event.data.path as string);
+      }
+    };
+    navigator.serviceWorker?.addEventListener('message', handler);
+    return () => navigator.serviceWorker?.removeEventListener('message', handler);
+  }, [navigate]);
 
   return (
     <Routes>
