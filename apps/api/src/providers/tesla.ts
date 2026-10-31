@@ -43,6 +43,7 @@ export function teslaAuthorizeUrl(state: string, codeChallenge: string): string 
     state,
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
+    show_keypair_step: 'true',
   });
   return `https://auth.tesla.com/oauth2/v3/authorize?${params.toString()}`;
 }

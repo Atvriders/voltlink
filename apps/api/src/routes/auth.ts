@@ -34,8 +34,11 @@ import {
   verifyEmail,
   verifyPasskeyRegistration,
 } from '../auth/service';
+import { createApiKey, revokeApiKey } from '../auth/apikeys';
 import { policyRouter, sessionActor } from '../authz/policy';
 import { AccessDenied } from '../authz/errors';
+import { API_SCOPES, type ApiScope } from '@voltlink/shared';
+import { audit } from '../core/settings';
 
 export const authRouter = policyRouter('/api/v1/auth');
 
@@ -306,6 +309,49 @@ authRouter.get('/step-up/passkey/options', { auth: 'session', target: { kind: 'n
 });
 
 // ---- me (the access layer fills req.actor) ----
+
+// ---- Scoped API keys (NEW-01) ----
+
+authRouter.get('/api-keys', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
+  const actor = req.actor!;
+  if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
+  const rows = await prisma.apiKey.findMany({ where: { userId: actor.userId }, orderBy: { createdAt: 'desc' } });
+  res.json({
+    data: rows.map((k) => ({
+      id: k.id, name: k.name, prefix: k.prefix, scopes: k.scopes as unknown[],
+      expiresAt: k.expiresAt.toISOString(), createdAt: k.createdAt.toISOString(),
+      lastUsedAt: k.lastUsedAt?.toISOString() ?? null, revokedAt: k.revokedAt?.toISOString() ?? null,
+    })),
+  });
+});
+
+authRouter.post('/api-keys', { auth: 'session', verifiedEmail: true, target: { kind: 'none' } }, async (req, res) => {
+  const actor = req.actor!;
+  if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
+  const body = (req.body ?? {}) as { name?: string; scopes?: unknown; expiresInDays?: number };
+  const allowed = new Set(API_SCOPES);
+  const scopes = Array.isArray(body.scopes) ? [...new Set(body.scopes.filter((s): s is ApiScope => typeof s === 'string' && allowed.has(s as ApiScope)))] : [];
+  if (!body.name || scopes.length === 0) {
+    res.status(400).json({ error: { code: 'VALIDATION', message: 'name and at least one valid scope are required.' } });
+    return;
+  }
+  const membership = await prisma.membership.findFirst({ where: { userId: actor.userId, status: 'ACTIVE' }, orderBy: { createdAt: 'asc' } });
+  if (!membership) {
+    res.status(403).json({ error: { code: 'FORBIDDEN', message: 'No organization available.' } });
+    return;
+  }
+  const key = await createApiKey({ userId: actor.userId, organizationId: membership.organizationId, name: body.name, scopes, expiresInDays: Number(body.expiresInDays) || 90 });
+  await audit({ actorId: actor.userId, organizationId: membership.organizationId, action: 'apikey.created', entityType: 'apiKey', entityId: key.id, details: { scopes } });
+  res.status(201).json({ data: key });
+});
+
+authRouter.delete('/api-keys/:id', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
+  const actor = req.actor!;
+  if (actor.kind !== 'session') throw new AccessDenied('API_KEY_NOT_ALLOWED', 'This endpoint requires an interactive session.', 403);
+  await revokeApiKey(actor.userId, String(req.params.id));
+  await audit({ actorId: actor.userId, action: 'apikey.revoked', entityType: 'apiKey', entityId: String(req.params.id) });
+  res.json({ data: { ok: true } });
+});
 
 authRouter.get('/me', { auth: 'session', target: { kind: 'none' } }, async (req, res) => {
   const actor = req.actor!;

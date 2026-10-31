@@ -82,6 +82,11 @@ providersRouter.get('/tesla/authorize', { auth: 'session', target: { kind: 'none
     res.status(403).json({ error: { code: 'FORBIDDEN', message: 'No organization available.' } });
     return;
   }
+  const pending = await prisma.oAuthState.count({ where: { sessionId: actor.sessionId, expiresAt: { gt: new Date() } } });
+  if (pending >= 5) {
+    res.status(429).json({ error: { code: 'RATE_LIMITED', message: 'Too many pending Tesla sign-ins.' } });
+    return;
+  }
   // Z-TESLASTATE: a server-stored random state bound to this user AND this
   // session; the callback never reads a user id out of the state. PKCE S256.
   const verifier = randomToken(32);
