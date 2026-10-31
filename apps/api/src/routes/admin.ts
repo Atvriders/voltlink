@@ -12,6 +12,39 @@ import { APP_VERSION } from '@voltlink/shared';
 
 export const adminRouter = policyRouter('/api/v1/admin');
 
+adminRouter.post(
+  '/tesla/partner-registration',
+  { auth: 'session', target: { kind: 'instanceAdmin' } },
+  async (req, res) => {
+    const { registerPartner } = await import('../providers/tesla/partner');
+    const regions = String((req.body as { regions?: string })?.regions ?? 'na,eu')
+      .split(',')
+      .map((r) => r.trim())
+      .filter((r) => r === 'na' || r === 'eu');
+    if (!regions.length) {
+      res
+        .status(400)
+        .json({ error: { code: 'VALIDATION', message: "regions must be 'na' and/or 'eu'." } });
+      return;
+    }
+    const results: { region: string; ok: boolean }[] = [];
+    for (const r of regions) {
+      try {
+        results.push(await registerPartner(r as 'na' | 'eu'));
+      } catch {
+        results.push({ region: r, ok: false });
+      }
+    }
+    await audit({
+      actorId: sessionActor(req).userId,
+      action: 'tesla.partner_registration',
+      entityType: 'provider',
+      entityId: 'tesla',
+    });
+    res.json({ data: { results } });
+  },
+);
+
 // ---- Settings (owner/admin write, others read) ----
 
 adminRouter.get(

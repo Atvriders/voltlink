@@ -11,8 +11,11 @@ export const TESLA_SCOPES =
 
 export function pkcePair(): { verifier: string; challenge: string } {
   const verifier = crypto.randomBytes(32).toString('base64url');
-  const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
-  return { verifier, challenge };
+  return { verifier, challenge: pkceChallenge(verifier) };
+}
+
+export function pkceChallenge(verifier: string): string {
+  return crypto.createHash('sha256').update(verifier).digest('base64url');
 }
 
 export function teslaAuthorizeUrl(

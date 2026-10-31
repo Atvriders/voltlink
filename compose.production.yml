@@ -189,6 +189,24 @@ services:
       start_period: 60s
       retries: 3
 
+  tesla-proxy:
+    image: tesla/vehicle-command:0.4.1
+    profiles: ['tesla']
+    restart: unless-stopped
+    environment:
+      TESLA_HTTP_PROXY_TLS_CERT: /config/tls-cert.pem
+      TESLA_HTTP_PROXY_TLS_KEY: /config/tls-key.pem
+      TESLA_HTTP_PROXY_HOST: 0.0.0.0
+      TESLA_HTTP_PROXY_PORT: '4443'
+      TESLA_HTTP_PROXY_TIMEOUT: 20s
+      TESLA_KEY_FILE: /keys/fleet-key.pem
+    volumes:
+      - ./tesla/proxy-tls:/config:ro
+      - ./tesla/keys/fleet-key.pem:/keys/fleet-key.pem:ro
+    security_opt: ['no-new-privileges:true']
+    read_only: true
+    networks: [egress]
+
 networks:
   internal:
 
