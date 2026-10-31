@@ -21,6 +21,8 @@ env:
   JWT_SECRET: da1ed84cbe380e8b2639006b5bdfcdce0ebc47754ca248e1277b16a8f8be4093
   VL_MASTER_KEY: MWY0MjZiYTc5OGIxMzQ3M2FkYTlmNjJmYzM3M2I0YzQ=
   DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink
+  # Migration tests create throwaway databases (role with CREATEDB).
+  TEST_DATABASE_ADMIN_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/postgres
 
 jobs:
   build-and-test:

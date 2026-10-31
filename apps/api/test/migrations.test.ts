@@ -9,8 +9,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client, Pool } from 'pg';
+import { adminDatabaseUrl } from './lib/admin-url';
 
-const ADMIN_URL = process.env.TEST_DATABASE_ADMIN_URL;
+const ADMIN_URL = adminDatabaseUrl();
 const API_ROOT = path.resolve(__dirname, '..');
 const PRISMA_DIR = path.join(API_ROOT, 'prisma');
 const SCHEMA = path.join(PRISMA_DIR, 'schema.prisma');
@@ -45,9 +46,6 @@ function deploy(schemaPath: string, databaseUrl: string): void {
 }
 
 async function adminClient(): Promise<Client> {
-  if (!ADMIN_URL) {
-    throw new Error('TEST_DATABASE_ADMIN_URL is required (a postgres role with CREATEDB), e.g. postgresql://voltlink:pw@127.0.0.1:5433/postgres');
-  }
   const c = new Client({ connectionString: ADMIN_URL });
   await c.connect();
   return c;

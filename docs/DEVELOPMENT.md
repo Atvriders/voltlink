@@ -89,6 +89,17 @@ npm run e2e                  # Playwright (needs a running API on :3111)
 blender/rebuild_all.sh       # regenerate vehicle GLBs + thumbnails + manifest
 ```
 
+### Tests
+
+`npm test` runs shared, API and web suites. The API migration tests create
+throwaway databases and therefore need a Postgres role with `CREATEDB`:
+
+- `TEST_DATABASE_ADMIN_URL` points at that role (e.g.
+  `postgresql://voltlink:pw@127.0.0.1:5433/postgres`).
+- When it is unset, tests derive it from `DATABASE_URL` by using the
+  `postgres` maintenance database on the same server, so a fresh shell with
+  only `DATABASE_URL` configured still works.
+
 ## Env for local dev
 
 See [Configuration](CONFIGURATION.md). `JWT_SECRET` is required everywhere;
