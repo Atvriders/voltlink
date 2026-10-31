@@ -33,7 +33,10 @@ export function Badge({
   pulse?: boolean;
 }) {
   return (
-    <span className={`chip ${toneStyles[tone] ?? toneStyles.neutral} ${pulse ? 'pulse' : ''}`}>
+    <span
+      className={`chip vl-badge ${pulse ? 'pulse' : ''}`}
+      data-tone={tone in toneStyles ? tone : 'neutral'}
+    >
       {children}
     </span>
   );
@@ -56,10 +59,10 @@ export function Button({
   const base =
     'inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[38px]';
   const variants: Record<string, string> = {
-    primary: 'bg-accent text-onaccent hover:brightness-110',
+    primary: 'bg-accent text-onaccent hover:bg-accent-hover',
     secondary: 'bg-panel2 text-ink border border-line hover:border-faint',
     ghost: 'bg-transparent text-subtle hover:text-ink hover:bg-panel2',
-    danger: 'bg-danger/90 text-white hover:bg-danger',
+    danger: 'bg-danger-strong text-ondanger hover:opacity-90',
     outline: 'border border-accent/60 text-accent hover:bg-accent/10',
   };
   return (
