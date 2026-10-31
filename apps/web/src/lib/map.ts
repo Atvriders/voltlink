@@ -4,6 +4,7 @@
 
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { configureMapLibre } from './maplibre';
 
 export type MapPoint = {
   lat: number;
@@ -131,6 +132,8 @@ export function buildStyle(): {
 }
 
 export function createMap(container: HTMLElement, interactive = true): maplibregl.Map {
+  // NEW-11: the worker must be a real asset URL before any map is created.
+  configureMapLibre();
   const map = new maplibregl.Map({
     container,
     style: buildStyle() as never,

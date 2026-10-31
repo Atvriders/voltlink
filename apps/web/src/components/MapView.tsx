@@ -31,8 +31,14 @@ export default function MapView({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const layersRef = useRef(layers);
   layersRef.current = layers;
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+  const onPointPickRef = useRef(onPointPick);
+  onPointPickRef.current = onPointPick;
   const [unavailable, setUnavailable] = useState(false);
 
+  // F-MAPLOOP: this effect depends on nothing — callbacks live in refs, so the
+  // map is created exactly once per mount and never torn down on re-render.
   useEffect(() => {
     if (!container.current) return;
     if (!hasWebGL2()) {
@@ -51,9 +57,9 @@ export default function MapView({
     }
     mapRef.current = map;
     map.on('click', (e) => {
-      onPointPick?.(e.lngLat.lat, e.lngLat.lng);
+      onPointPickRef.current?.(e.lngLat.lat, e.lngLat.lng);
     });
-    onReady?.(map);
+    onReadyRef.current?.(map);
 
     const draw = () => {
       const ls = layersRef.current ?? [];
@@ -98,7 +104,8 @@ export default function MapView({
       }
       mapRef.current = null;
     };
-  }, [onReady, onPointPick]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (unavailable) {
     return (
