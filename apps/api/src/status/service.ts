@@ -5,6 +5,7 @@ import { prisma, query } from '../core/db';
 import { getQueue } from '../core/queue';
 import { env } from '../core/env';
 import { poller } from '../telemetry/poller';
+import { getSetting } from '../core/settings';
 import { sseCount } from '../core/sse';
 import type { ComponentStatus } from '@voltlink/shared';
 
@@ -88,12 +89,15 @@ async function checkComponent(key: string): Promise<CheckResult> {
     }
     case 'workers': {
       const q = getQueue();
-      const dead = await prisma.backgroundJob.count({ where: { status: 'dead' } });
-      const depth = env.REDIS_URL ? await q.depth('default') : 0;
+      const { queue } = await import('../jobs/queues');
+      const failed = await queue('vehicle-commands').getFailed(0, 10_000).then((j) => j.length).catch(() => 0);
+      const depth = env.REDIS_URL ? await q.depth('vehicle-commands') : 0;
+      const beat = await getSetting('workerBeat');
+      const active = !!beat && Date.now() - new Date(beat).getTime() < 90_000;
       return {
-        ok: dead < 50,
+        ok: failed < 50,
         latencyMs: latency(),
-        detail: `${dead} dead jobs, queue depth ${depth}.`,
+        detail: active ? `${failed} failed jobs, queue depth ${depth}.` : 'No worker beat recently; workers may be down.',
       };
     }
     case 'scheduler':

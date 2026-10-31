@@ -1,11 +1,12 @@
 // Vehicle command pipeline: validation → queue → provider dispatch →
-// confirmation → terminal state. Server-side truth only; the client never
-// fabricates completion.
+// guarded transitions → predicate-based confirmation → terminal state
+// (guide 04 §4, guide 01 §9-§11). Server-side truth only.
 
 import { prisma } from '../core/db';
 import { getQueue } from '../core/queue';
-import { audit } from '../core/settings';
-import { getSetting } from '../core/settings';
+import { enqueue } from '../jobs/queues';
+import { producerConnection } from '../core/redis';
+import { audit, getSetting } from '../core/settings';
 import { ssePublish } from '../core/sse';
 import { assertVehicleAccess } from '../authz/access';
 import { requireRecentStepUp } from '../authz/policy';
@@ -13,9 +14,13 @@ import { AccessDenied } from '../authz/errors';
 import type { Actor } from '../authz/types';
 import { buildContext, getProvider } from '../providers/registry';
 import { randomId, sha256hex } from '../core/crypto';
+import { DelayedError } from 'bullmq';
 import {
   COMMAND_DEFINITIONS,
+  COMMAND_PARAM_SCHEMAS,
+  commandStatePredicate,
   HIGH_RISK_COMMANDS,
+  NOT_OBSERVABLE_COMMANDS,
   type CommandParams,
   type CommandStatus,
   type CommandType,
@@ -33,7 +38,10 @@ export class CommandError extends Error {
   }
 }
 
-// Per user+vehicle rate limiting (in-memory; per-process, conservative).
+const CONFIRM_DELAY_MS = 10_000;
+const CONFIRM_TIMEOUT_MS = 90_000;
+
+// Per user+vehicle rate limiting (per-process, conservative).
 const rateBuckets = new Map<string, number[]>();
 const MAX_COMMANDS_PER_HOUR = 30;
 const HIGH_RISK_PER_HOUR = 5;
@@ -43,18 +51,51 @@ function checkRate(userId: string, vehicleId: string, highRisk: boolean): void {
   const now = Date.now();
   const bucket = (rateBuckets.get(key) ?? []).filter((t) => now - t < 3600_000);
   const limit = highRisk ? HIGH_RISK_PER_HOUR : MAX_COMMANDS_PER_HOUR;
-  if (bucket.length >= limit)
-    throw new CommandError(
-      'RATE_LIMITED',
-      `Command rate limit reached (${limit}/hour for this vehicle).`,
-      429,
-    );
+  if (bucket.length >= limit) {
+    throw new CommandError('RATE_LIMITED', `Command rate limit reached (${limit}/hour for this vehicle).`, 429);
+  }
   bucket.push(now);
   rateBuckets.set(key, bucket);
 }
 
-const CONFIRM_DELAY_MS = 8000;
-const CONFIRM_TIMEOUT_MS = 60_000;
+const TERMINAL: readonly CommandStatus[] = ['confirmed', 'failed', 'rejected', 'unsupported', 'timed_out', 'canceled'];
+
+// ---------------------------------------------------------------------------
+// Guarded transitions (P-TERMINAL): each step is one conditional update so a
+// race can never overwrite a terminal state. Terminal states are final.
+// ---------------------------------------------------------------------------
+
+export async function transitionStatus(
+  commandId: string,
+  from: readonly CommandStatus[],
+  to: CommandStatus,
+  extra: {
+    providerResponse?: string;
+    responseCategory?: string;
+    confirmation?: string;
+    errorMessage?: string;
+    confirmed?: boolean;
+  } = {},
+): Promise<boolean> {
+  const data: Record<string, unknown> = { status: to };
+  if (to === 'submitted') data.submittedAt = new Date();
+  if (TERMINAL.includes(to)) data.completedAt = new Date();
+  if (extra.providerResponse) data.providerResponse = extra.providerResponse;
+  if (extra.responseCategory) data.responseCategory = extra.responseCategory;
+  if (extra.confirmation) data.confirmation = extra.confirmation;
+  if (extra.errorMessage) data.errorMessage = extra.errorMessage;
+  if (extra.confirmed) data.confirmed = true;
+  if (to === 'canceled') data.errorMessage = 'Canceled before submission.';
+  const res = await prisma.vehicleCommand.updateMany({
+    where: { id: commandId, status: { in: [...from] } },
+    data: data as never,
+  });
+  return res.count === 1;
+}
+
+async function auditEvent(commandId: string, event: string, actor: string, detail: string): Promise<void> {
+  await prisma.commandAuditEvent.create({ data: { commandId, event, actor, detail } });
+}
 
 // ---------------------------------------------------------------------------
 // Issuing
@@ -81,6 +122,15 @@ export async function issueCommand(
       400,
     );
   }
+  // G-02: per-command types and ranges, rejected before a row is created.
+  const schema = COMMAND_PARAM_SCHEMAS[type];
+  const raw = params ?? {};
+  const parsed = schema.safeParse(Object.keys(raw).length === 0 ? undefined : raw);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    throw new CommandError('INVALID_PARAMS', `Invalid ${def.label} parameters: ${first?.message ?? 'invalid'}.`, 422);
+  }
+  const cleanParams = (parsed.data ?? {}) as CommandParams;
 
   const highRisk = HIGH_RISK_COMMANDS.includes(type);
   const { vehicle, permissions } = await assertVehicleAccess(
@@ -89,16 +139,12 @@ export async function issueCommand(
     highRisk ? 'vehicles.command_high_risk' : 'vehicles.command',
   );
 
-  // High-risk: sessions need a recent step-up; API keys never get high-risk.
   if (highRisk) {
     if (actor.kind === 'session') requireRecentStepUp(actor);
-    else if (actor.kind === 'apiKey')
-      throw new AccessDenied('FORBIDDEN', 'API keys cannot run high-risk commands.', 403);
+    else if (actor.kind === 'apiKey') throw new AccessDenied('FORBIDDEN', 'API keys cannot run high-risk commands.', 403);
     else if (actor.kind === 'automation') {
       const a = await prisma.automation.findUnique({ where: { id: actor.automationId } });
-      const hash = sha256hex(
-        JSON.stringify({ trigger: a?.triggerType ?? '', vehicleId, actions: [type] }),
-      );
+      const hash = sha256hex(JSON.stringify({ trigger: a?.triggerType ?? '', vehicleId, actions: [type] }));
       if (!a?.highRiskApprovedAt || a.approvedActionsHash !== hash) {
         throw new CommandError(
           'AUTOMATION_HIGH_RISK_NOT_APPROVED',
@@ -109,24 +155,8 @@ export async function issueCommand(
     }
   }
 
-  // Kill switches (global, provider, vehicle).
-  const [globalOn, providerOn, vehicleOn] = await Promise.all([
-    getSetting('commandsEnabled'),
-    getSetting(`providerCmd:${vehicle.providerAccountId}`),
-    getSetting(`vehicleCmd:${vehicle.id}`),
-  ]);
-  if (globalOn !== 'true')
-    throw new CommandError('COMMANDS_DISABLED', 'Vehicle commands are disabled globally.', 403);
-  if (providerOn === 'false')
-    throw new CommandError(
-      'COMMANDS_DISABLED',
-      'Commands are disabled for this provider account.',
-      403,
-    );
-  if (vehicleOn === 'false')
-    throw new CommandError('COMMANDS_DISABLED', 'Commands are disabled for this vehicle.', 403);
+  await assertKillSwitches(vehicle.providerAccountId, vehicle.id);
 
-  // Capability check.
   const caps = (vehicle.capabilities ?? []) as string[];
   if (!caps.includes(def.requiresCapability)) {
     throw new CommandError('UNSUPPORTED', `This vehicle does not support "${def.label}".`, 422);
@@ -138,7 +168,6 @@ export async function issueCommand(
     highRisk,
   );
 
-  // Idempotency is scoped per actor kind (Z-IDEMP).
   const scope =
     actor.kind === 'apiKey'
       ? `apikey:${actor.apiKeyId}`
@@ -148,19 +177,11 @@ export async function issueCommand(
           ? 'system:system'
           : `user:${actor.userId}`;
   const idempotencyKey = opts.idempotencyKey ?? `cmd:${scope}:${vehicleId}:${type}:${randomId()}`;
-  const requestHash = sha256hex(
-    JSON.stringify({ vehicleId, type, params: sanitizeParams(type, params) }),
-  );
-  const prior = await prisma.commandIdempotency.findUnique({
-    where: { scope_key: { scope, key: idempotencyKey } },
-  });
+  const requestHash = sha256hex(JSON.stringify({ vehicleId, type, params: sanitizeParams(type, cleanParams) }));
+  const prior = await prisma.commandIdempotency.findUnique({ where: { scope_key: { scope, key: idempotencyKey } } });
   if (prior && prior.expiresAt > new Date()) {
     if (prior.requestHash !== requestHash) {
-      throw new CommandError(
-        'IDEMPOTENCY_KEY_REUSED',
-        'This idempotency key was already used with a different request.',
-        409,
-      );
+      throw new CommandError('IDEMPOTENCY_KEY_REUSED', 'This idempotency key was already used with a different request.', 409);
     }
     const original = await prisma.vehicleCommand.findUnique({ where: { id: prior.commandId } });
     if (original) return { command: serializeCommand(original), replayed: true };
@@ -184,7 +205,7 @@ export async function issueCommand(
         }),
       ),
       type,
-      params: JSON.parse(JSON.stringify(sanitizeParams(type, params))),
+      params: JSON.parse(JSON.stringify(sanitizeParams(type, cleanParams))),
       status: 'queued',
       risk: def.risk,
       idempotencyKey,
@@ -192,34 +213,23 @@ export async function issueCommand(
   });
   try {
     await prisma.commandIdempotency.create({
-      data: {
-        scope,
-        key: idempotencyKey,
-        requestHash,
-        commandId: command.id,
-        expiresAt: new Date(Date.now() + 86_400_000),
-      },
+      data: { scope, key: idempotencyKey, requestHash, commandId: command.id, expiresAt: new Date(Date.now() + 86_400_000) },
     });
   } catch (e) {
     if ((e as { code?: string }).code === 'P2002') {
-      const prior = await prisma.commandIdempotency.findUniqueOrThrow({
+      const existing = await prisma.commandIdempotency.findUniqueOrThrow({
         where: { scope_key: { scope, key: idempotencyKey } },
       });
-      if (prior.requestHash !== requestHash)
-        throw new CommandError(
-          'IDEMPOTENCY_KEY_REUSED',
-          'This idempotency key was already used with a different request.',
-          409,
-        );
-      const original = await prisma.vehicleCommand.findUnique({ where: { id: prior.commandId } });
+      if (existing.requestHash !== requestHash) {
+        throw new CommandError('IDEMPOTENCY_KEY_REUSED', 'This idempotency key was already used with a different request.', 409);
+      }
+      const original = await prisma.vehicleCommand.findUnique({ where: { id: existing.commandId } });
       if (original) return { command: serializeCommand(original), replayed: true };
     }
     throw e;
   }
   const actorUserId =
-    actor.kind === 'session' || actor.kind === 'automation' || actor.kind === 'apiKey'
-      ? actor.userId
-      : '';
+    actor.kind === 'session' || actor.kind === 'automation' || actor.kind === 'apiKey' ? actor.userId : '';
   await prisma.commandAuditEvent.create({
     data: {
       commandId: command.id,
@@ -237,29 +247,45 @@ export async function issueCommand(
     ip: meta.ip,
     requestId: meta.requestId,
   });
-  await getQueue().enqueue(
-    'vehicle-commands',
-    { commandId: command.id },
-    { dedupeKey: `cmd:${command.id}` },
-  );
-  ssePublish({
-    type: 'command',
-    data: { command: serializeCommand(command) },
-    userId: actorUserId,
-  });
+  await getQueue().enqueue('vehicle-commands', { commandId: command.id, stage: 'dispatch' }, { dedupeKey: `cmd:${command.id}` });
+  ssePublish({ type: 'command', data: { command: serializeCommand(command) }, userId: actorUserId });
   return { command: serializeCommand(command), replayed: false };
 }
 
+async function assertKillSwitches(providerAccountId: string, vehicleId: string): Promise<void> {
+  const [maintenance, globalOn, emergency, providerOn, vehicleOn] = await Promise.all([
+    getSetting('instance.maintenanceMode'),
+    getSetting('commandsEnabled'),
+    getSetting('commandsEmergencyOff'),
+    getSetting(`providerCmd:${providerAccountId}`),
+    getSetting(`vehicleCmd:${vehicleId}`),
+  ]);
+  if (maintenance === 'true') {
+    throw new CommandError('MAINTENANCE_MODE', 'The instance is in read-only maintenance mode.', 403);
+  }
+  if (emergency === 'true') {
+    throw new CommandError('COMMANDS_DISABLED', 'Vehicle commands are disabled by the emergency switch.', 403);
+  }
+  if (globalOn !== 'true') {
+    throw new CommandError('COMMANDS_DISABLED', 'Vehicle commands are disabled globally.', 403);
+  }
+  if (providerOn === 'false') {
+    throw new CommandError('COMMANDS_DISABLED', 'Commands are disabled for this provider account.', 403);
+  }
+  if (vehicleOn === 'false') {
+    throw new CommandError('COMMANDS_DISABLED', 'Commands are disabled for this vehicle.', 403);
+  }
+}
+
 function sanitizeParams(type: CommandType, params: CommandParams): CommandParams {
-  // Keep only numeric/simple fields; never persist secrets.
   const out: CommandParams = {};
   for (const [k, v] of Object.entries(params)) {
     if (v === undefined || v === null) continue;
-    if (typeof v === 'string' && (k === 'pin' || k === 'password')) continue;
-    if (typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string')
+    if (typeof v === 'string' && (k === 'pin' || k === 'password' || k === 'token')) continue;
+    if (typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string') {
       out[k as keyof CommandParams] = v as never;
-    if (typeof v === 'object')
-      out[k as keyof CommandParams] = JSON.parse(JSON.stringify(v)) as never;
+    }
+    if (typeof v === 'object') out[k as keyof CommandParams] = JSON.parse(JSON.stringify(v)) as never;
   }
   return out;
 }
@@ -279,6 +305,8 @@ function serializeCommand(c: {
   submittedAt: Date | null;
   completedAt: Date | null;
   providerResponse: string | null;
+  responseCategory: string | null;
+  confirmation: string | null;
   errorMessage: string | null;
   confirmed: boolean;
 }): VehicleCommand {
@@ -297,6 +325,8 @@ function serializeCommand(c: {
     submittedAt: c.submittedAt?.toISOString(),
     completedAt: c.completedAt?.toISOString(),
     providerResponse: c.providerResponse ?? undefined,
+    responseCategory: (c.responseCategory ?? undefined) as VehicleCommand['responseCategory'],
+    confirmation: (c.confirmation ?? undefined) as VehicleCommand['confirmation'],
     errorMessage: c.errorMessage ?? undefined,
     confirmed: c.confirmed,
   };
@@ -306,208 +336,245 @@ function serializeCommand(c: {
 // Worker processing
 // ---------------------------------------------------------------------------
 
-async function auditEvent(
-  commandId: string,
-  event: string,
-  actor: string,
-  detail: string,
-): Promise<void> {
-  await prisma.commandAuditEvent.create({ data: { commandId, event, actor, detail } });
-}
-
-async function updateStatus(
-  commandId: string,
-  status: CommandStatus,
-  extra: { providerResponse?: string; errorMessage?: string; confirmed?: boolean } = {},
-): Promise<void> {
-  const data: Record<string, unknown> = { status };
-  if (status === 'submitted' && extra.providerResponse === undefined) data.submittedAt = new Date();
-  if (
-    [
-      'accepted',
-      'confirmed',
-      'failed',
-      'rejected',
-      'unsupported',
-      'timed_out',
-      'canceled',
-    ].includes(status)
-  )
-    data.completedAt = new Date();
-  if (extra.providerResponse) data.providerResponse = extra.providerResponse;
-  if (extra.errorMessage) data.errorMessage = extra.errorMessage;
-  if (extra.confirmed) data.confirmed = true;
-  await prisma.vehicleCommand.update({ where: { id: commandId }, data: data as never });
+async function setPendingCommandUntil(vehicleId: string, ms = 90_000): Promise<void> {
+  await prisma.vehiclePollState.upsert({
+    where: { vehicleId },
+    update: { pendingCommandUntil: new Date(Date.now() + ms) },
+    create: { vehicleId, pendingCommandUntil: new Date(Date.now() + ms) },
+  });
 }
 
 export async function processCommandJob(payload: {
   commandId: string;
   stage?: 'dispatch' | 'confirm';
+  n?: number;
 }): Promise<void> {
   const stage = payload.stage ?? 'dispatch';
   const command = await prisma.vehicleCommand.findUnique({ where: { id: payload.commandId } });
   if (!command) return;
-  if (command.status === 'canceled') return;
 
   if (stage === 'dispatch') {
-    if (command.status !== 'queued' && command.status !== 'submitted') return;
-    await updateStatus(command.id, 'submitted');
-    await auditEvent(command.id, 'submitted', 'worker', 'Command submitted to provider.');
-    const vehicle = await prisma.vehicle.findUnique({
-      where: { id: command.vehicleId },
-      include: { providerAccount: true },
-    });
-    if (!vehicle) {
-      await updateStatus(command.id, 'failed', { errorMessage: 'Vehicle no longer exists.' });
-      return;
+    // Per-vehicle lock: delivery is at-least-once, so never send twice.
+    const lockKey = `voltlink:lock:vehicle-cmd:${command.vehicleId}`;
+    const lock = await producerConnection().set(lockKey, command.id, 'PX', 60_000, 'NX');
+    if (!lock) {
+      throw new DelayedError();
     }
-    let result;
     try {
-      const ctx = await buildContext(vehicle.providerAccount);
-      const provider = getProvider(vehicle.provider);
-      result = await provider.sendCommand(
-        ctx,
-        vehicle.providerVehicleId,
-        command.type as CommandType,
-        (command.params ?? {}) as CommandParams,
-      );
-    } catch (err) {
-      result = {
-        kind: 'rejected',
-        errorMessage: `Provider error: ${(err as Error).message.slice(0, 200)}`,
-      };
-    }
-    if (result.kind === 'unsupported') {
-      await updateStatus(command.id, 'unsupported', { errorMessage: result.errorMessage });
-      await auditEvent(command.id, 'unsupported', 'provider', result.errorMessage ?? '');
-      return;
-    }
-    if (result.kind === 'rejected') {
-      await updateStatus(command.id, 'rejected', {
-        errorMessage: result.errorMessage,
-        providerResponse: result.response,
+      const claimed = await transitionStatus(command.id, ['queued'], 'submitted');
+      if (!claimed) return; // terminal or another worker claimed it
+      await auditEvent(command.id, 'submitted', 'worker', 'Command submitted to provider.');
+      const vehicle = await prisma.vehicle.findUnique({
+        where: { id: command.vehicleId },
+        include: { providerAccount: true },
       });
-      await auditEvent(
-        command.id,
-        'rejected',
-        'provider',
-        result.errorMessage ?? 'Provider rejected the command.',
-      );
-      await notifyCommandFinished(command, 'failed');
-      return;
+      if (!vehicle) {
+        await transitionStatus(command.id, ['submitted'], 'failed', { errorMessage: 'Vehicle no longer exists.' });
+        return;
+      }
+      // P-KILLSW: re-check every kill switch in the worker.
+      const switched = await Promise.allSettled([
+        getSetting('instance.maintenanceMode'),
+        getSetting('commandsEmergencyOff'),
+        getSetting('commandsEnabled'),
+        getSetting(`providerCmd:${vehicle.providerAccountId}`),
+        getSetting(`vehicleCmd:${vehicle.id}`),
+      ]);
+      const off =
+        (switched[0].status === 'fulfilled' && switched[0].value === 'true') ||
+        (switched[1].status === 'fulfilled' && switched[1].value === 'true') ||
+        (switched[2].status === 'fulfilled' && switched[2].value !== 'true') ||
+        (switched[3].status === 'fulfilled' && switched[3].value === 'false') ||
+        (switched[4].status === 'fulfilled' && switched[4].value === 'false');
+      if (off) {
+        await transitionStatus(command.id, ['submitted'], 'rejected', {
+          responseCategory: 'kill_switch',
+          errorMessage: 'A kill switch disabled commands after this command was queued.',
+        });
+        await notifyCommandFinished(command, 'failed');
+        return;
+      }
+
+      const observable = !NOT_OBSERVABLE_COMMANDS.includes(command.type as CommandType);
+      let result: {
+        kind: 'accepted' | 'rejected' | 'unsupported' | 'timed_out' | 'failed';
+        response?: string;
+        category?: string;
+        errorMessage?: string;
+      };
+      try {
+        const ctx = await buildContext(vehicle.providerAccount);
+        const provider = getProvider(vehicle.provider);
+        const sent = await provider.sendCommand(
+          ctx,
+          vehicle.providerVehicleId,
+          command.type as CommandType,
+          (command.params ?? {}) as CommandParams,
+        );
+        if (sent.kind === 'accepted') {
+          result = { kind: 'accepted', response: sent.response };
+        } else if (sent.kind === 'rejected') {
+          result = { kind: 'rejected', response: sent.response, category: sent.category, errorMessage: sent.errorMessage };
+        } else if (sent.kind === 'unsupported') {
+          result = { kind: 'unsupported', errorMessage: sent.errorMessage };
+        } else if (sent.kind === 'timed_out') {
+          result = { kind: 'timed_out', errorMessage: sent.errorMessage };
+        } else if (sent.kind === 'failed') {
+          result = { kind: 'failed', errorMessage: sent.errorMessage ?? 'Provider reported an error.' };
+        } else {
+          result = { kind: 'failed', errorMessage: sent.errorMessage ?? 'Unknown provider result.' };
+        }
+      } catch (err) {
+        result = { kind: 'failed', errorMessage: `Provider error: ${(err as Error).message.slice(0, 200)}` };
+      }
+
+      switch (result.kind) {
+        case 'unsupported': {
+          await transitionStatus(command.id, ['submitted'], 'unsupported', {
+            responseCategory: 'vehicle_unsupported',
+            errorMessage: result.errorMessage,
+          });
+          await auditEvent(command.id, 'unsupported', 'provider', result.errorMessage ?? '');
+          await notifyCommandFinished(command, 'failed');
+          return;
+        }
+        case 'rejected': {
+          await transitionStatus(command.id, ['submitted'], 'rejected', {
+            providerResponse: result.response,
+            responseCategory: result.category ?? 'vehicle_refused',
+            errorMessage: result.errorMessage,
+          });
+          await auditEvent(command.id, 'rejected', 'provider', result.errorMessage ?? 'Provider rejected the command.');
+          await notifyCommandFinished(command, 'failed');
+          return;
+        }
+        case 'failed': {
+          await transitionStatus(command.id, ['submitted'], 'failed', {
+            providerResponse: result.response,
+            responseCategory: result.category ?? 'invalid_request',
+            errorMessage: result.errorMessage,
+          });
+          await auditEvent(command.id, 'failed', 'provider', result.errorMessage ?? 'Provider error.');
+          await notifyCommandFinished(command, 'failed');
+          return;
+        }
+        case 'timed_out': {
+          await transitionStatus(command.id, ['submitted'], 'timed_out', {
+            responseCategory: 'outcome_unknown',
+            errorMessage: result.errorMessage,
+          });
+          await auditEvent(command.id, 'timed_out', 'provider', result.errorMessage ?? 'Provider timed out.');
+          await notifyCommandFinished(command, 'failed');
+          return;
+        }
+        case 'accepted': {
+          const accepted = await transitionStatus(command.id, ['submitted'], 'accepted', {
+            providerResponse: result.response,
+            responseCategory: result.category ?? 'ok',
+          });
+          if (!accepted) return;
+          await auditEvent(command.id, 'accepted', 'provider', result.response ?? 'Provider accepted.');
+          if (!observable) {
+            // P-CONFIRM: not_observable commands end at accepted, never confirmed.
+            await prisma.vehicleCommand.update({
+              where: { id: command.id },
+              data: { confirmation: 'not_observable' },
+            });
+            await notifyCommandFinished(command, 'success');
+            return;
+          }
+          await setPendingCommandUntil(command.vehicleId, CONFIRM_TIMEOUT_MS);
+          await enqueue(
+            'vehicle-commands',
+            { commandId: command.id, stage: 'confirm', n: 1 },
+            { jobId: `confirm-${command.id}-1`, delayMs: CONFIRM_DELAY_MS },
+          );
+          return;
+        }
+      }
+    } finally {
+      await producerConnection()
+        .eval(
+          "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+          1,
+          `voltlink:lock:vehicle-cmd:${command.vehicleId}`,
+          command.id,
+        )
+        .catch(() => undefined);
     }
-    if (result.kind === 'timed_out') {
-      await updateStatus(command.id, 'timed_out', { errorMessage: result.errorMessage });
-      await auditEvent(
-        command.id,
-        'timed_out',
-        'provider',
-        result.errorMessage ?? 'Provider timed out.',
-      );
-      return;
-    }
-    // accepted
-    await updateStatus(command.id, 'accepted', { providerResponse: result.response });
-    await auditEvent(command.id, 'accepted', 'provider', result.response ?? 'Provider accepted.');
-    await getQueue().enqueue(
-      'vehicle-commands',
-      { commandId: command.id, stage: 'confirm' },
-      { delayMs: CONFIRM_DELAY_MS },
-    );
-    return;
   }
 
   if (stage === 'confirm') {
+    // G-03 / P-CONFIRM: evaluate the predicate against the INGESTED snapshot —
+    // no second provider call and no separate polling budget.
     if (command.status !== 'accepted') return;
-    // Confirmation: fetch state and verify the provider still reports the
-    // vehicle consistently. Only then mark confirmed — never assume success.
-    const vehicle = await prisma.vehicle.findUnique({
-      where: { id: command.vehicleId },
-      include: { providerAccount: true, snapshot: true },
-    });
-    if (!vehicle) {
-      await updateStatus(command.id, 'failed', { errorMessage: 'Vehicle no longer exists.' });
-      await notifyCommandFinished(
-        {
-          id: command.id,
-          userId: command.userId,
-          vehicleId: command.vehicleId,
-          vehicleName: command.vehicleName,
-          type: command.type,
-        },
-        'failed',
-      );
-      return;
-    }
     const ageMs = command.completedAt ? Date.now() - command.completedAt.getTime() : 0;
     if (ageMs > CONFIRM_TIMEOUT_MS) {
-      await updateStatus(command.id, 'timed_out', {
+      await transitionStatus(command.id, ['accepted'], 'timed_out', {
+        confirmation: 'timeout',
         errorMessage: 'Vehicle did not confirm the command within the timeout.',
       });
       await auditEvent(command.id, 'timed_out', 'worker', 'Confirmation timeout.');
-      await notifyCommandFinished(
-        {
-          id: command.id,
-          userId: command.userId,
-          vehicleId: command.vehicleId,
-          vehicleName: command.vehicleName,
-          type: command.type,
-        },
-        'failed',
-      );
+      await notifyCommandFinished(command, 'failed');
       return;
     }
-    try {
-      const ctx = await buildContext(vehicle.providerAccount);
-      const provider = getProvider(vehicle.provider);
-      const fresh = await provider.fetchState(ctx, vehicle.providerVehicleId);
-      const state = fresh.state as { status?: string };
-      if (fresh.live && state.status !== 'offline' && state.status !== 'unknown') {
-        await updateStatus(command.id, 'confirmed', { confirmed: true });
-        await auditEvent(
-          command.id,
-          'confirmed',
-          'worker',
-          'Vehicle state confirms the command completed.',
-        );
-        await notifyCommandFinished(
-          {
-            id: command.id,
-            userId: command.userId,
-            vehicleId: command.vehicleId,
-            vehicleName: command.vehicleName,
-            type: command.type,
-          },
-          'success',
-        );
-        return;
+    const snapshot = await prisma.vehicleSnapshot.findUnique({ where: { vehicleId: command.vehicleId } });
+    const state = ((snapshot?.state ?? {}) as Record<string, unknown>) ?? {};
+    const params = (command.params ?? {}) as Record<string, unknown>;
+    if (
+      state.status !== 'offline' &&
+      state.status !== 'unknown' &&
+      commandStatePredicate(command.type as CommandType, params, state)
+    ) {
+      const confirmed = await transitionStatus(command.id, ['accepted'], 'confirmed', {
+        confirmed: true,
+        confirmation: 'state_match',
+      });
+      if (confirmed) {
+        await auditEvent(command.id, 'confirmed', 'worker', 'Ingested vehicle state satisfies the expected-state predicate.');
+        await notifyCommandFinished(command, 'success');
       }
-    } catch {
-      /* confirmation fetch failed — retry until timeout */
-    }
-    if (ageMs > CONFIRM_TIMEOUT_MS) {
-      await updateStatus(command.id, 'timed_out', {
-        errorMessage: 'Vehicle did not confirm the command within the timeout.',
-      });
-      await auditEvent(command.id, 'timed_out', 'worker', 'Confirmation timeout.');
-      await notifyCommandFinished(
-        {
-          id: command.id,
-          userId: command.userId,
-          vehicleId: command.vehicleId,
-          vehicleName: command.vehicleName,
-          type: command.type,
-        },
-        'failed',
-      );
       return;
     }
-    await getQueue().enqueue(
+    const n = (payload.n ?? 0) + 1;
+    await enqueue(
       'vehicle-commands',
-      { commandId: command.id, stage: 'confirm' },
-      { delayMs: CONFIRM_DELAY_MS },
+      { commandId: command.id, stage: 'confirm', n },
+      { jobId: `confirm-${command.id}-${n}`, delayMs: CONFIRM_DELAY_MS },
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Stuck-command sweeper (P-STUCK)
+// ---------------------------------------------------------------------------
+
+export async function sweepStuckCommands(): Promise<number> {
+  const rows = await prisma.$queryRaw<
+    { id: string; userId: string; vehicleId: string; vehicleName: string; status: string; type: string }[]
+  >`
+    UPDATE "VehicleCommand" SET status = 'timed_out', "completedAt" = now(), "errorMessage" = 'No provider result in time',
+      "confirmation" = 'sweep'
+     WHERE (status IN ('submitted','accepted') AND COALESCE("submittedAt","createdAt") < now() - interval '3 minutes')
+        OR (status = 'queued' AND "createdAt" < now() - interval '15 minutes')
+    RETURNING id, "userId", "vehicleId", "vehicleName", status, type`;
+  for (const row of rows) {
+    await auditEvent(row.id, 'timed_out', 'sweeper', 'No provider result in time.');
+    await notifyCommandFinished(row, 'failed');
+  }
+  return rows.length;
+}
+
+/** P-STUCK: commands stuck in submitted/accepted are recovered on worker start. */
+export async function recoverStuckCommands(): Promise<number> {
+  const rows = await prisma.vehicleCommand.findMany({
+    where: { status: { in: ['submitted', 'accepted'] } },
+    select: { id: true },
+  });
+  for (const row of rows) {
+    await enqueue('vehicle-commands', { commandId: row.id, stage: 'confirm', n: 1 }, { jobId: `confirm-${row.id}-1` });
+  }
+  return rows.length;
 }
 
 async function notifyCommandFinished(
@@ -521,7 +588,9 @@ async function notifyCommandFinished(
     event,
     severity: outcome === 'success' ? 'success' : 'warning',
     title: outcome === 'success' ? 'Command completed' : 'Command failed',
-    body: `${command.vehicleName}: ${COMMAND_DEFINITIONS[command.type as CommandType]?.label ?? command.type} ${outcome === 'success' ? 'completed.' : 'did not complete.'}`,
+    body: `${command.vehicleName}: ${COMMAND_DEFINITIONS[command.type as CommandType]?.label ?? command.type} ${
+      outcome === 'success' ? 'completed.' : 'did not complete.'
+    }`,
     vehicleId: command.vehicleId ?? undefined,
   });
   ssePublish({
@@ -534,15 +603,18 @@ async function notifyCommandFinished(
 export async function cancelCommand(commandId: string): Promise<VehicleCommand> {
   const command = await prisma.vehicleCommand.findUnique({ where: { id: commandId } });
   if (!command) throw new CommandError('NOT_FOUND', 'Command not found.', 404);
-  if (
-    ['confirmed', 'failed', 'rejected', 'unsupported', 'timed_out', 'canceled'].includes(
-      command.status,
-    )
-  ) {
+  if (TERMINAL.includes(command.status as CommandStatus)) {
     throw new CommandError('ALREADY_FINAL', 'Command is already in a final state.', 409);
   }
-  await updateStatus(command.id, 'canceled');
-  await auditEvent(command.id, 'canceled', command.actorKind, 'Canceled by user.');
+  // P-TERMINAL: queued → canceled before submission; after submission it is a
+  // recorded cancel request, honestly labelled.
+  const canceled = await transitionStatus(command.id, ['queued'], 'canceled');
+  if (!canceled) {
+    await auditEvent(command.id, 'cancel_requested', command.actorKind, 'Cancel requested after submission.');
+    ssePublish({ type: 'command_finished', data: { commandId: command.id, outcome: 'cancel_requested' }, userId: command.userId });
+  } else {
+    await auditEvent(command.id, 'canceled', command.actorKind, 'Canceled by user.');
+  }
   const updated = await prisma.vehicleCommand.findUniqueOrThrow({ where: { id: commandId } });
   return serializeCommand(updated);
 }
@@ -563,21 +635,11 @@ export async function listCommands(vehicleIds: string[], page: number, pageSize:
 
 export async function getCommand(commandId: string): Promise<{
   command: VehicleCommand;
-  events: {
-    id: string;
-    commandId: string;
-    event: string;
-    actor: string;
-    detail: string;
-    createdAt: string;
-  }[];
+  events: { id: string; commandId: string; event: string; actor: string; detail: string; createdAt: string }[];
 }> {
   const command = await prisma.vehicleCommand.findUnique({ where: { id: commandId } });
   if (!command) throw new CommandError('NOT_FOUND', 'Command not found.', 404);
-  const events = await prisma.commandAuditEvent.findMany({
-    where: { commandId },
-    orderBy: { createdAt: 'asc' },
-  });
+  const events = await prisma.commandAuditEvent.findMany({ where: { commandId }, orderBy: { createdAt: 'asc' } });
   return {
     command: serializeCommand(command),
     events: events.map((e) => ({ ...e, createdAt: e.createdAt.toISOString() })),

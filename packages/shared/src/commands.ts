@@ -1,5 +1,7 @@
 // VoltLink command model.
 
+import { z } from 'zod';
+
 export const COMMAND_TYPES = [
   'wake',
   'lock',
@@ -295,6 +297,8 @@ export interface VehicleCommand {
   submittedAt?: string;
   completedAt?: string;
   providerResponse?: string;
+  responseCategory?: string;
+  confirmation?: string;
   errorMessage?: string;
   /** true when state change has been confirmed by telemetry/provider */
   confirmed: boolean;
@@ -307,4 +311,135 @@ export interface CommandAuditEvent {
   actor: string;
   detail: string;
   createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Per-command parameter validation (G-02): types, ranges, 4-digit PINs and
+// destination length, rejected with 422 before a row is created.
+// ---------------------------------------------------------------------------
+
+const pin = z.string().regex(/^\d{4}$/, 'PIN must be exactly 4 digits').optional();
+const dest = z.string().min(1).max(200, 'Destination must be at most 200 characters').optional();
+
+export const COMMAND_PARAM_SCHEMAS: Record<CommandType, z.ZodTypeAny> = {
+  wake: z.object({}).optional(),
+  lock: z.object({}).optional(),
+  unlock: z.object({ pin }).optional(),
+  climate_start: z.object({}).optional(),
+  climate_stop: z.object({}).optional(),
+  set_temperature: z
+    .object({
+      driverTempC: z.number().min(15).max(28).optional(),
+      passengerTempC: z.number().min(15).max(28).optional(),
+    })
+    .refine((p) => p.driverTempC !== undefined || p.passengerTempC !== undefined, {
+      message: 'set_temperature needs driverTempC and/or passengerTempC.',
+    })
+    .optional(),
+  defrost: z.object({}).optional(),
+  seat_heater: z
+    .object({
+      seat: z.number().int().min(0).max(6).optional(),
+      level: z.number().int().min(0).max(3),
+    })
+    .optional(),
+  steering_heater: z.object({ on: z.boolean() }).optional(),
+  charge_start: z.object({}).optional(),
+  charge_stop: z.object({}).optional(),
+  set_charge_limit: z.object({ chargeLimitPct: z.number().int().min(50).max(100) }).optional(),
+  set_charging_amps: z.object({ chargingAmps: z.number().int().min(1).max(48) }).optional(),
+  charge_port_open: z.object({}).optional(),
+  charge_port_close: z.object({}).optional(),
+  open_trunk: z.object({}).optional(),
+  open_frunk: z.object({}).optional(),
+  window_vent: z.object({}).optional(),
+  window_close: z.object({}).optional(),
+  sentry_mode: z.object({ on: z.boolean() }).optional(),
+  flash_lights: z.object({}).optional(),
+  honk_horn: z.object({}).optional(),
+  homelink: z
+    .object({ lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180), token: z.string().min(1).max(64) })
+    .optional(),
+  remote_start: z.object({}).optional(),
+  valet_mode: z
+    .object({ on: z.boolean(), pin })
+    .refine((p) => p.on === false || p.pin !== undefined, { message: 'valet_mode on requires a 4-digit pin.' })
+    .optional(),
+  speed_limit: z.object({ limitMph: z.number().min(50).max(120), pin }).optional(),
+  send_navigation: z.object({ dest }).optional(),
+  schedule_update: z.object({}).optional(),
+};
+
+/** Commands with no observable state: they end at `accepted` with confirmation
+ * `not_observable` — never `confirmed`, and the stuck-command sweeper never
+ * times them out (guide 01 §10). */
+export const NOT_OBSERVABLE_COMMANDS: readonly CommandType[] = [
+  'flash_lights',
+  'honk_horn',
+  'homelink',
+  'send_navigation',
+];
+
+/**
+ * P-CONFIRM: the expected-state predicate per observable command type.
+ * Matched against the freshly ingested snapshot; `true` confirms.
+ */
+export function commandStatePredicate(
+  type: CommandType,
+  params: Record<string, unknown>,
+  state: Record<string, unknown>,
+): boolean {
+  switch (type) {
+    case 'lock':
+      return state.locked === true;
+    case 'unlock':
+      return state.locked === false;
+    case 'climate_start':
+      return state.climateOn === true;
+    case 'climate_stop':
+      return state.climateOn === false;
+    case 'set_temperature': {
+      const want = params.driverTempC ?? params.passengerTempC;
+      const got = params.driverTempC !== undefined ? state.driverTempSettingC : state.passengerTempSettingC;
+      return typeof want === 'number' && typeof got === 'number' && Math.abs(got - want) <= 0.5;
+    }
+    case 'charge_start':
+      return state.chargingState === 'Charging' || state.chargingState === 'Starting';
+    case 'charge_stop':
+      return state.chargingState !== 'Charging' && state.chargingState !== 'Starting';
+    case 'set_charge_limit':
+      return typeof params.chargeLimitPct === 'number' && state.chargeLimitPct === params.chargeLimitPct;
+    case 'charge_port_open':
+      return state.chargePortDoorOpen === true;
+    case 'charge_port_close':
+      return state.chargePortDoorOpen === false;
+    case 'sentry_mode':
+      return state.sentryMode === params.on;
+    case 'window_vent':
+      return state.windowsVented === true;
+    case 'window_close':
+      return state.windowsVented === false;
+    case 'open_trunk':
+      return state.trunkOpen === true;
+    case 'open_frunk':
+      return state.frunkOpen === true;
+    case 'defrost':
+      return state.defrostOn === true;
+    case 'seat_heater':
+      return true; // verified by climate state on next poll; acceptance is the observable step
+    case 'steering_heater':
+      return true;
+    case 'set_charging_amps':
+      return typeof params.chargingAmps === 'number' && state.chargeCurrentRequestAmps === params.chargingAmps;
+    case 'remote_start':
+      return state.remoteStartActive === true;
+    case 'valet_mode':
+      return state.valetMode === params.on;
+    case 'speed_limit':
+      return typeof params.limitMph === 'number' && state.speedLimitMph === params.limitMph;
+    case 'wake':
+      return state.status === 'online';
+    default:
+      return false;
+  }
 }

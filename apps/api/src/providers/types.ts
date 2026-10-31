@@ -40,11 +40,12 @@ export interface FetchStateResult {
   freshForSec: number;
 }
 
-export type CommandResultKind = 'accepted' | 'rejected' | 'unsupported' | 'timed_out';
+export type CommandResultKind = 'accepted' | 'rejected' | 'unsupported' | 'timed_out' | 'failed';
 
 export interface CommandDispatchResult {
   kind: CommandResultKind;
   response?: string;
+  category?: string;
   errorMessage?: string;
 }
 

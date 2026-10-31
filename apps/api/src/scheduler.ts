@@ -9,9 +9,11 @@ import { dispatchTrigger } from './automations/engine';
 import { runRetention } from './telemetry/retention';
 import { setSetting } from './core/settings';
 import { runStatusChecks, ensureComponents } from './status/service';
+import { initRedis } from './core/redis';
 
 async function main(): Promise<void> {
   validateEnv();
+  await initRedis();
   await waitForMigrations();
   await prisma.$connect();
   await ensureComponents();

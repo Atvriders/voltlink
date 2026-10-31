@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import crypto from 'node:crypto';
 import { buildApp } from '../src/app';
+import { initRedis } from '../src/core/redis';
 import { prisma } from '../src/core/db';
 import { env } from '../src/core/env';
 
@@ -145,6 +146,7 @@ const orgs: string[] = [];
 let api: Api;
 
 beforeAll(async () => {
+  await initRedis();
   server = buildApp({ serveSpa: false }).listen(0);
   await new Promise<void>((resolve) => server.once('listening', resolve));
   port = (server.address() as AddressInfo).port;

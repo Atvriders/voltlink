@@ -45,3 +45,22 @@ Deviations from the kit's target design are recorded here, per START_HERE.md
    (`teslaExchangeCode` now takes an optional PKCE verifier) rather than a new
    `providers/tesla/oauth.ts`; Phase 6's contract-test work will move it to
    the guide 01 §3 shape (TeslaAuthError, decodeClaims, etc.).
+
+## Phase 4
+
+1. **BullMQ 6 on Redis replaces both custom queues** (guide 04 §4). No
+   Postgres fallback — the spec mandates Redis-backed jobs and the untested
+   second backend was the original defect. `core/queue.ts` remains as a thin
+   compatibility shim over `jobs/queues.ts`; new code imports `enqueue`/
+   `startWorker` directly. BullMQ's own PostgreSQL backend is the documented
+   exit path if Redis is ever dropped.
+2. **The `BackgroundJob` DROP is hand-appended** to
+   `20261031142359_queue_v4_pollstate`. Verified: `prisma migrate diff` 6.19.3
+   does not emit `DROP TABLE "BackgroundJob"` even from a fresh shadow
+   database (the table is created by the initial migration and absent from the
+   datamodel); the manual drop keeps both drift gates at exit 0.
+3. **Confirmation reads ingested snapshots only** (G-03): the confirm stage
+   never calls `provider.fetchState`; it evaluates the expected-state
+   predicate (shared `commandStatePredicate`) against `VehicleSnapshot` and
+   sets `VehiclePollState.pendingCommandUntil` so the poller's single fetch
+   path doubles as confirmation sampling.

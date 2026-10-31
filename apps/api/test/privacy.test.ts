@@ -5,6 +5,7 @@ process.env.NODE_ENV = 'test';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app';
+import { initRedis } from '../src/core/redis';
 import type { Server } from 'node:http';
 import { prisma, ensureTelemetryPartition } from '../src/core/db';
 import { randomId } from '../src/core/crypto';
@@ -16,6 +17,7 @@ import { runAccountDeletion } from '../src/jobs/account-deletion';
 let server: Server;
 
 beforeAll(async () => {
+  await initRedis();
   server = buildApp({ serveSpa: false }).listen(0);
   await new Promise<void>((resolve) => server.once('listening', resolve));
 }, 30_000);

@@ -365,6 +365,7 @@ model Vehicle {
   createdAt         DateTime @db.Timestamptz(3)         @default(now())
   updatedAt         DateTime @db.Timestamptz(3)         @updatedAt
   snapshot          VehicleSnapshot?
+  pollState         VehiclePollState?
   locations         VehicleLocation?
   drives            Drive[]
   chargeSessions    ChargingSession[]
@@ -690,6 +691,23 @@ model PushSubscription {
 // Vehicle commands
 // ---------------------------------------------------------------------------
 
+model VehiclePollState {
+  vehicleId         String    @id
+  vehicle           Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  connectivity      String    @default("unknown")
+  activity          Json?
+  lastVehicleDataAt DateTime? @db.Timestamptz(3)
+  lastActivityAt    DateTime? @db.Timestamptz(3)
+  nextPollAt        DateTime  @db.Timestamptz(3) @default(now())
+  nextAction        String    @default("vehicle_data")
+  mode              String    @default("idle")
+  pendingCommandUntil DateTime? @db.Timestamptz(3)
+  userActiveUntil   DateTime? @db.Timestamptz(3)
+  suspendedUntil    DateTime? @db.Timestamptz(3)
+  backoffUntil      DateTime? @db.Timestamptz(3)
+  updatedAt         DateTime  @db.Timestamptz(3) @updatedAt
+}
+
 model VehicleCommand {
   id                String             @id @default(cuid())
   vehicleId         String
@@ -713,6 +731,8 @@ model VehicleCommand {
   submittedAt       DateTime? @db.Timestamptz(3)
   completedAt       DateTime? @db.Timestamptz(3)
   providerResponse  String?
+  responseCategory  String?
+  confirmation      String?
   errorMessage      String?
   auditEvents       CommandAuditEvent[]
   @@index([vehicleId, createdAt])
@@ -949,23 +969,6 @@ model AggregateMonthly {
 // Background jobs (Postgres queue implementation)
 // ---------------------------------------------------------------------------
 
-model BackgroundJob {
-  id          String    @id @default(cuid())
-  queue       String
-  payload     String
-  status      String    @default("pending")
-  runAt       DateTime @db.Timestamptz(3)  @default(now())
-  attempts    Int       @default(0)
-  maxAttempts Int       @default(3)
-  lockedAt    DateTime? @db.Timestamptz(3)
-  lockedBy    String?
-  startedAt   DateTime? @db.Timestamptz(3)
-  doneAt      DateTime? @db.Timestamptz(3)
-  error       String?
-  dedupeKey   String?
-  @@index([queue, status, runAt])
-  @@index([dedupeKey])
-}
 
 model DataRetentionJob {
   id             String   @id @default(cuid())

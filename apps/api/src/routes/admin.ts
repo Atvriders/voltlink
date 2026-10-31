@@ -173,10 +173,9 @@ adminRouter.get(
       migrationsCurrent = false;
     }
     const queue = getQueue();
-    const depth = await queue.depth('default').catch(() => -1);
-    const workersActive = await prisma.backgroundJob
-      .count({ where: { status: 'processing', lockedAt: { gt: new Date(Date.now() - 60_000) } } })
-      .then((n) => n > 0);
+    const depth = await queue.depth('vehicle-commands').catch(() => -1);
+    const workerBeat = await getSetting('workerBeat');
+    const workersActive = !!workerBeat && Date.now() - new Date(workerBeat).getTime() < 90_000;
     const freshSnap = await prisma.vehicleSnapshot.findFirst({
       where: { fetchedAt: { gt: new Date(Date.now() - 15 * 60000) } },
     });
@@ -217,38 +216,38 @@ adminRouter.post(
   { auth: 'session', target: { kind: 'instanceAdmin' } },
   async (req, res) => {
     const queueName = String(req.params.queueName).slice(0, 40);
-    const n = await prisma.backgroundJob.updateMany({
-      where: { queue: queueName, status: 'dead' },
-      data: { status: 'pending', attempts: 0, runAt: new Date() },
-    });
-    res.json({ data: { requeued: n.count } });
+    const { queue } = await import('../jobs/queues');
+    const failed = await queue(queueName as never).getFailed(0, 1_000);
+    let n = 0;
+    for (const job of failed) {
+      await job.retry().catch(() => undefined);
+      n += 1;
+    }
+    res.json({ data: { requeued: n } });
   },
 );
 
 adminRouter.get(
   '/queue/dead',
   { auth: 'session', target: { kind: 'instanceAdmin' } },
-  async (req, res) => {
-    const rows = await prisma.backgroundJob.findMany({
-      where: { status: 'dead' },
-      orderBy: { doneAt: 'desc' },
-      take: 50,
-    });
-    res.json({
-      data: rows.map((r) => ({
-        id: r.id,
-        queue: r.queue,
-        error: r.error ?? '',
-        attempts: r.attempts,
-        doneAt: r.doneAt?.toISOString(),
-        payload: (() => {
-          try {
-            return JSON.parse(r.payload);
-          } catch {
-            return null;
-          }
-        })(),
-      })),
-    });
+  async (_req, res) => {
+    const { queue, QUEUE_DEFAULTS } = await import('../jobs/queues');
+    const names = Object.keys(QUEUE_DEFAULTS);
+    const rows: { id: string; queue: string; error: string; attempts: number; doneAt?: string; payload: unknown }[] = [];
+    for (const name of names) {
+      const jobs = await queue(name as never).getFailed(0, 50).catch(() => []);
+      for (const job of jobs) {
+        rows.push({
+          id: String(job.id),
+          queue: name,
+          error: job.failedReason ?? '',
+          attempts: job.attemptsMade,
+          doneAt: job.finishedOn ? new Date(job.finishedOn).toISOString() : undefined,
+          payload: job.data as unknown,
+        });
+      }
+    }
+    rows.sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? ''));
+    res.json({ data: rows.slice(0, 50) });
   },
 );

@@ -6,9 +6,11 @@ import { sseStart, sseStop } from './core/sse';
 import { waitForMigrations } from './cli/migrate';
 import { prisma } from './core/db';
 import { ensureComponents, runStatusChecks } from './status/service';
+import { initRedis } from './core/redis';
 
 async function main(): Promise<void> {
   validateEnv();
+  await initRedis();
   await import('./net/policy').then((m) => m.buildOutboundPolicy());
   await waitForMigrations();
   await prisma.$connect();
