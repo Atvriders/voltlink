@@ -28,6 +28,8 @@ COPY packages/shared packages/shared
 COPY apps/api apps/api
 COPY apps/web apps/web
 COPY scripts scripts
+COPY assets assets
+COPY blender blender
 # prisma generate -> shared -> api (tsc + esbuild + selftest bundle) -> web -> stage apps/api/web-dist
 RUN npm run build
 

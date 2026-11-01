@@ -17,6 +17,7 @@ import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { VehicleState, VehicleWithState } from '@voltlink/shared';
+import { resolveAssetUrl } from './vehicleAssets';
 
 import { PRESETS, autoPreset, type GraphicsPreset } from './preset';
 export { PRESETS, autoPreset };
@@ -281,13 +282,24 @@ export default function VehicleViewer({
   // LOD: low/medium graphics presets load the decimated _lod variant that the
   // Blender pipeline emits alongside every class.
   const useLod = p === 'low' || p === 'medium';
-  const asset = `/assets/models/${vehicle.vehicleClass}${useLod ? '_lod' : ''}.glb`;
+  const base = `${vehicle.vehicleClass}${useLod ? '_lod' : ''}`;
+  const [asset, setAsset] = useState(`/assets/models/${base}.glb`);
+
+  useEffect(() => {
+    let cancelled = false;
+    void resolveAssetUrl(base).then((url) => {
+      if (!cancelled) setAsset(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [base]);
 
   // Preflight the GLB before letting GLTFLoader fetch it, so a missing asset
   // degrades to the procedural fallback instead of a loader error.
   useEffect(() => {
     let cancelled = false;
-    const url = `/assets/models/${vehicle.vehicleClass}${useLod ? '_lod' : ''}.glb`;
+    const url = asset;
     fetch(url, { method: 'HEAD' })
       .then((r) => {
         if (!cancelled) setAssetOk(r.ok);
@@ -298,7 +310,7 @@ export default function VehicleViewer({
     return () => {
       cancelled = true;
     };
-  }, [vehicle.vehicleClass, useLod]);
+  }, [asset]);
 
   const useGlb = assetOk === true && !missing;
 

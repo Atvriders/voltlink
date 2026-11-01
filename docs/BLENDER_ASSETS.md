@@ -1,60 +1,47 @@
-# Blender asset pipeline
+# Blender asset pipeline (guide 06)
 
-The five vehicle models are **original procedural assets** generated headlessly
-by Blender 5.x — no external model downloads.
+Single source of truth: `blender/specs/vehicle_classes.json` — six vehicle
+classes with envelopes, wheel/tire specs, doors, closures, ports and triangle
+budgets. Everything downstream (generator, validator, docs) reads this file.
 
-## Layout
+## Coordinate & articulation conventions
 
-```
-blender/
-  scripts/generate_vehicle.py   one generator, five classes + LOD flag
-  scripts/render_thumb.py       orthographic thumbnail renderer
-  scripts/validate_assets.py    GLB container + part-name validation
-  rebuild_all.sh                orchestrator (generate → thumbs → manifest → validate)
-apps/web/public/assets/models/
-  <class>.glb, <class>_lod.glb  shipped assets
-  thumbs/<class>.png            showroom thumbnails
-  manifest.json                 per-asset stats (verts/tris/bytes)
-```
+- glTF space: **x left, y up, z front**. Blender builder converts with
+  `to_blender(x,y,z) = (x, -z, y)`; the exporter swizzles back.
+- Articulated parts are **EMPTY pivots** (identity rotation/scale, position on
+  the hinge) with mesh children. Pivot nodes carry extras:
+  `{"voltlink": {kind, axis, openDeg, distance, hideAtOpen, class, lod, specVersion}}`.
+- `kind`: `rotate` (doors, frunk, trunk, liftgate, tailgate), `slide` (windows),
+  `translate` (charge port), `spin` (wheels). Positive rotation opens outward.
 
-## Classes
-
-Five visibly distinct silhouettes, all Y-up glTF with named parts:
-
-| Class               | Character                                      |
-| ------------------- | ---------------------------------------------- |
-| `compact_sedan`     | rounded hatch, low roof                        |
-| `sport_sedan`       | low stance, swept nose, ducktail spoiler       |
-| `compact_crossover` | raised ride height, roof rails                 |
-| `suv`               | tall box, long roof, rails                     |
-| `pickup`            | cab + open bed, high clearance, chunky fenders |
-
-## Rebuild
+## Pipeline (regenerate everything)
 
 ```bash
-BLENDER=~/.local/bin/blender blender/rebuild_all.sh
+blender/rebuild_all.sh   # or:
+BLENDER=blender bash blender/rebuild_all.sh
 ```
 
-The script fails when Blender is missing, a part is missing, or validation
-fails, and prints a polygon/file-size report.
+Steps: generate 6 classes × 3 LODs (`generate_vehicle.py`), 5 environments
+(`build_environment.py`), then `scripts/assets/postprocess.ts` (gltf-transform
+dedup → prune --keep-leaves → meshopt), `scripts/assets/validate.mts`
+(C-ASSETVALID, fails the build on any violation), and `scripts/assets/stage.ts`
+(hashes files into `apps/web/public/3d/<name>.<sha256:10>.glb` +
+`manifest.json`). `apps/web` runs postprocess+stage via its `prebuild`/`predev`
+hooks.
 
-## Export conventions
+## Server & viewer
 
-- Y-up glTF with identity node rotations (`export_yup=False` — see the
-  generator header comment for why)
-- `_lod` variants drop bevels and wheel segments (~25% lighter)
-- Door/trunk/frunk/charge-port origins sit on their hinges so the viewer's
-  rotations open them correctly
-- `charge_connector` is an emissive element inside the charge port
+- API serves `/3d/manifest.json` with `Cache-Control: no-cache` and `/3d/*` as
+  immutable (1y) static files; missing 3D files are 404, never the SPA shell.
+- `apps/web/src/webgl/vehicleAssets.ts` resolves classes through the manifest;
+  `articulation.ts` applies poses purely from node extras.
+- Budgets (lod0 60k–110k tris ≤3.5 MB, lod1 ≤40k, lod2 ≤12k; environments
+  ≤60k) are enforced by the validator and checked in CI.
 
-## Validation
+## Verification
 
-`validate_assets.py` (no Blender required) checks every GLB: container
-structure, glTF version, JSON chunk, all 15 required part names, thumbnails,
-and manifest consistency. CI runs it on every push.
-
-## Editing the models
-
-Tweak proportions in the per-class builder functions, run `rebuild_all.sh`,
-and verify in the showroom (`/showroom`) — the viewer reflects the new assets
-on the next build. Keep every required part name present or validation fails.
+- `npx tsx scripts/assets/validate.mts` → 0 failures on all 23 GLBs.
+- Playwright projects `webgl-swiftshader` (software GL) and `no-webgl`
+  (graceful degradation) exercise the showroom both ways.
+- `packages/shared/src/validate-assets.test.ts` runs the validator against
+  good and deliberately corrupted fixtures.

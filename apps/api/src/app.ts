@@ -194,6 +194,16 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
   if (opts.serveSpa) {
     const spaDir = PATHS.webDist;
     if (fs.existsSync(spaDir)) {
+      // 3D assets: hashed, immutable, with a no-cache manifest (guide 06 §11).
+      const threeDDir = path.join(spaDir, '3d');
+      if (fs.existsSync(threeDDir)) {
+        app.get('/3d/manifest.json', (_req, res) => {
+          res.set('Cache-Control', 'no-cache');
+          res.sendFile(path.join(threeDDir, 'manifest.json'));
+        });
+        app.use('/3d', express.static(threeDDir, { immutable: true, maxAge: '1y', index: false }));
+        app.use('/3d', (_req, res) => res.status(404).end());
+      }
       app.use(express.static(spaDir, { index: false, maxAge: '7d' }));
       app.use((req, res, next) => {
         if (req.path.startsWith('/api') || req.method !== 'GET') {

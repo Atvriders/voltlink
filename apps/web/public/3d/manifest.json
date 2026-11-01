@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "files": {
+    "compact_crossover": {
+      "url": "/3d/compact_crossover.91dca7ed60.glb",
+      "bytes": 359128,
+      "sha256": "91dca7ed6046dc5eaac95af8b0b97ed1c842a2d06689a9cd330d60eab1f00316"
+    },
+    "compact_crossover_lod": {
+      "url": "/3d/compact_crossover_lod.72a0a49b9d.glb",
+      "bytes": 68768,
+      "sha256": "72a0a49b9dbbd68420adfb76f801e5f004ef97014c3ecf9722e18a87d9cc4938"
+    },
+    "compact_crossover_lod2": {
+      "url": "/3d/compact_crossover_lod2.5a6b6b15d2.glb",
+      "bytes": 43296,
+      "sha256": "5a6b6b15d2093c5473fbc118fc1f016000136e52b1527c7936a586dbd5819d4f"
+    },
+    "compact_sedan": {
+      "url": "/3d/compact_sedan.7ddd32ff7f.glb",
+      "bytes": 349788,
+      "sha256": "7ddd32ff7fb1fba766cac03c553b5a22ff707246ca3b1f655778ce87a7ac4fc3"
+    },
+    "compact_sedan_lod": {
+      "url": "/3d/compact_sedan_lod.22af2dc5d7.glb",
+      "bytes": 68484,
+      "sha256": "22af2dc5d7bb146585beeadb13e2ed0aaa85fc995ec79a4dbdaeaf45d99ed229"
+    },
+    "compact_sedan_lod2": {
+      "url": "/3d/compact_sedan_lod2.32fc58c73d.glb",
+      "bytes": 42928,
+      "sha256": "32fc58c73dcf5203b04d95aa9c350b757541a54248d0d082a339c5087af7baa6"
+    },
+    "fallback": {
+      "url": "/3d/fallback.eb2ea1b58c.glb",
+      "bytes": 310400,
+      "sha256": "eb2ea1b58cd25607330613c9bb8279b2d8bfed1c3aa0b22e819db6884b224c15"
+    },
+    "fallback_lod": {
+      "url": "/3d/fallback_lod.ce9d00da11.glb",
+      "bytes": 65660,
+      "sha256": "ce9d00da111c82b6a1103ca98466c35d3c793ba0a10d52c679489565a0323be9"
+    },
+    "fallback_lod2": {
+      "url": "/3d/fallback_lod2.0be6d74993.glb",
+      "bytes": 42344,
+      "sha256": "0be6d749934bf4c56fef944705a35d8e1c017244f8c4c540f2746d6ca2769d29"
+    },
+    "pickup": {
+      "url": "/3d/pickup.d4688fa9c5.glb",
+      "bytes": 292980,
+      "sha256": "d4688fa9c52d8e241d441f8ee6046aee59c85f708626784c779078a039657183"
+    },
+    "pickup_lod": {
+      "url": "/3d/pickup_lod.4794aef3a7.glb",
+      "bytes": 65540,
+      "sha256": "4794aef3a7d2b287bbaec8dfbb753cb4a976538f0e69a49a856e553617cd1dcf"
+    },
+    "pickup_lod2": {
+      "url": "/3d/pickup_lod2.fa20871e4f.glb",
+      "bytes": 42180,
+      "sha256": "fa20871e4f2d8e94726fc50fc9d251f37ca393d126ee34feeb24d531c0316c7d"
+    },
+    "sport_sedan": {
+      "url": "/3d/sport_sedan.35a125016e.glb",
+      "bytes": 292600,
+      "sha256": "35a125016ef526fa78ead7cd90f0b6a249992fbebe7f98c5fc6e67444e083639"
+    },
+    "sport_sedan_lod": {
+      "url": "/3d/sport_sedan_lod.fc924c7cd4.glb",
+      "bytes": 65456,
+      "sha256": "fc924c7cd436166247eb1c19a041a9536fca8c62db23c4f75e80641f13f596b1"
+    },
+    "sport_sedan_lod2": {
+      "url": "/3d/sport_sedan_lod2.83f54f01b5.glb",
+      "bytes": 42368,
+      "sha256": "83f54f01b5d37c9691fdcffd928cceaf93824b2f3393e2f1c292a121a3d439ba"
+    },
+    "suv": {
+      "url": "/3d/suv.9316c880bb.glb",
+      "bytes": 356252,
+      "sha256": "9316c880bbd7195bb028118eee8ae71900af6b461e4749ff0017df09b965e3b4"
+    },
+    "suv_lod": {
+      "url": "/3d/suv_lod.e6d2162c9e.glb",
+      "bytes": 69608,
+      "sha256": "e6d2162c9e861a9562510e7d49078416bd23300488481620adc83f98d7b20ba9"
+    },
+    "suv_lod2": {
+      "url": "/3d/suv_lod2.59e6734288.glb",
+      "bytes": 42952,
+      "sha256": "59e6734288473729024d488e4bf95245d56a25af89b2851e706fe9d0beecab63"
+    },
+    "charging_bay": {
+      "url": "/3d/charging_bay.9c35a0f570.glb",
+      "bytes": 4264,
+      "sha256": "9c35a0f570ba9881109cc70eed8b5a965537fbaf3b6472cf744c392d2ba944b5"
+    },
+    "diagnostic": {
+      "url": "/3d/diagnostic.9505dbb87c.glb",
+      "bytes": 4248,
+      "sha256": "9505dbb87c8902b973e9cca008828fcfd45e4d86b3246d7283197e867844b286"
+    },
+    "fleet_depot": {
+      "url": "/3d/fleet_depot.a811088786.glb",
+      "bytes": 5644,
+      "sha256": "a811088786459906cff1d0e7d7998d053a8e089159a8991bd1b93d1f17224be9"
+    },
+    "garage": {
+      "url": "/3d/garage.a540265270.glb",
+      "bytes": 5032,
+      "sha256": "a540265270097574dab8c0463f1f3eca32c6b6e669551935ec0a41bebd9576e2"
+    },
+    "studio": {
+      "url": "/3d/studio.4948e2a07c.glb",
+      "bytes": 4220,
+      "sha256": "4948e2a07cf27c8ef15515d91295fcab964f528bde68d07a5fdbf9098b7fd317"
+    }
+  }
+}

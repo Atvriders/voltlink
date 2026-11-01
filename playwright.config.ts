@@ -15,15 +15,28 @@ export default defineConfig({
     viewport: { width: 1360, height: 900 },
   },
   projects: [
-    { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
+    { name: 'desktop', use: { ...devices['Desktop Chrome'] }, testIgnore: /no-webgl\.spec\.ts/ },
     // Gate 7: every page is exercised at desktop, tablet and mobile sizes.
     // Visual snapshots are desktop-only (viewport coverage lives in the
     // acceptance spec, which asserts layout on Pixel 7 and iPad profiles).
     {
       name: 'tablet',
       use: { ...devices['iPad Pro 11'], defaultBrowserType: 'chromium', browserName: 'chromium' },
-      testIgnore: /visual\.spec\.ts/,
+      testIgnore: /visual\.spec\.ts|no-webgl\.spec\.ts/,
     },
-    { name: 'mobile', use: { ...devices['Pixel 7'] }, testIgnore: /visual\.spec\.ts/ },
+    { name: 'mobile', use: { ...devices['Pixel 7'] }, testIgnore: /visual\.spec\.ts|no-webgl\.spec\.ts/ },
+    // Guide 06 §12: WebGL rendering is exercised both on real GL and on the
+    // SwiftShader software path, and WebGL-disabled browsers degrade instead
+    // of crashing (G-14).
+    {
+      name: 'webgl-swiftshader',
+      use: { ...devices['Desktop Chrome'], launchOptions: { args: ['--use-gl=swiftshader', '--disable-gpu'] } },
+      testMatch: /webgl-assets\.spec\.ts/,
+    },
+    {
+      name: 'no-webgl',
+      use: { ...devices['Desktop Chrome'], launchOptions: { args: ['--disable-webgl', '--disable-gpu'] } },
+      testMatch: /no-webgl\.spec\.ts/,
+    },
   ],
 });

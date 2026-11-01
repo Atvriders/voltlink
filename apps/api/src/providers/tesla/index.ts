@@ -18,8 +18,19 @@ import type {
   VehicleProvider,
 } from '../types';
 import type { CommandParams, CommandType } from '@voltlink/shared';
+import type { VehicleClass } from '@voltlink/shared';
 
 const VEHICLES_PATH = '/api/1/vehicles';
+
+// Map Tesla VIN digit 8 (model code) to a VoltLink vehicle class (guide 06 §12).
+const CLASS_BY_VIN8: Record<string, VehicleClass> = {
+  '3': 'compact_sedan',
+  S: 'sport_sedan',
+  X: 'suv',
+  Y: 'compact_crossover',
+};
+export const parseClass = (vin: string): VehicleClass =>
+  CLASS_BY_VIN8[vin.charAt(7)?.toUpperCase()] ?? 'fallback';
 
 export class TeslaProviderImpl implements VehicleProvider {
   id = 'tesla' as const;
@@ -115,7 +126,7 @@ export class TeslaProviderImpl implements VehicleProvider {
           make: 'Tesla',
           model: undefined,
           year: undefined,
-          vehicleClass: 'fallback',
+          vehicleClass: parseClass(v.vin),
           vinLast4: v.vin.slice(-4),
           capabilities,
           capabilityDetails: details as Record<

@@ -20,18 +20,27 @@ function run(args: string[]): void {
 }
 
 mkdirSync(outDir, { recursive: true });
-const files = readdirSync(srcDir).filter((f) => f.endsWith('.glb'));
+const groups: { files: string[]; rel: string }[] = [
+  { files: readdirSync(srcDir).filter((f) => f.endsWith('.glb')), rel: '' },
+  ...(existsSync(path.join(srcDir, 'env'))
+    ? [{ files: readdirSync(path.join(srcDir, 'env')).filter((f) => f.endsWith('.glb')), rel: 'env' }]
+    : []),
+];
+for (const { files, rel } of groups) {
 for (const file of files) {
-  const src = path.join(srcDir, file);
-  const out = path.join(outDir, file);
-  const t1 = path.join(outDir, file.replace('.glb', '.t1.glb'));
-  const t2 = path.join(outDir, file.replace('.glb', '.t2.glb'));
+  const src = path.join(srcDir, rel, file);
+  const sub = path.join(outDir, rel);
+  mkdirSync(sub, { recursive: true });
+  const out = path.join(sub, file);
+  const t1 = path.join(sub, file.replace('.glb', '.t1.glb'));
+  const t2 = path.join(sub, file.replace('.glb', '.t2.glb'));
   // No textures in this pipeline; the KTX2/WebP steps are intentionally a
   // no-op and the manifest records the texture backend as "none".
   run(['dedup', src, t1]);
   run(['prune', t1, t2, '--keep-leaves', 'true']);
   run(['meshopt', t2, out]);
   for (const tmp of [t1, t2]) if (existsSync(tmp)) require('node:fs').rmSync(tmp);
-  console.log(`postprocessed ${file} -> processed/${file}`);
+  console.log(`postprocessed ${rel}/${file}`);
+}
 }
 console.log('postprocess done');

@@ -2,14 +2,17 @@
   "name": "@voltlink/web",
   "version": "1.0.0",
   "private": true,
-  "description": "VoltLink SPA — React 19 + Vite 7 + React Router 7 + Tailwind + TanStack Query + MapLibre + React Three Fiber.",
+  "description": "VoltLink SPA \u2014 React 19 + Vite 7 + React Router 7 + Tailwind + TanStack Query + MapLibre + React Three Fiber.",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "assets": "tsx ../../scripts/assets/postprocess.ts && tsx ../../scripts/assets/stage.ts",
+    "prebuild": "npm run assets",
+    "predev": "npm run assets"
   },
   "dependencies": {
     "@react-three/drei": "^10.6.0",
