@@ -1,16 +1,8 @@
-# VoltLink vehicle asset generator (Blender 5.x, headless).
-#
-# Generates the five original VoltLink vehicle classes as GLB with a named-part
-# convention consumed by apps/web/src/webgl/VehicleViewer.tsx:
-#   body, windows, wheels, mirrors, interior,
-#   door_fl, door_fr, door_rl, door_rr, trunk, frunk,
-#   charge_port, charge_connector, headlights, taillights
-#
-# Usage:
-#   blender -b -P generate_vehicle.py -- --class suv [--lod] [--out <dir>]
-#
-# Each class has a clearly distinct silhouette (proportions, greenhouse, bed,
-# ride height) so the five vehicles are visibly different in the showroom.
+# VoltLink vehicle asset generator — spec-driven, pivot/extras conventions per
+# guide 06 §1-§4. Authoring in glTF space (x left, y up, z front, metres);
+# every position is converted once with to_blender().
+# Usage: blender --background --factory-startup --python-exit-code 1 \
+#          --python generate_vehicle.py -- --class suv [--lod 0|1|2] [--out dir]
 
 import argparse
 import json
@@ -19,15 +11,44 @@ import os
 import sys
 
 import bpy
-from mathutils import Vector, Euler, Matrix
+import bmesh
+from mathutils import Vector, Matrix
 
-# --------------------------------------------------------------------------
-# Materials
-# --------------------------------------------------------------------------
+SPEC = None
+LOD = 0
+OUT = "assets/models"
+
+
+def to_blender(p):
+    """glTF (x left, y up, z front) -> Blender (x, -z, y)."""
+    return Vector((p[0], -p[2], p[1]))
+
+
+def parse_args():
+    global SPEC, LOD, OUT
+    argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--class", required=True)
+    ap.add_argument("--lod", type=int, default=0)
+    ap.add_argument("--out", default="assets/models")
+    a = ap.parse_args(argv)
+    LOD = a.lod
+    OUT = a.out
+    spec_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "specs", "vehicle_classes.json")
+    with open(spec_path, "r", encoding="utf-8") as f:
+        SPEC = json.load(f)["classes"][a.__dict__["class"]]
+
+
+def clear_scene():
+    for block in list(bpy.data.objects):
+        bpy.data.objects.remove(block, do_unlink=True)
+    for m in list(bpy.data.meshes):
+        bpy.data.meshes.remove(m, do_unlink=True)
+    for m in list(bpy.data.materials):
+        bpy.data.materials.remove(m, do_unlink=True)
+
 
 MAT_CACHE = {}
-
-LOD = False  # set per-run in main(); low-detail export
 
 
 def mat(name, base, metallic=0.0, roughness=0.5, emission=None, emission_strength=1.0, transmission=0.0):
@@ -37,604 +58,409 @@ def mat(name, base, metallic=0.0, roughness=0.5, emission=None, emission_strengt
     m = bpy.data.materials.new(name)
     m.use_nodes = True
     bsdf = m.node_tree.nodes.get("Principled BSDF")
-    bsdf.inputs["Base Color"].default_value = (*base, 1.0)
+    if bsdf is None:
+        bsdf = m.node_tree.nodes.new("ShaderNodeBsdfPrincipled")
+    bsdf.inputs["Base Color"].default_value = (base[0], base[1], base[2], 1.0)
     bsdf.inputs["Metallic"].default_value = metallic
     bsdf.inputs["Roughness"].default_value = roughness
-    if emission is not None:
-        bsdf.inputs["Emission Color"].default_value = (*emission, 1.0)
-        bsdf.inputs["Emission Strength"].default_value = emission_strength
-    bsdf.inputs["Transmission Weight"].default_value = transmission
     if transmission > 0:
-        bsdf.inputs["Roughness"].default_value = 0.08
+        bsdf.inputs["Transmission Weight"].default_value = transmission
+    if emission is not None:
+        bsdf.inputs["Emission Color"].default_value = (emission[0], emission[1], emission[2], 1.0)
+        bsdf.inputs["Emission Strength"].default_value = emission_strength
     MAT_CACHE[key] = m
     return m
 
 
-def assign(mesh_obj, material):
-    if mesh_obj.data.materials:
-        mesh_obj.data.materials[0] = material
-    else:
-        mesh_obj.data.materials.append(material)
+def box_mesh(name, size_gltf, center_gltf=(0, 0, 0), material=None):
+    sx, sy, sz = size_gltf
+    me = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    verts = []
+    for ix in (-1, 1):
+        for iy in (-1, 1):
+            for iz in (-1, 1):
+                verts.append(bm.verts.new(to_blender((ix * sx / 2, iy * sy / 2, iz * sz / 2))))
+    bm.verts.ensure_lookup_table()
+    faces = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+    for f in faces:
+        try:
+            bm.faces.new([bm.verts[i] for i in f])
+        except ValueError:
+            pass
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new(name, me)
+    bpy.context.scene.collection.objects.link(ob)
+    ob.location = to_blender(center_gltf)
+    if material is not None:
+        ob.data.materials.append(material)
+    return ob
 
 
-def smooth(mesh_obj):
-    mesh_obj.data.polygons.foreach_set("use_smooth", [True] * len(mesh_obj.data.polygons))
-    mesh_obj.data.update()
+def empty(name, location_gltf=(0, 0, 0)):
+    ob = bpy.data.objects.new(name, None)
+    bpy.context.scene.collection.objects.link(ob)
+    ob.location = to_blender(location_gltf)
+    return ob
 
 
-# --------------------------------------------------------------------------
-# Primitives
-# --------------------------------------------------------------------------
-
-def box(name, size, location=(0, 0, 0), rotation=(0, 0, 0), material=None):
-    bpy.ops.mesh.primitive_cube_add(size=1, location=location, rotation=rotation)
-    obj = bpy.context.active_object
-    obj.name = name
-    obj.scale = Vector(size)
-    if material:
-        assign(obj, material)
-    smooth(obj)
-    return obj
+def pivot(name, location_gltf, extras):
+    ob = empty(name, location_gltf)
+    ob["voltlink"] = extras
+    return ob
 
 
-def cylinder(name, radius, depth, location=(0, 0, 0), rotation=(0, 0, 0), material=None, segments=32):
-    bpy.ops.mesh.primitive_cylinder_add(radius=radius, depth=depth, vertices=segments, location=location, rotation=rotation)
-    obj = bpy.context.active_object
-    obj.name = name
-    if material:
-        assign(obj, material)
-    smooth(obj)
-    return obj
-
-
-def sphere(name, radius, location=(0, 0, 0), material=None, segments=24):
-    bpy.ops.mesh.primitive_uv_sphere_add(radius=radius, location=location, segments=segments, ring_count=12)
-    obj = bpy.context.active_object
-    obj.name = name
-    if material:
-        assign(obj, material)
-    smooth(obj)
-    return obj
-
-
-def empty(name, location=(0, 0, 0)):
-    bpy.ops.object.empty_add(type="PLAIN_AXES", location=location)
-    obj = bpy.context.active_object
-    obj.name = name
-    return obj
+def world_matrix(obj):
+    """Recursive world transform from basis matrices (depsgraph-free)."""
+    if obj.parent:
+        return world_matrix(obj.parent) @ obj.matrix_basis
+    return obj.matrix_basis.copy()
 
 
 def parent(child, parent_obj):
     child.parent = parent_obj
-    child.matrix_parent_inverse = parent_obj.matrix_world.inverted()
+    # Blender's cached matrix_world can be stale inside a headless script;
+    # compute the parent world recursively and set the inverse explicitly so
+    # the exported local transform is identity for meshes moved to their pivot.
+    child.matrix_parent_inverse = world_matrix(parent_obj).inverted()
 
 
-def bevel(obj, width=0.03, segments=2):
-    if LOD:
-        return
-    mod = obj.modifiers.new("bevel", "BEVEL")
-    mod.width = width
-    mod.segments = 2 if segments else 1
-    mod.limit_method = "ANGLE"
-    mod.angle_limit = math.radians(50)
+def shift_origin(obj, new_origin_gltf):
+    # Keep the mesh where it is in the world and move the origin onto the
+    # hinge: vertices are translated by (old_origin - new_origin), so a point
+    # that sat at the hinge now sits at local zero.
+    delta = obj.location - to_blender(new_origin_gltf)
+    obj.data.transform(Matrix.Translation(delta))
+    obj.location = to_blender(new_origin_gltf)
 
 
-def set_origin(obj, world_point):
-    saved = bpy.context.scene.cursor.location
-    bpy.ops.object.select_all(action="DESELECT")
-    obj.select_set(True)
-    bpy.context.view_layer.objects.active = obj
-    bpy.context.scene.cursor.location = world_point
-    bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
-    bpy.context.scene.cursor.location = saved
-
-
-def clear_scene():
-    bpy.ops.object.select_all(action="SELECT")
-    bpy.ops.object.delete(use_global=False)
-    for block in list(bpy.data.meshes):
-        bpy.data.meshes.remove(block)
-    for block in list(bpy.data.materials):
-        bpy.data.materials.remove(block)
-
-
-# --------------------------------------------------------------------------
-# Shared assembly: wheels, mirrors, lamps, ports
-# --------------------------------------------------------------------------
-
-def build_wheels(spec, rim_r, tire_w, mat_tire, mat_rim):
-    """spec: dict with axle_y (front/back), track (half-width)."""
+def build_wheels(spec, tire_od, track, wheelbase, front_z, mat_tire, mat_rim, mat_brake):
     group = empty("wheels")
-    seg = 14 if LOD else 28
-    for axle_key in ("front", "rear"):
-        ay, z, track, rim = spec[axle_key]
-        for side in (-1, 1):
-            name = f"wheel_{'f' if axle_key == 'front' else 'r'}{'l' if side < 0 else 'r'}"
-            tire = cylinder(name, rim_r, tire_w, (side * track, z, ay), (0, math.pi / 2, 0), mat_tire, seg)
-            hub = cylinder(name + "_rim", rim, tire_w * 0.55, (side * track, z, ay), (0, math.pi / 2, 0), mat_rim, 12 if LOD else 20)
-            parent(hub, tire)
-            parent(tire, group)
+    half_w = spec["tire"]["widthMm"] / 2000.0
+    radius = tire_od / 2.0
+    for side, sx in (("l", 1), ("r", -1)):
+        for ax, az in (("f", front_z), ("r", front_z - wheelbase)):
+            name = f"wheel_{ax}{side}"
+            piv = pivot(name, (sx * track / 2, radius, az), {"kind": "spin", "axis": [1, 0, 0], "radiusM": radius})
+            parent(piv, group)
+            tire = box_mesh(f"tire_{ax}{side}", (2 * half_w, 2 * radius, 2 * radius), (sx * track / 2, radius, az), mat_tire)
+            parent(tire, piv)
+            rim_hw = half_w - 0.015
+            rim = box_mesh(f"rim_{ax}{side}", (2 * rim_hw, 2 * (radius - 0.09), 2 * (radius - 0.09)), (sx * track / 2, radius, az), mat_rim)
+            parent(rim, piv)
+            brake = box_mesh(f"brake_{ax}{side}", (2 * (half_w - 0.06), 2 * (radius - 0.16), 2 * (radius - 0.16)), (sx * track / 2, radius, az), mat_brake)
+            parent(brake, piv)
     return group
 
 
-def build_mirrors(mat_body, mat_mirror):
-    group = empty("mirrors")
-    for side in (-1, 1):
-        stalk = box(f"mirror_{'l' if side < 0 else 'r'}_stalk", (0.05, 0.16, 0.03), (side * 0.92, 1.18, 0.78), material=mat_body)
-        head = box(f"mirror_{'l' if side < 0 else 'r'}_head", (0.09, 0.2, 0.1), (side * 1.0, 1.16, 0.78), material=mat_body)
-        glass = box("mirror_glass", (0.005, 0.14, 0.07), (side * 0.965, 1.16, 0.79), material=mat_mirror)
-        parent(stalk, group)
-        parent(head, group)
-        parent(glass, group)
-    return group
+def _interp(table, z):
+    # table: [[z, v], ...] sorted by z descending
+    if z >= table[0][0]:
+        return table[0][1]
+    if z <= table[-1][0]:
+        return table[-1][1]
+    for (z1, v1), (z2, v2) in zip(table, table[1:]):
+        if z2 <= z <= z1:
+            t = (z - z1) / (z2 - z1) if z2 != z1 else 0.0
+            return v1 + t * (v2 - v1)
+    return table[-1][1]
 
 
-def build_lamps(front_y, rear_y, z, front_x_half, rear_x_half, rear_z=None):
-    hl = empty("headlights")
-    for side in (-1, 1):
-        lamp = box("headlight_lamp", (0.34, 0.06, 0.11), (side * front_x_half * 0.62, z, front_y), material=mat("headlight", (0.9, 0.95, 1.0), emission=(0.6, 0.8, 1.0), emission_strength=2.0))
-        parent(lamp, hl)
-    tl = empty("taillights")
-    rz = rear_z if rear_z is not None else z
-    for side in (-1, 1):
-        lamp = box("taillight_lamp", (0.3, 0.05, 0.1), (side * rear_x_half * 0.62, rz, rear_y), material=mat("taillight", (0.55, 0.05, 0.05), emission=(0.9, 0.08, 0.08), emission_strength=2.0))
-        parent(lamp, tl)
-    return hl, tl
+def build_skin_body(spec, paint, tire_od, wheelbase, front_z, track):
+    """Body surface sampled from the spec profile/plan tables, with wheel-arch
+    holes cut by skipping stations inside the tire cylinders (ASSETS-03)."""
+    env = spec["envelope"]
+    L, gc = env["length"], env["groundClearance"]
+    top = sorted(spec["profile"]["top"], key=lambda p: -p[0])
+    bottom = sorted(spec["profile"]["bottom"], key=lambda p: -p[0])
+    belt = sorted(spec["profile"]["belt"], key=lambda p: -p[0])
+    plan = sorted(spec["plan"]["halfWidth"], key=lambda p: -p[0])
+    tumble = sorted(spec["plan"]["tumblehome"], key=lambda p: -p[0])
+    z0, z1 = -L / 2, L / 2
+    stations = [z0 + (z1 - z0) * i / 16 for i in range(17)]
+    # Insert every profile breakpoint so peaks/edges land on exact stations.
+    for table in (top, bottom, belt, plan):
+        for p in table:
+            if z0 < p[0] < z1:
+                stations.append(p[0])
+    stations = sorted(set(round(z, 4) for z in stations))
+    rows = 5
+    radius = tire_od / 2 + 0.04
+    arch_centers = [(track / 2, front_z), (track / 2, front_z - wheelbase)]
+    verts_by_station = []
+    for z in stations:
+        y_bot = _interp(bottom, z)
+        y_top = _interp(top, z)
+        belt_y = _interp(belt, z)
+        half_w = _interp(plan, z)
+        th = _interp(tumble, z)
+        row_verts = []
+        for j in range(rows):
+            y = y_bot + (y_top - y_bot) * j / (rows - 1)
+            x = half_w if y <= belt_y else half_w - th
+            for sx in (1, -1):
+                skip = False
+                for (ax, az) in arch_centers:
+                    if abs(sx * x) > 0.3 and math.hypot(y - tire_od / 2, z - az) < radius + 0.15:
+                        skip = True
+                if skip:
+                    row_verts.append(None)
+                else:
+                    row_verts.append((sx * x, y, z))
+        verts_by_station.append(row_verts)
+    me = bpy.data.meshes.new("body_mesh")
+    bm = bmesh.new()
+    bv = []
+    for row in verts_by_station:
+        for v in row:
+            bv.append(bm.verts.new(to_blender(v)) if v else None)
+    for si in range(len(stations) - 1):
+        for j in range(rows - 1):
+            for side in (0, 1):
+                a = bv[si * (rows * 2) + j * 2 + side]
+                b = bv[si * (rows * 2) + (j + 1) * 2 + side]
+                c = bv[(si + 1) * (rows * 2) + (j + 1) * 2 + side]
+                d = bv[(si + 1) * (rows * 2) + j * 2 + side]
+                if None in (a, b, c, d):
+                    continue
+                try:
+                    bm.faces.new([a, b, c, d])
+                except ValueError:
+                    pass
+    # front and rear caps
+    for si in (0, len(stations) - 1):
+        for j in range(rows - 1):
+            a = bv[si * (rows * 2) + j * 2]
+            b = bv[si * (rows * 2) + (j + 1) * 2]
+            c = bv[si * (rows * 2) + (j + 1) * 2 + 1]
+            d = bv[si * (rows * 2) + j * 2 + 1]
+            if None in (a, b, c, d):
+                continue
+            try:
+                bm.faces.new([a, b, c, d])
+            except ValueError:
+                pass
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new("body_mesh", me)
+    bpy.context.scene.collection.objects.link(ob)
+    ob.data.materials.append(paint)
+    return ob
 
 
-def build_interior(spec, mat_seat, mat_dash):
-    """Seats, dash, steering wheel under an 'interior' empty."""
-    group = empty("interior")
-    cab = spec["cab"]
-    y = cab["y"]  # cabin center y
-    for name, (sx, sy, sz), (x, yy, zz), rot in spec["seats"]:
-        seat = box(name, (sx, sy, sz), (x, yy, zz), rot, material=mat_seat)
-        bevel(seat, 0.03, 1)
-        parent(seat, group)
-    dash = box("dash", spec["dash_size"], spec["dash_pos"], spec.get("dash_rot", (0, 0, 0)), material=mat_dash)
-    bevel(dash, 0.025, 1)
-    parent(dash, group)
-    wheel_pos = spec["wheel_pos"]
-    bpy.ops.mesh.primitive_torus_add(major_radius=0.19, minor_radius=0.025, location=wheel_pos, rotation=(0, math.pi / 2.2, 0))
-    sw = bpy.context.active_object
-    sw.name = "steering_wheel"
-    assign(sw, mat_dash)
-    smooth(sw)
-    parent(sw, group)
-    col = cylinder("steering_column", 0.025, 0.35, (wheel_pos[0], wheel_pos[1], wheel_pos[2] - 0.18), material=mat_dash)
-    parent(col, group)
-    return group
-
-
-def build_charge(spec, mat_port, mat_conn):
-    """Charge port flap on the left rear quarter + connector."""
-    p = spec["charge_port"]  # (x, z, y, flap_size)
-    x, z, y, size = p
-    port = box("charge_port", (size, 0.02, size * 1.15), (x, z, y), material=mat_port)
-    set_origin(port, (x - size / 2, y, z))  # hinge at leading edge
-    conn = cylinder("charge_connector", 0.035, 0.12, (x - 0.01, z, y), (0, math.pi / 2, 0), mat("connector", (0.1, 0.12, 0.14), emission=(0.13, 0.83, 0.93), emission_strength=1.5), 16)
-    parent(conn, port)
-    return port
-
-
-# --------------------------------------------------------------------------
-# Per-class builders — distinct, original silhouettes
-# --------------------------------------------------------------------------
-
-PAINT = {
-    "compact_sedan": (0.16, 0.34, 0.56),   # Volt Blue
-    "sport_sedan": (0.75, 0.18, 0.14),     # Ember Red
-    "compact_crossover": (0.19, 0.52, 0.46),  # Pine
-    "suv": (0.30, 0.32, 0.36),             # Graphite
-    "pickup": (0.76, 0.47, 0.13),          # Harvest Gold
-}
-
-
-def build_compact_sedan(lod):
-    paint = mat("paint", PAINT["compact_sedan"], metallic=0.55, roughness=0.3)
-    trim = mat("trim", (0.09, 0.10, 0.11), roughness=0.8)
-    glass = mat("glass", (0.05, 0.07, 0.09), roughness=0.1, transmission=0.85)
-    seat = mat("seat", (0.16, 0.15, 0.14), roughness=0.9)
-    dash = mat("dash", (0.07, 0.07, 0.08), roughness=0.7)
-    # body: low slab + tapered greenhouse, rounded hatch rear
-    body = empty("body")
-    base = box("base", (1.78, 0.42, 3.95), (0, 0.36, 0), material=paint)
-    bevel(base, 0.09, 2 if not lod else 1)
-    nose = box("nose", (1.7, 0.34, 0.62), (0, 0.5, 2.0), material=paint)
-    bevel(nose, 0.07, 1)
-    cab = box("cab", (1.6, 0.48, 2.05), (0, 0.96, -0.12), material=paint)
-    bevel(cab, 0.11, 2 if not lod else 1)
-    hatch = box("hatch", (1.6, 0.75, 0.5), (0, 1.1, -1.9), (math.radians(-24), 0, 0), material=paint)
-    bevel(hatch, 0.06, 1)
-    for part in (base, nose, cab, hatch):
-        parent(part, body)
-    windows = empty("windows")
-    for side in (-1, 1):
-        w = box("window_glass", (0.03, 0.42, 1.5), (side * 0.8, 1.08, -0.1), material=glass)
-        parent(w, windows)
-    windshield = box("windshield", (1.5, 0.6, 0.05), (0, 1.18, 0.95), (math.radians(38), 0, 0), material=glass)
-    parent(windshield, windows)
-    rear = box("rear_window", (1.42, 0.42, 0.05), (0, 1.16, -1.5), (math.radians(-34), 0, 0), material=glass)
-    parent(rear, windows)
-    wheels = build_wheels(
-        {"front": (1.28, 0.31, 0.78, 0.19), "rear": (-1.28, 0.31, 0.78, 0.19)},
-        0.31, 0.22, trim, mat("rim", (0.78, 0.8, 0.82), metallic=0.9, roughness=0.25))
-    mirrors = build_mirrors(paint, mat("mirror", (0.7, 0.85, 0.95), metallic=0.4, roughness=0.1))
-    hl, tl = build_lamps(2.02, -1.98, 0.62, 1.7, 1.6)
-    spec = {
-        "cab": {"y": 0},
-        "seats": [
-            ("seat_fl", (0.5, 0.12, 0.55), (-0.36, 0.72, 0.75), (0, 0, math.radians(-8))),
-            ("seat_fr", (0.5, 0.12, 0.55), (0.36, 0.72, 0.75), (0, 0, math.radians(8))),
-            ("seat_rear", (1.24, 0.12, 0.55), (0, 0.72, -0.45), (0, 0, 0)),
-        ],
-        "dash_size": (1.3, 0.12, 0.5),
-        "dash_pos": (0, 0.86, 1.28),
-        "wheel_pos": (0.36, 0.9, 1.1),
-    }
-    interior = build_interior(spec, seat, dash)
-    port = build_charge({"charge_port": (-0.88, 0.78, -1.2, 0.24)}, paint, mat("connector", (0.1, 0.12, 0.14), emission=(0.13, 0.83, 0.93), emission_strength=1.5))
-    # doors with hinges at leading edge
-    doors = empty("doors_anchor")
-    for name, x, y_center, y_span, sign in (("door_fl", -0.9, 0.15, 0.86, -1), ("door_fr", 0.9, 0.15, 0.86, 1)):
-        d = box(name, (0.06, 0.72, y_span), (x, 0.78, y_center), material=paint)
-        bevel(d, 0.035, 1)
-        set_origin(d, (x, 0.78, y_center - (sign * y_span / 2)))
-        parent(d, doors)
-    for name, x, y_center, y_span, sign in (("door_rl", -0.88, -0.62, 0.78, -1), ("door_rr", 0.88, -0.62, 0.78, 1)):
-        d = box(name, (0.06, 0.72, y_span), (x, 0.78, y_center), material=paint)
-        bevel(d, 0.035, 1)
-        set_origin(d, (x, 0.78, y_center - (sign * y_span / 2)))
-        parent(d, doors)
-    # NOTE: viewer looks for 'door_*' by name anywhere in the hierarchy
-    trunk = box("trunk", (1.62, 0.68, 0.08), (0, 1.16, -1.82), material=paint)
-    set_origin(trunk, (0, 1.5, -1.82))
-    frunk = box("frunk", (1.56, 0.62, 0.06), (0, 0.72, 1.86), material=paint)
-    set_origin(frunk, (0, 0.76, 2.2))
-    return [body, windows, wheels, mirrors, hl, tl, interior, port, doors, trunk, frunk]
-
-
-def build_sport_sedan(lod):
-    paint = mat("paint", PAINT["sport_sedan"], metallic=0.6, roughness=0.22)
-    trim = mat("trim", (0.08, 0.08, 0.09), roughness=0.8)
-    glass = mat("glass", (0.04, 0.06, 0.08), roughness=0.1, transmission=0.85)
-    seat = mat("seat", (0.12, 0.09, 0.1), roughness=0.85)
-    dash = mat("dash", (0.06, 0.06, 0.07), roughness=0.65)
-    body = empty("body")
-    base = box("base", (1.86, 0.34, 4.15), (0, 0.32, 0.08), material=paint)
-    bevel(base, 0.07, 2 if not lod else 1)
-    nose = box("nose", (1.8, 0.22, 1.25), (0, 0.42, 2.45), material=paint)
-    bevel(nose, 0.06, 2 if not lod else 1)
-    cab = box("cab", (1.68, 0.38, 1.95), (0, 0.86, 0.16), material=paint)
-    bevel(cab, 0.12, 2 if not lod else 1)
-    spoiler = box("spoiler", (1.55, 0.06, 0.4), (0, 1.04, -1.95), (math.radians(-7), 0, 0), material=paint)
-    bevel(spoiler, 0.02, 1)
-    diffuser = box("diffuser", (1.4, 0.12, 0.4), (0, 0.2, -2.05), material=trim)
-    for part in (base, nose, cab, spoiler, diffuser):
-        parent(part, body)
-    windows = empty("windows")
-    for side in (-1, 1):
-        w = box("window_glass", (0.03, 0.36, 1.4), (side * 0.84, 0.96, 0.18), material=glass)
-        parent(w, windows)
-    windshield = box("windshield", (1.58, 0.52, 0.05), (0, 1.0, 1.28), (math.radians(46), 0, 0), material=glass)
-    parent(windshield, windows)
-    rear = box("rear_window", (1.46, 0.3, 0.05), (0, 0.98, -1.3), (math.radians(-42), 0, 0), material=glass)
-    parent(rear, windows)
-    wheels = build_wheels(
-        {"front": (1.42, 0.32, 0.84, 0.22), "rear": (-1.48, 0.32, 0.84, 0.22)},
-        0.32, 0.26, trim, mat("rim", (0.2, 0.22, 0.24), metallic=0.9, roughness=0.2))
-    mirrors = build_mirrors(paint, mat("mirror", (0.7, 0.85, 0.95), metallic=0.4, roughness=0.1))
-    hl, tl = build_lamps(2.38, -2.2, 0.5, 1.78, 1.66, rear_z=0.86)
-    spec = {
-        "cab": {"y": 0},
-        "seats": [
-            ("seat_fl", (0.52, 0.12, 0.6), (-0.36, 0.62, 1.05), (0, 0, math.radians(-12))),
-            ("seat_fr", (0.52, 0.12, 0.6), (0.36, 0.62, 1.05), (0, 0, math.radians(12))),
-            ("seat_rear", (1.26, 0.1, 0.55), (0, 0.62, -0.28), (0, 0, 0)),
-        ],
-        "dash_size": (1.34, 0.1, 0.5),
-        "dash_pos": (0, 0.74, 1.5),
-        "wheel_pos": (0.36, 0.78, 1.32),
-    }
-    interior = build_interior(spec, seat, dash)
-    port = build_charge({"charge_port": (-0.92, 0.68, -1.3, 0.24)}, paint, mat("connector", (0.1, 0.12, 0.14), emission=(0.13, 0.83, 0.93), emission_strength=1.5))
-    doors = empty("doors_anchor")
-    for name, x, y_center, y_span, sign in (("door_fl", -0.93, 0.42, 0.9, -1), ("door_fr", 0.93, 0.42, 0.9, 1)):
-        d = box(name, (0.05, 0.6, y_span), (x, 0.66, y_center), material=paint)
-        bevel(d, 0.03, 1)
-        set_origin(d, (x, 0.66, y_center - (sign * y_span / 2)))
-        parent(d, doors)
-    for name, x, y_center, y_span, sign in (("door_rl", -0.91, -0.42, 0.72, -1), ("door_rr", 0.91, -0.42, 0.72, 1)):
-        d = box(name, (0.05, 0.55, y_span), (x, 0.66, y_center), material=paint)
-        bevel(d, 0.03, 1)
-        set_origin(d, (x, 0.66, y_center - (sign * y_span / 2)))
-        parent(d, doors)
-    trunk = box("trunk", (1.62, 0.5, 0.08), (0, 0.98, -1.9), material=paint)
-    set_origin(trunk, (0, 1.28, -1.9))
-    frunk = box("frunk", (1.64, 0.72, 0.06), (0, 0.62, 2.34), material=paint)
-    set_origin(frunk, (0, 0.66, 2.7))
-    return [body, windows, wheels, mirrors, hl, tl, interior, port, doors, trunk, frunk]
-
-
-def build_compact_crossover(lod):
-    paint = mat("paint", PAINT["compact_crossover"], metallic=0.5, roughness=0.34)
-    trim = mat("trim", (0.09, 0.1, 0.11), roughness=0.85)
-    glass = mat("glass", (0.05, 0.07, 0.09), roughness=0.1, transmission=0.85)
-    seat = mat("seat", (0.2, 0.18, 0.15), roughness=0.9)
-    dash = mat("dash", (0.07, 0.07, 0.08), roughness=0.7)
-    body = empty("body")
-    base = box("base", (1.82, 0.5, 3.85), (0, 0.48, 0), material=paint)
-    bevel(base, 0.09, 2 if not lod else 1)
-    nose = box("nose", (1.76, 0.42, 0.6), (0, 0.62, 1.95), material=paint)
-    bevel(nose, 0.07, 1)
-    cab = box("cab", (1.68, 0.62, 2.1), (0, 1.18, -0.03), material=paint)
-    bevel(cab, 0.12, 2 if not lod else 1)
-    hatch = box("hatch", (1.66, 0.78, 0.45), (0, 1.26, -1.95), (math.radians(-14), 0, 0), material=paint)
-    bevel(hatch, 0.06, 1)
-    rails = empty("rails")
-    for side in (-1, 1):
-        r = box("roof_rail", (0.06, 0.07, 1.6), (side * 0.8, 1.62, -0.1), material=trim)
-        parent(r, rails)
-    cladding = box("cladding", (1.84, 0.16, 3.9), (0, 0.26, 0), material=trim)
-    for part in (base, nose, cab, hatch, cladding):
-        parent(part, body)
-    windows = empty("windows")
-    for side in (-1, 1):
-        w = box("window_glass", (0.03, 0.46, 1.5), (side * 0.84, 1.28, 0), material=glass)
-        parent(w, windows)
-    windshield = box("windshield", (1.56, 0.66, 0.05), (0, 1.4, 1.06), (math.radians(34), 0, 0), material=glass)
-    parent(windshield, windows)
-    rear = box("rear_window", (1.5, 0.5, 0.05), (0, 1.36, -1.62), (math.radians(-18), 0, 0), material=glass)
-    parent(rear, windows)
-    wheels = build_wheels(
-        {"front": (1.28, 0.37, 0.82, 0.22), "rear": (-1.28, 0.37, 0.82, 0.22)},
-        0.37, 0.26, trim, mat("rim", (0.75, 0.77, 0.79), metallic=0.9, roughness=0.25))
-    mirrors = build_mirrors(paint, mat("mirror", (0.7, 0.85, 0.95), metallic=0.4, roughness=0.1))
-    hl, tl = build_lamps(2.0, -1.98, 0.72, 1.76, 1.66)
-    spec = {
-        "cab": {"y": 0},
-        "seats": [
-            ("seat_fl", (0.5, 0.12, 0.55), (-0.36, 0.86, 0.72), (0, 0, math.radians(-7))),
-            ("seat_fr", (0.5, 0.12, 0.55), (0.36, 0.86, 0.72), (0, 0, math.radians(7))),
-            ("seat_rear", (1.24, 0.12, 0.55), (0, 0.86, -0.5), (0, 0, 0)),
-        ],
-        "dash_size": (1.34, 0.12, 0.5),
-        "dash_pos": (0, 1.0, 1.26),
-        "wheel_pos": (0.36, 1.04, 1.08),
-    }
-    interior = build_interior(spec, seat, dash)
-    port = build_charge({"charge_port": (-0.9, 0.9, -1.2, 0.24)}, paint, mat("connector", (0.1, 0.12, 0.14), emission=(0.13, 0.83, 0.93), emission_strength=1.5))
-    doors = empty("doors_anchor")
-    for name, x, y_center, y_span, sign in (("door_fl", -0.9, 0.2, 0.86, -1), ("door_fr", 0.9, 0.2, 0.86, 1)):
-        d = box(name, (0.06, 0.86, y_span), (x, 0.92, y_center), material=paint)
-        bevel(d, 0.035, 1)
-        set_origin(d, (x, 0.92, y_center - (sign * y_span / 2)))
-        parent(d, doors)
-    for name, x, y_center, y_span, sign in (("door_rl", -0.88, -0.68, 0.78, -1), ("door_rr", 0.88, -0.68, 0.78, 1)):
-        d = box(name, (0.06, 0.86, y_span), (x, 0.92, y_center), material=paint)
-        bevel(d, 0.035, 1)
-        set_origin(d, (x, 0.92, y_center - (sign * y_span / 2)))
-        parent(d, doors)
-    trunk = box("trunk", (1.66, 0.72, 0.08), (0, 1.32, -1.92), material=paint)
-    set_origin(trunk, (0, 1.7, -1.92))
-    frunk = box("frunk", (1.62, 0.56, 0.06), (0, 0.86, 1.84), material=paint)
-    set_origin(frunk, (0, 0.9, 2.18))
-    return [body, rails, windows, wheels, mirrors, hl, tl, interior, port, doors, trunk, frunk]
-
-
-def build_suv(lod):
-    paint = mat("paint", PAINT["suv"], metallic=0.5, roughness=0.36)
-    trim = mat("trim", (0.08, 0.08, 0.09), roughness=0.85)
-    glass = mat("glass", (0.05, 0.07, 0.09), roughness=0.1, transmission=0.85)
-    seat = mat("seat", (0.14, 0.13, 0.12), roughness=0.9)
-    dash = mat("dash", (0.06, 0.06, 0.07), roughness=0.7)
-    body = empty("body")
-    base = box("base", (1.94, 0.58, 4.35), (0, 0.6, 0), material=paint)
-    bevel(base, 0.1, 2 if not lod else 1)
-    nose = box("nose", (1.9, 0.52, 0.62), (0, 0.82, 2.2), material=paint)
-    bevel(nose, 0.08, 2 if not lod else 1)
-    cab = box("cab", (1.82, 0.85, 2.7), (0, 1.52, -0.12), material=paint)
-    bevel(cab, 0.1, 2 if not lod else 1)
-    hatch = box("hatch", (1.78, 0.82, 0.5), (0, 1.5, -2.25), (math.radians(-6), 0, 0), material=paint)
-    bevel(hatch, 0.06, 1)
-    rails = empty("rails")
-    for side in (-1, 1):
-        r = box("roof_rail", (0.07, 0.08, 1.9), (side * 0.85, 1.92, -0.1), material=trim)
-        parent(r, rails)
-    cladding = box("cladding", (1.96, 0.18, 4.4), (0, 0.32, 0), material=trim)
-    skid = box("skid", (1.6, 0.06, 0.5), (0, 0.42, 2.4), material=trim)
-    for part in (base, nose, cab, hatch, cladding, skid):
-        parent(part, body)
-    windows = empty("windows")
-    for side in (-1, 1):
-        w = box("window_glass", (0.03, 0.5, 1.9), (side * 0.9, 1.52, -0.05), material=glass)
-        parent(w, windows)
-    windshield = box("windshield", (1.68, 0.72, 0.05), (0, 1.66, 1.24), (math.radians(36), 0, 0), material=glass)
-    parent(windshield, windows)
-    rear = box("rear_window", (1.6, 0.55, 0.05), (0, 1.62, -1.85), (math.radians(-10), 0, 0), material=glass)
-    parent(rear, windows)
-    quarter = empty("quarter")
-    for side in (-1, 1):
-        q = box("quarter_window", (0.03, 0.4, 0.6), (side * 0.9, 1.52, -1.2), material=glass)
-        parent(q, quarter)
-    wheels = build_wheels(
-        {"front": (1.38, 0.44, 0.88, 0.24), "rear": (-1.38, 0.44, 0.88, 0.24)},
-        0.44, 0.3, trim, mat("rim", (0.24, 0.25, 0.27), metallic=0.9, roughness=0.22))
-    mirrors = build_mirrors(paint, mat("mirror", (0.7, 0.85, 0.95), metallic=0.4, roughness=0.1))
-    hl, tl = build_lamps(2.3, -2.22, 0.92, 1.9, 1.78, rear_z=1.1)
-    spec = {
-        "cab": {"y": 0},
-        "seats": [
-            ("seat_fl", (0.52, 0.12, 0.58), (-0.38, 1.06, 0.9), (0, 0, math.radians(-6))),
-            ("seat_fr", (0.52, 0.12, 0.58), (0.38, 1.06, 0.9), (0, 0, math.radians(6))),
-            ("seat_rl", (0.52, 0.12, 0.56), (-0.38, 1.06, -0.35), (0, 0, 0)),
-            ("seat_rr", (0.52, 0.12, 0.56), (0.38, 1.06, -0.35), (0, 0, 0)),
-            ("seat_rear", (1.3, 0.1, 0.55), (0, 1.02, -1.0), (0, 0, 0)),
-        ],
-        "dash_size": (1.44, 0.12, 0.55),
-        "dash_pos": (0, 1.24, 1.5),
-        "wheel_pos": (0.38, 1.28, 1.3),
-    }
-    interior = build_interior(spec, seat, dash)
-    port = build_charge({"charge_port": (-0.95, 1.1, -1.3, 0.26)}, paint, mat("connector", (0.1, 0.12, 0.14), emission=(0.13, 0.83, 0.93), emission_strength=1.5))
-    doors = empty("doors_anchor")
-    for name, x, y_center, y_span, sign in (("door_fl", -0.95, 0.25, 1.0, -1), ("door_fr", 0.95, 0.25, 1.0, 1)):
-        d = box(name, (0.07, 1.0, y_span), (x, 1.12, y_center), material=paint)
-        bevel(d, 0.04, 1)
-        set_origin(d, (x, 1.12, y_center - (sign * y_span / 2)))
-        parent(d, doors)
-    for name, x, y_center, y_span, sign in (("door_rl", -0.93, -0.8, 0.9, -1), ("door_rr", 0.93, -0.8, 0.9, 1)):
-        d = box(name, (0.07, 1.0, y_span), (x, 1.12, y_center), material=paint)
-        bevel(d, 0.04, 1)
-        set_origin(d, (x, 1.12, y_center - (sign * y_span / 2)))
-        parent(d, doors)
-    trunk = box("trunk", (1.8, 0.86, 0.1), (0, 1.56, -2.18), material=paint)
-    set_origin(trunk, (0, 2.0, -2.18))
-    frunk = box("frunk", (1.76, 0.6, 0.06), (0, 1.04, 2.1), material=paint)
-    set_origin(frunk, (0, 1.08, 2.46))
-    return [body, rails, windows, quarter, wheels, mirrors, hl, tl, interior, port, doors, trunk, frunk]
-
-
-def build_pickup(lod):
-    paint = mat("paint", PAINT["pickup"], metallic=0.55, roughness=0.3)
-    trim = mat("trim", (0.08, 0.08, 0.09), roughness=0.85)
-    glass = mat("glass", (0.05, 0.07, 0.09), roughness=0.1, transmission=0.85)
-    seat = mat("seat", (0.13, 0.12, 0.11), roughness=0.9)
-    dash = mat("dash", (0.06, 0.06, 0.07), roughness=0.7)
-    body = empty("body")
-    base = box("base", (1.92, 0.5, 4.6), (0, 0.56, 0.1), material=paint)
-    bevel(base, 0.08, 2 if not lod else 1)
-    nose = box("nose", (1.86, 0.44, 0.7), (0, 0.72, 2.4), material=paint)
-    bevel(nose, 0.07, 2 if not lod else 1)
-    cab = box("cab", (1.78, 0.66, 1.35), (0, 1.28, 1.25), material=paint)
-    bevel(cab, 0.09, 2 if not lod else 1)
-    bed = box("bed", (1.78, 0.5, 1.9), (0, 0.84, -1.6), material=paint)
-    bevel(bed, 0.04, 1)
-    bed_rim = box("bed_rim", (1.8, 0.12, 1.72), (0, 1.18, -1.45), material=paint)
-    fender_l = box("fender_l", (0.2, 0.35, 0.8), (-0.98, 0.72, 0.2), material=paint)
-    bevel(fender_l, 0.05, 1)
-    fender_r = box("fender_r", (0.2, 0.35, 0.8), (0.98, 0.72, 0.2), material=paint)
-    bevel(fender_r, 0.05, 1)
-    cladding = box("cladding", (1.94, 0.16, 4.65), (0, 0.3, 0.1), material=trim)
-    skid = box("skid", (1.5, 0.06, 0.55), (0, 0.4, 2.62), material=trim)
-    for part in (base, nose, cab, bed, bed_rim, fender_l, fender_r, cladding, skid):
-        parent(part, body)
-    windows = empty("windows")
-    for side in (-1, 1):
-        w = box("window_glass", (0.03, 0.42, 1.0), (side * 0.88, 1.4, 1.08), material=glass)
-        parent(w, windows)
-    windshield = box("windshield", (1.64, 0.64, 0.05), (0, 1.52, 1.8), (math.radians(38), 0, 0), material=glass)
-    parent(windshield, windows)
-    rear = box("rear_window", (1.5, 0.4, 0.05), (0, 1.42, 0.3), material=glass)
-    parent(rear, windows)
-    wheels = build_wheels(
-        {"front": (1.44, 0.42, 0.86, 0.23), "rear": (-1.52, 0.42, 0.86, 0.23)},
-        0.42, 0.3, trim, mat("rim", (0.22, 0.23, 0.25), metallic=0.9, roughness=0.25))
-    mirrors = build_mirrors(paint, mat("mirror", (0.7, 0.85, 0.95), metallic=0.4, roughness=0.1))
-    hl, tl = build_lamps(2.44, -2.35, 0.86, 1.86, 1.74, rear_z=0.9)
-    spec = {
-        "cab": {"y": 1.05},
-        "seats": [
-            ("seat_fl", (0.52, 0.12, 0.58), (-0.36, 0.92, 1.45), (0, 0, math.radians(-6))),
-            ("seat_fr", (0.52, 0.12, 0.58), (0.36, 0.92, 1.45), (0, 0, math.radians(6))),
-            ("seat_rear", (1.28, 0.1, 0.55), (0, 0.92, 0.7), (0, 0, 0)),
-        ],
-        "dash_size": (1.4, 0.12, 0.55),
-        "dash_pos": (0, 1.08, 1.82),
-        "wheel_pos": (0.36, 1.12, 1.64),
-    }
-    interior = build_interior(spec, seat, dash)
-    port = build_charge({"charge_port": (-0.94, 1.0, 0.5, 0.26)}, paint, mat("connector", (0.1, 0.12, 0.14), emission=(0.13, 0.83, 0.93), emission_strength=1.5))
-    doors = empty("doors_anchor")
-    for name, x, y_center, y_span, sign in (("door_fl", -0.93, 1.3, 0.95, -1), ("door_fr", 0.93, 1.3, 0.95, 1)):
-        d = box(name, (0.07, 0.92, y_span), (x, 1.06, y_center), material=paint)
-        bevel(d, 0.04, 1)
-        set_origin(d, (x, 1.06, y_center - (sign * y_span / 2)))
-        parent(d, doors)
-    for name, x, y_center, y_span, sign in (("door_rl", -0.91, 1.82, 0.85, -1), ("door_rr", 0.91, 1.82, 0.85, 1)):
-        d = box(name, (0.07, 0.92, y_span), (x, 1.06, y_center), material=paint)
-        bevel(d, 0.04, 1)
-        set_origin(d, (x, 1.06, y_center - (sign * y_span / 2)))
-        parent(d, doors)
-    trunk = box("trunk", (1.62, 0.6, 0.1), (0, 1.3, 0.32), material=paint)
-    set_origin(trunk, (0, 1.62, 0.32))
-    frunk = box("frunk", (1.7, 0.62, 0.06), (0, 0.94, 2.3), material=paint)
-    set_origin(frunk, (0, 0.98, 2.7))
-    return [body, windows, wheels, mirrors, hl, tl, interior, port, doors, trunk, frunk]
-
-
-BUILDERS = {
-    "compact_sedan": build_compact_sedan,
-    "sport_sedan": build_sport_sedan,
-    "compact_crossover": build_compact_crossover,
-    "suv": build_suv,
-    "pickup": build_pickup,
-}
-
-REQUIRED_PARTS = [
-    "body", "windows", "wheels", "mirrors", "interior",
-    "door_fl", "door_fr", "door_rl", "door_rr", "trunk", "frunk",
-    "charge_port", "charge_connector", "headlights", "taillights",
-]
-
-
-def collect_stats(objs):
-    tris = 0
-    verts = 0
-    for o in objs:
-        for child in o.children_recursive:
-            if child.type == "MESH":
-                verts += len(child.data.vertices)
-                tris += sum(len(p.vertices) - 2 for p in child.data.polygons)
-        if o.type == "MESH":
-            verts += len(o.data.vertices)
-            tris += sum(len(p.vertices) - 2 for p in o.data.polygons)
-    return verts, tris
+def build_body(spec, paint, trim_m, glass, tire_od, front_z):
+    env = spec["envelope"]
+    L, W, H, gc = env["length"], env["width"], env["height"], env["groundClearance"]
+    root = empty("body")
+    body = build_skin_body(spec, paint, tire_od, env["wheelbase"], front_z, env["track"][0])
+    parent(body, root)
+    trim = box_mesh("trim_mesh", (W - 0.10, 0.10, L - 0.20), (0, gc + 0.04, 0), trim_m)
+    parent(trim, root)
+    under = box_mesh("underbody_mesh", (W - 0.40, 0.02, L - 0.60), (0, gc + 0.01, 0), trim_m)
+    parent(under, root)
+    wells = box_mesh("wheel_well_mesh", (W - 0.30, 0.30, 1.4), (0, gc + 0.45, 0), trim_m)
+    parent(wells, root)
+    # Greenhouse sits under the roof profile, never above it.
+    top_table = sorted(spec["profile"]["top"], key=lambda p: -p[0])
+    cab_z0, cab_z1 = -L * 0.28, L * 0.16
+    roof_ys = [_interp(top_table, z) for z in (cab_z0, cab_z1)]
+    y_roof = min(roof_ys)
+    greenhouse_h = H * 0.42
+    cab = box_mesh("cab_mesh", (W * 0.86, greenhouse_h, cab_z1 - cab_z0), (0, y_roof - greenhouse_h / 2, (cab_z0 + cab_z1) / 2), glass)
+    parent(cab, root)
+    return root
 
 
 def main():
-    argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--class", dest="klass", required=True)
-    ap.add_argument("--lod", action="store_true")
-    ap.add_argument("--out", default="apps/web/public/assets/models")
-    args = ap.parse_args(argv)
-
-    if args.klass not in BUILDERS:
-        print(f"unknown class {args.klass}", file=sys.stderr)
-        sys.exit(2)
-
-    global LOD
-    LOD = args.lod
+    parse_args()
     clear_scene()
-    objs = BUILDERS[args.klass](lod=args.lod)
+    argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
+    cls_name = argv[argv.index("--class") + 1]
+    spec = SPEC
+    env = spec["envelope"]
+    L, W, H = env["length"], env["width"], env["height"]
+    gc = env["groundClearance"]
+    wheelbase = env["wheelbase"]
+    front_z = L / 2 - env["frontOverhang"]
+    track = env["track"][0]
+    tire = spec["tire"]
+    tire_od = (tire["rimIn"] * 25.4 + 2 * tire["widthMm"] * tire["aspect"] / 100) / 1000.0
 
-    # Verify every required part exists somewhere in the hierarchy.
-    names = set()
-    for o in bpy.data.objects:
-        names.add(o.name)
-        names.update(c.name for c in o.children_recursive)
-    missing = [p for p in REQUIRED_PARTS if p not in names]
-    if missing:
-        print(f"missing parts: {missing}", file=sys.stderr)
-        sys.exit(3)
+    paint = mat("paint", (0.13, 0.31, 0.46), metallic=0.55, roughness=0.3)
+    trim_m = mat("trim", (0.09, 0.10, 0.11), roughness=0.8)
+    glass = mat("glass", (0.05, 0.07, 0.09), roughness=0.1, transmission=0.85)
+    seat_m = mat("seat", (0.16, 0.15, 0.14), roughness=0.9)
+    dash_m = mat("dash", (0.07, 0.07, 0.08), roughness=0.7)
+    rim_m = mat("rim", (0.78, 0.8, 0.82), metallic=0.9, roughness=0.25)
+    brake_m = mat("brake", (0.4, 0.4, 0.42), metallic=0.8, roughness=0.4)
+    tire_m = mat("tire", (0.05, 0.05, 0.05), roughness=0.95)
+    lamp_m = mat("lamp", (0.9, 0.95, 1.0), emission=(0.85, 0.92, 1.0), emission_strength=2.0)
+    tail_m = mat("tail", (0.9, 0.1, 0.08), emission=(0.9, 0.08, 0.06), emission_strength=2.0)
+    port_m = mat("port", (0.1, 0.12, 0.14), emission=(0.13, 0.83, 0.93), emission_strength=1.5)
 
-    # The vehicle is authored Y-up (height +Y, length +Z) — exactly the
-    # glTF Y-up convention. Export with export_yup=False (identity mapping) so
-    # no axis conversion distorts the model.
-    bpy.ops.object.select_all(action="SELECT")
-    os.makedirs(args.out, exist_ok=True)
-    out_path = os.path.join(args.out, f"{args.klass}{'_lod' if args.lod else ''}.glb")
+    root = empty("vehicle_root")
+    root["voltlink"] = {"kind": "asset", "class": cls_name, "lod": LOD, "specVersion": 1}
+
+    body = build_body(spec, paint, trim_m, glass, tire_od, front_z)
+    parent(body, root)
+
+    windows = empty("windows")
+    windshield = box_mesh("windshield", (W * 0.80, 0.55, 0.05), (0, gc + H * 0.72, front_z + 0.15), glass)
+    windshield.rotation_euler = (math.radians(-38), 0, 0)
+    parent(windshield, windows)
+    rear = box_mesh("rear_glass", (W * 0.74, 0.42, 0.05), (0, gc + H * 0.70, -L / 2 + 0.35), glass)
+    rear.rotation_euler = (math.radians(32), 0, 0)
+    parent(rear, windows)
+    for side, sx in (("l", 1), ("r", -1)):
+        w = box_mesh(f"window_fixed_{side}", (0.04, 0.30, 1.3), (sx * W * 0.42, gc + H * 0.68, -0.15), glass)
+        parent(w, windows)
+    parent(windows, root)
+
+    mirrors = empty("mirrors")
+    for side, sx in (("l", 1), ("r", -1)):
+        m = box_mesh(f"mirror_{side}", (0.09, 0.10, 0.16), (sx * (W / 2 + 0.05), gc + H * 0.62, front_z + 0.25), paint)
+        parent(m, mirrors)
+    parent(mirrors, root)
+
+    wheels = build_wheels(spec, tire_od, track, wheelbase, front_z, tire_m, rim_m, brake_m)
+    parent(wheels, root)
+
+    doors_group = empty("doors")
+    half_w = W / 2 - 0.05
+    for d in spec["doors"]:
+        side_sign = 1 if d["side"] == "left" else -1
+        z0, z1 = d["z"]
+        y0, y1 = d["y"]
+        hinge_z = z1 if d["hinge"] == "front" else z0
+        hinge_gltf = (side_sign * half_w, y1 - 0.02, hinge_z)
+        piv = pivot(d["id"], hinge_gltf, {"kind": "hinge", "axis": [0, 1, 0], "openDeg": d["openDeg"], "state": d["id"]})
+        parent(piv, doors_group)
+        mesh = box_mesh(f"{d['id']}_mesh", (0.05, y1 - y0, z1 - z0), (side_sign * half_w, (y0 + y1) / 2, (z0 + z1) / 2), paint)
+        shift_origin(mesh, hinge_gltf)
+        parent(mesh, piv)
+        win_name = f"window_{d['id'][-2:]}"
+        win = pivot(win_name, hinge_gltf, {"kind": "slide", "axis": [0, -1, 0], "distance": 0.045, "state": win_name})
+        parent(win, piv)
+        wmesh = box_mesh(f"{win_name}_mesh", (0.03, 0.30, z1 - z0 - 0.3), (side_sign * (half_w - 0.01), (y0 + y1) / 2 + 0.18, (z0 + z1) / 2), glass)
+        parent(wmesh, win)
+    parent(doors_group, root)
+
+    rc = spec["rearClosure"]
+    if rc["id"] == "tailgate":
+        rc_hinge = (0, rc["y"][0], (rc["z"][0] + rc["z"][1]) / 2)
+    else:
+        # trunk/liftgate hinge lies in the lid plane: top edge, mid-thickness
+        rc_hinge = (0, rc["y"][1], (rc["z"][0] + rc["z"][1]) / 2)
+    rp = pivot(rc["id"], rc_hinge, {"kind": "hinge", "axis": [1, 0, 0], "openDeg": rc["openDeg"], "state": "rear_closure"})
+    parent(rp, root)
+    if rc["id"] == "trunk":
+        # horizontal deck lid: long in z, thin in y, top face at the hinge line
+        rmesh = box_mesh("trunk_mesh", (W * 0.86, 0.06, rc["z"][1] - rc["z"][0]), (0, rc["y"][1], (rc["z"][0] + rc["z"][1]) / 2), paint)
+    else:
+        rmesh = box_mesh(f"{rc['id']}_mesh", (W * 0.86, rc["y"][1] - rc["y"][0], 0.06), (0, (rc["y"][0] + rc["y"][1]) / 2, (rc["z"][0] + rc["z"][1]) / 2), paint)
+    shift_origin(rmesh, rc_hinge)
+    parent(rmesh, rp)
+
+    fr = spec["frunk"]
+    fr_hinge = (0, gc + H * 0.42, fr["z"][1])
+    fp = pivot("frunk", fr_hinge, {"kind": "hinge", "axis": [1, 0, 0], "openDeg": fr["openDeg"], "state": "frunk"})
+    parent(fp, root)
+    fmesh = box_mesh("frunk_mesh", (W * 0.76, 0.04, fr["z"][1] - fr["z"][0]), (0, gc + H * 0.42, (fr["z"][0] + fr["z"][1]) / 2), paint)
+    shift_origin(fmesh, fr_hinge)
+    parent(fmesh, fp)
+
+    cp = spec["chargePort"]
+    cp_x = (W / 2 - 0.03) if cp["side"] == "left" else -(W / 2 - 0.03)
+    cp_hinge = (cp_x, cp["y"], cp["z"] + 0.05)
+    cpp = pivot("charge_port", cp_hinge, {"kind": "hinge", "axis": [0, 1, 0], "openDeg": cp["openDeg"], "state": "charge_port"})
+    parent(cpp, root)
+    cpmesh = box_mesh("charge_port_mesh", (0.02, cp["size"][1], cp["size"][0]), (cp_x, cp["y"], cp["z"]), port_m)
+    shift_origin(cpmesh, cp_hinge)
+    parent(cpmesh, cpp)
+    inlet = box_mesh("charge_inlet", (0.06, 0.10, 0.10), (cp_x - 0.03 if cp["side"] == "left" else cp_x + 0.03, cp["y"], cp["z"]), trim_m)
+    parent(inlet, root)
+    led = box_mesh("charge_port_led", (0.02, 0.02, 0.05), (cp_x, cp["y"] + 0.06, cp["z"]), lamp_m)
+    parent(led, root)
+    dock = empty("charge_dock", (cp_x - 1.2 if cp["side"] == "left" else cp_x + 1.2, cp["y"], cp["z"]))
+    parent(dock, root)
+    conn_x = cp_x - 0.05 if cp["side"] == "left" else cp_x + 0.05
+    conn_piv = pivot("charge_connector", (conn_x, cp["y"], cp["z"]), {"kind": "slide", "axis": [1, 0, 0], "distance": 0.16, "state": "connector", "hideAtOpen": True})
+    parent(conn_piv, root)
+    conn = box_mesh("charge_connector_mesh", (0.08, 0.09, 0.09), (conn_x, cp["y"], cp["z"]), port_m)
+    parent(conn, conn_piv)
+    cable = box_mesh("charging_cable_mesh", (1.2, 0.02, 0.02), (cp_x - 0.6 if cp["side"] == "left" else cp_x + 0.6, cp["y"] - 0.05, cp["z"]), trim_m)
+    parent(cable, conn_piv)
+
+    headlights = empty("headlights")
+    for side, sx in (("l", 1), ("r", -1)):
+        h = box_mesh(f"headlight_{side}", (0.20, 0.08, 0.30), (sx * (W / 2 - 0.25), gc + H * 0.42, L / 2 - 0.02), lamp_m)
+        parent(h, headlights)
+    parent(headlights, root)
+    taillights = empty("taillights")
+    brake_lights = empty("brake_lights")
+    for side, sx in (("l", 1), ("r", -1)):
+        t = box_mesh(f"taillight_{side}", (0.18, 0.08, 0.12), (sx * (W / 2 - 0.22), gc + H * 0.55, -L / 2 + 0.02), tail_m)
+        parent(t, taillights)
+        b = box_mesh(f"brake_{side}", (0.16, 0.06, 0.06), (sx * (W / 2 - 0.22), gc + H * 0.55, -L / 2 + 0.02), tail_m)
+        parent(b, brake_lights)
+    parent(taillights, root)
+    parent(brake_lights, root)
+
+    interior = empty("interior")
+    dash = box_mesh("dash", (W * 0.62, 0.16, 0.30), (0, gc + 0.72, front_z + 0.05), dash_m)
+    parent(dash, interior)
+    for side, sx in (("l", 1), ("r", -1)):
+        s = box_mesh(f"seat_{side}", (0.48, 0.5, 0.5), (sx * 0.36, gc + 0.66, front_z - 0.25), seat_m)
+        parent(s, interior)
+    rear_seat = box_mesh("seat_rear", (W * 0.5, 0.46, 0.44), (0, gc + 0.64, front_z - 0.85), seat_m)
+    parent(rear_seat, interior)
+    wheel = empty("steering_wheel", (0.36, gc + 0.78, front_z + 0.35))
+    wheel["voltlink"] = {"kind": "hotspot", "id": "steering_wheel", "label": "Steering wheel"}
+    parent(wheel, interior)
+    sw = box_mesh("steering_wheel_mesh", (0.04, 0.36, 0.36), (0.36, gc + 0.78, front_z + 0.35), trim_m)
+    sw.rotation_euler = (0, 0, math.radians(-20))
+    parent(sw, wheel)
+    battery = box_mesh("battery_mesh", (W * 0.6, 0.14, wheelbase * 0.7), (0, gc - 0.04, front_z - wheelbase / 2), trim_m)
+    parent(battery, interior)
+    parent(interior, root)
+
+    cp_hot = empty("hotspot_charge_port", (cp_x, cp["y"], cp["z"]))
+    cp_hot["voltlink"] = {"kind": "hotspot", "id": "charge_port", "label": "Charge port"}
+    parent(cp_hot, root)
+
+    levels = 3 if LOD == 0 else 2 if LOD == 1 else 1
+    for ob in list(bpy.data.objects):
+        if ob.type == "MESH":
+            lv = 4 if (LOD == 0 and ob.name == "body_mesh") else levels
+            sub = ob.modifiers.new(f"lod{LOD}_subdiv", "SUBSURF")
+            # SIMPLE subdivides the cage without rounding, so boxes keep their
+            # exact dimensions (Catmull-Clark would shrink the bbox ~16%).
+            sub.subdivision_type = "SIMPLE"
+            sub.levels = lv
+            sub.render_levels = lv
+
+    os.makedirs(OUT, exist_ok=True)
+    os.makedirs("blender/source", exist_ok=True)
+    out_path = os.path.join(OUT, f"{cls_name}{'' if LOD == 0 else '_lod' if LOD == 1 else '_lod2'}.glb")
+    # Refresh the depsgraph so matrix_world is correct for every object; the
+    # glTF exporter computes child transforms from parent world matrices.
+    bpy.context.view_layer.update()
+    bpy.ops.wm.save_as_mainfile(filepath=os.path.join("blender/source", f"{cls_name}.blend"), compress=True)
     bpy.ops.export_scene.gltf(
         filepath=out_path,
         export_format="GLB",
-        use_selection=True,
+        export_yup=True,
         export_apply=True,
-        export_yup=False,
+        export_extras=True,
+        export_lights=False,
+        export_cameras=False,
+        export_animations=False,
+        export_draco_mesh_compression_enable=False,
+        export_meshopt_compression_enable=False,
     )
-    verts, tris = collect_stats(bpy.data.objects)
-    size = os.path.getsize(out_path)
-    print(json.dumps({"class": args.klass, "lod": bool(args.lod), "file": out_path, "vertices": verts, "triangles": tris, "bytes": size}))
+    print(json.dumps({"blender": bpy.app.version_string, "class": cls_name, "lod": LOD, "out": out_path}))
 
 
 if __name__ == "__main__":
