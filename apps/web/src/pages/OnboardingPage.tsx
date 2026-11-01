@@ -6,7 +6,6 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Boxes,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -114,7 +113,6 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (loaded) void persist(STEPS[step]!.id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, loaded]);
 
   if (!loaded) {

@@ -34,6 +34,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await fake.close();
+  delete process.env.TESLA_CLIENT_ID;
+  delete process.env.TESLA_CLIENT_SECRET;
   await prisma.$disconnect();
 });
 

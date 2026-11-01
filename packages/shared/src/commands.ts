@@ -335,8 +335,6 @@ const pin = z
   .string()
   .regex(/^\d{4}$/, 'PIN must be exactly 4 digits')
   .optional();
-const dest = z.string().min(1).max(200, 'Destination must be at most 200 characters').optional();
-
 export const COMMAND_PARAM_SCHEMAS: Record<CommandType, z.ZodTypeAny> = {
   wake: z.object({}).optional(),
   lock: z.object({}).optional(),

@@ -23,15 +23,11 @@ import type {
   Department,
   Driver,
   FleetGroup,
-  FleetVehicleRow,
   MaintenanceRecord,
   VehicleAssignment,
 } from '@voltlink/shared';
 
 export default function FleetPage() {
-  const { user } = useAuth();
-  const units = user?.units ?? 'metric';
-  const tz = user?.timezone;
   const [tab, setTab] = useState<'overview' | 'groups' | 'drivers' | 'maintenance'>('overview');
   const { data: overview, isLoading } = useQuery({
     queryKey: ['fleet-overview'],
