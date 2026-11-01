@@ -29,6 +29,7 @@ function toVehicleWithState(v: {
   year: number | null;
   exteriorColor: string | null;
   wheelStyle: string | null;
+  labels: string[];
   vinLast4: string | null;
   capabilities: unknown;
   demo: boolean;
@@ -53,6 +54,7 @@ function toVehicleWithState(v: {
     year: v.year ?? undefined,
     exteriorColor: v.exteriorColor ?? undefined,
     wheelStyle: v.wheelStyle ?? undefined,
+    labels: v.labels ?? [],
     vinLast4: v.vinLast4 ?? undefined,
     capabilities: (v.capabilities ?? []) as string[],
     demo: v.demo,
@@ -296,12 +298,14 @@ vehiclesRouter.patch(
   { auth: 'session', target: { kind: 'vehicle', from: 'param:id', perm: 'vehicles.manage' } },
   async (req, res) => {
     const vehicle = req.access!.vehicle!;
-    const body = (req.body ?? {}) as { displayName?: string; exteriorColor?: string };
+    const body = (req.body ?? {}) as { displayName?: string; exteriorColor?: string; labels?: string[] };
     const data: Record<string, unknown> = {};
     if (typeof body.displayName === 'string' && body.displayName.trim())
       data.displayName = body.displayName.trim().slice(0, 60);
     if (typeof body.exteriorColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(body.exteriorColor))
       data.exteriorColor = body.exteriorColor;
+    if (Array.isArray(body.labels))
+      data.labels = body.labels.filter((l) => typeof l === 'string').map((l) => l.trim().slice(0, 32)).filter(Boolean).slice(0, 8);
     if (Object.keys(data).length > 0)
       await prisma.vehicle.update({ where: { id: vehicle.id }, data });
     res.json({ data: { ok: true } });

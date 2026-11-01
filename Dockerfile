@@ -64,6 +64,13 @@ COPY --from=build /app/apps/api/openapi.json ./openapi.json
 COPY --from=build /app/apps/api/web-dist ./web-dist
 COPY --chmod=0555 docker/entrypoint.sh /usr/local/bin/voltlink-entrypoint
 COPY --chmod=0555 docker/healthcheck.sh /usr/local/bin/voltlink-healthcheck
+# Consistent product name in container labels (spec L108).
+LABEL org.opencontainers.image.title="VoltLink" \
+      org.opencontainers.image.description="Self-hosted connected-vehicle platform" \
+      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.vendor="VoltLink" \
+      com.voltlink.role="multi (web|worker|scheduler|status|migrate|selftest)"
 USER 10001:10001
 RUN ["node", "dist/cli/selftest.cjs"]
 EXPOSE 3000 3001

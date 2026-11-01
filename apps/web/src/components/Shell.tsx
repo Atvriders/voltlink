@@ -96,6 +96,7 @@ function VehicleSwitcher() {
   const { selectedId, setVehicle } = useSelectedVehicle();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const ref = useRef<HTMLDivElement>(null);
   const [favorites, setFavorites] = useState<string[]>(user?.favoriteVehicleIds ?? []);
   const { data: groups } = useQuery({
@@ -119,7 +120,16 @@ function VehicleSwitcher() {
       .catch(() => undefined);
   };
 
-  const list = vehicles ?? [];
+  const q = query.trim().toLowerCase();
+  const list = (vehicles ?? []).filter((v) => {
+    if (!q) return true;
+    return (
+      v.displayName.toLowerCase().includes(q) ||
+      (v.model ?? '').toLowerCase().includes(q) ||
+      (v.make ?? '').toLowerCase().includes(q) ||
+      (v.labels ?? []).some((l) => l.toLowerCase().includes(q))
+    );
+  });
   const byId = new Map(list.map((v) => [v.id, v]));
   const recents = user
     ? readRecent(user.id)
@@ -160,6 +170,17 @@ function VehicleSwitcher() {
           className="absolute right-0 top-full z-40 mt-1 max-h-[70vh] w-64 overflow-auto rounded-xl border border-line bg-panel p-1 shadow-2xl"
           role="menu"
         >
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search vehicles"
+            aria-label="Search vehicles"
+            className="m-1 w-[calc(100%-0.5rem)] rounded-lg border border-line bg-canvas px-2.5 py-1.5 text-sm outline-none focus:border-accent"
+          />
+          {q && list.length === 0 && (
+            <p className="px-2.5 py-3 text-center text-sm text-faint">No vehicles match.</p>
+          )}
           {favs.length > 0 && (
             <>
               <MenuLabel>Favorites</MenuLabel>

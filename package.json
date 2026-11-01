@@ -2,7 +2,7 @@
   "name": "voltlink",
   "private": true,
   "version": "1.0.0",
-  "description": "VoltLink — self-hosted connected-vehicle platform: vehicle telemetry, secure controls, drives, charging, battery analytics, automations, notifications, fleet management, and a full status platform.",
+  "description": "VoltLink \u2014 self-hosted connected-vehicle platform: vehicle telemetry, secure controls, drives, charging, battery analytics, automations, notifications, fleet management, and a full status platform.",
   "license": "MIT",
   "author": "Atvriders",
   "homepage": "https://github.com/Atvriders/voltlink#readme",
@@ -35,7 +35,9 @@
     "naming:scan": "tsx scripts/naming-scan.ts",
     "prisma:generate": "prisma generate --schema apps/api/prisma/schema.prisma",
     "check:compose": "tsx scripts/check-compose.ts",
-    "check:bundle": "tsx scripts/check-bundle.ts"
+    "check:bundle": "tsx scripts/check-bundle.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",

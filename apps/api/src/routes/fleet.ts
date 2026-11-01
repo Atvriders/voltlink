@@ -70,6 +70,7 @@ fleetRouter.get('/overview', fleetRead, async (req, res) => {
           displayName: v.displayName,
           make: v.make,
           model: v.model,
+          labels: v.labels,
           vehicleClass: v.vehicleClass,
           batteryPct: st?.b ?? null,
           charging: st?.cp === true || st?.charging === true,

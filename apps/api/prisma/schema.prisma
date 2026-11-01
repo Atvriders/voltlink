@@ -57,6 +57,11 @@ model User {
   notificationOutbox   NotificationOutbox[]
   inboundWebhooks        InboundWebhook[]
   auditEvents            AuditLog[]
+  placesCreated          Place[]            @relation("PlaceCreatedBy")
+  geofencesCreated       Geofence[]         @relation("GeofenceCreatedBy")
+  privacyZonesCreated    PrivacyZone[]      @relation("PrivacyZoneCreatedBy")
+  rateRulesCreated       RateRule[]         @relation("RateRuleCreatedBy")
+  vehicleCommands        VehicleCommand[]
 }
 
 model UserSession {
@@ -381,6 +386,7 @@ model Vehicle {
   year              Int?
   vehicleClass      String           @default("fallback")
   exteriorColor     String           @default("#8b9bb4")
+  labels            String[]         @default([])
   wheelStyle        String?
   vinLast4          String?
   capabilities      Json             @default("[]")
@@ -440,6 +446,7 @@ model Place {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdById    String?
+  createdBy      User? @relation("PlaceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   name           String
   type           String  @default("custom")
   lat            Float
@@ -453,6 +460,7 @@ model Geofence {
   organizationId  String
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdById     String?
+  createdBy       User? @relation("GeofenceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   name            String
   lat             Float
   lon             Float
@@ -468,6 +476,7 @@ model PrivacyZone {
   organizationId  String
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdById     String?
+  createdBy       User? @relation("PrivacyZoneCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   name            String
   lat             Float
   lon             Float
@@ -562,6 +571,7 @@ model RateRule {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdById    String?
+  createdBy      User? @relation("RateRuleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   name           String
   type           String  @default("flat")
   pricePerKwh    Float
@@ -776,6 +786,7 @@ model VehicleCommand {
   vehicleName       String             @default("")
   providerAccountId String
   userId            String
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   actorKind         String             @default("user")
   apiKeyId          String?
   automationId      String?
@@ -951,6 +962,7 @@ model Driver {
   email          String?
   phone          String?
   active         Boolean @default(true)
+  assignments    VehicleAssignment[]
   @@index([organizationId])
 }
 
@@ -961,6 +973,7 @@ model VehicleAssignment {
   vehicleId      String
   vehicle        Vehicle    @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
   driverId       String
+  driver         Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
   departmentId   String?
   costCenterId   String?
   fromAt         DateTime? @db.Timestamptz(3)

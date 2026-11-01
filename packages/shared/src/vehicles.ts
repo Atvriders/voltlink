@@ -161,6 +161,7 @@ export interface VehicleInfo {
   year?: number;
   exteriorColor?: string;
   wheelStyle?: string;
+  labels?: string[];
   vinLast4?: string;
   capabilities: Capability[];
   demo: boolean;

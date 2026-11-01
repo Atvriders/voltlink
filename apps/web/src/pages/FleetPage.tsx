@@ -38,6 +38,7 @@ export default function FleetPage() {
           displayName: string;
           make: string | null;
           model: string | null;
+          labels: string[];
           vehicleClass: string;
           batteryPct: number | null;
           charging: boolean;
@@ -132,6 +133,18 @@ export default function FleetPage() {
                         <span className="ml-1.5 text-xs text-faint">
                           {v.make} {v.model}
                         </span>
+                        {v.labels.length > 0 && (
+                          <span className="ml-2 inline-flex gap-1">
+                            {v.labels.map((l) => (
+                              <span
+                                key={l}
+                                className="rounded-full bg-panel2 px-1.5 py-0.5 text-[10px] text-subtle"
+                              >
+                                {l}
+                              </span>
+                            ))}
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-2.5">
                         <Badge tone={v.offline ? 'danger' : v.charging ? 'charging' : 'ok'}>

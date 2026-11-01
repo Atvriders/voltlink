@@ -21,6 +21,7 @@ import { Badge, Button, Card, EmptyState, ProgressBar, Spinner, Stat } from '../
 import {
   fmtClock,
   fmtDist,
+  fmtEnergy,
   fmtPower,
   fmtSpeed,
   fmtTemp,
@@ -30,6 +31,7 @@ import {
 } from '../lib/format';
 import type {
   Automation,
+  ChargeSession,
   Drive,
   ProviderInfo,
   VehicleState,
@@ -53,6 +55,11 @@ export default function OverviewPage() {
   const { data: drives } = useQuery({
     queryKey: ['drives', 'recent'],
     queryFn: () => api<{ items: Drive[] }>('/api/v1/drives?pageSize=4').then((d) => d.items),
+  });
+  const { data: charges } = useQuery({
+    queryKey: ['charging', 'recent'],
+    queryFn: () =>
+      api<{ items: ChargeSession[] }>('/api/v1/charging?pageSize=4').then((d) => d.items),
   });
   const { data: automations } = useQuery({
     queryKey: ['automations'],
@@ -133,6 +140,7 @@ export default function OverviewPage() {
             title={
               <span className="flex items-center gap-2">
                 {selected?.displayName} <ChargingBadgeX state={state} />
+                {selected?.demo && <Badge tone="info">demo</Badge>}
               </span>
             }
             subtitle={
@@ -186,6 +194,23 @@ export default function OverviewPage() {
               )}
             </Card>
 
+            <Card title="Recent charging">
+              {charges && charges.length > 0 ? (
+                <ul className="divide-y divide-line">
+                  {charges.slice(0, 4).map((c) => (
+                    <li key={c.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                      <span className="truncate">{c.vehicleName}</span>
+                      <span className="text-subtle">
+                        {fmtEnergy(c.energyAddedKwh)} · {fmtClock(c.startAt)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="py-4 text-sm text-faint">No charging recorded yet.</p>
+              )}
+            </Card>
+
             <Card
               title="Automations"
               actions={
@@ -236,7 +261,10 @@ export default function OverviewPage() {
                       style={{ background: v.exteriorColor ?? '#8b9bb4' }}
                       aria-hidden
                     />
-                    <span className="flex-1 truncate text-sm font-medium">{v.displayName}</span>
+                    <span className="flex-1 truncate text-sm font-medium">
+                      {v.displayName}
+                      {v.demo && <Badge tone="info">demo</Badge>}
+                    </span>
                     {v.state && <VehicleMini state={v.state} />}
                   </button>
                 </li>
@@ -348,6 +376,28 @@ function OverviewState({ state, units }: { state: VehicleState; units: 'metric' 
           label="Location"
           value={state.address ? <span className="text-sm">{state.address}</span> : '—'}
           sub={state.speedKmh ? fmtSpeed(state.speedKmh, units) : undefined}
+        />
+        <Stat
+          label="Odometer"
+          value={state.odometerKm != null ? fmtDist(state.odometerKm, units, 0) : '—'}
+          sub={state.softwareVersion ? `SW ${state.softwareVersion}` : undefined}
+        />
+        <Stat
+          label="Tire pressure"
+          value={
+            state.tirePressureKpa ? (
+              <span className="text-sm">
+                {Math.round(state.tirePressureKpa.frontLeft)} kPa
+              </span>
+            ) : (
+              '—'
+            )
+          }
+          sub={
+            state.tirePressureKpa
+              ? `${Math.round(state.tirePressureKpa.frontLeft / 6.895)} psi front`
+              : undefined
+          }
         />
       </div>
 
