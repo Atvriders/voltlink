@@ -51,8 +51,8 @@ export function csrf(req: Request, res: Response, next: NextFunction): void {
   next();
 }
 
-export function notFound(_req: Request, res: Response): void {
-  res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Route not found.' } });
+export function notFound(req: Request, res: Response): void {
+  res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Route not found.', requestId: req.id } });
 }
 
 export function errorHandler(

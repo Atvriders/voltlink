@@ -31,6 +31,13 @@ const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
 export function metricsText(): string {
   const lines: string[] = [];
+  // Always render the TYPE line for every known business family so scrapers
+  // see the full set even before the first sample arrives.
+  for (const [name, kind] of DECLARED) {
+    if (!counters.has(name) && !gauges.has(name) && !histograms.has(name)) {
+      lines.push(`# TYPE ${name} ${kind}`);
+    }
+  }
   for (const [name, labels] of counters) {
     lines.push(`# TYPE ${name} counter`);
     for (const [label, v] of labels) {
@@ -49,6 +56,16 @@ export function metricsText(): string {
   }
   return lines.join('\n');
 }
+
+const DECLARED: Array<[string, string]> = [
+  ['voltlink_command_total', 'counter'],
+  ['voltlink_command_latency_ms', 'summary'],
+  ['voltlink_provider_fetch_ms', 'summary'],
+  ['voltlink_provider_fetch_errors_total', 'counter'],
+  ['voltlink_queue_depth', 'gauge'],
+  ['voltlink_last_poll_success_epoch_seconds', 'gauge'],
+  ['voltlink_automation_failures_total', 'counter'],
+];
 
 export const METRICS = {
   commandTotal: 'voltlink_command_total',
