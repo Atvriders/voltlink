@@ -7,7 +7,8 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  reporter: [['list']],
+  // list for humans; json for scripts/test-inventory.ts (guide 08 §5).
+  reporter: [['list'], ['json', { outputFile: 'test-results/playwright.json' }]],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3111',
     trace: 'retain-on-failure',

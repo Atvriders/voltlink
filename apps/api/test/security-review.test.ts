@@ -228,6 +228,32 @@ describe('SEC-REVIEW-2: invite registration requires the secret token', () => {
     await prisma.user.delete({ where: { id: created!.id } });
     await prisma.user.delete({ where: { id: host.user.id } });
   });
+
+  it('an invitee cannot escalate to OWNER through the register body', async () => {
+    const { host, token, invitation } = await seedInviteMode();
+    const email = invitation.email;
+    // If a caller could name a role in the body, the membership would still
+    // be created from the invitation only (default VIEWER) - never from the
+    // request. Sending the field proves it is ignored.
+    const res = await postJson(request.agent(base), '/api/v1/auth/register', {
+      email,
+      name: 'Escalator',
+      password: 'invite-password-123',
+      inviteToken: token,
+      role: 'OWNER',
+    });
+    expect(res.status).toBe(201);
+    const created = await prisma.user.findUniqueOrThrow({
+      where: { email },
+      include: { memberships: true },
+    });
+    expect(created.memberships).toHaveLength(1);
+    expect(created.memberships[0]!.role).toBe('VIEWER');
+    expect(created.memberships[0]!.organizationId).toBe(host.org.id);
+
+    await prisma.user.delete({ where: { id: created.id } });
+    await prisma.user.delete({ where: { id: host.user.id } });
+  });
 });
 
 describe('SEC-REVIEW-3: API-key vehicle lists follow the owner permissions', () => {

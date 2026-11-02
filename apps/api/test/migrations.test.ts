@@ -59,7 +59,18 @@ async function createDb(name: string, admin: Client): Promise<string> {
 }
 
 async function dropDb(name: string, admin: Client): Promise<void> {
-  await admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+  // WITH (FORCE) fails with "permission denied to terminate process" when a
+  // superuser-owned backend (e.g. an autovacuum worker) is briefly in the
+  // database. Retry a few times; the blocker passes on its own.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      return;
+    } catch (err) {
+      if (attempt >= 4) throw err;
+      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+    }
+  }
 }
 
 const suffix = `${Date.now()}_${process.pid}`;

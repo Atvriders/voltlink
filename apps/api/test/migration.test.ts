@@ -86,7 +86,15 @@ beforeAll(async () => {
 }, 180_000);
 
 afterAll(async () => {
-  await admin.query(`DROP DATABASE IF EXISTS "${dbName}" WITH (FORCE)`);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await admin.query(`DROP DATABASE IF EXISTS "${dbName}" WITH (FORCE)`);
+      break;
+    } catch (err) {
+      if (attempt >= 4) throw err;
+      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+    }
+  }
   await admin.end();
 }, 60_000);
 
