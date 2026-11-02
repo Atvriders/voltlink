@@ -126,13 +126,13 @@ export class PollingScheduler {
     this.pendingCommands.set(vehicleId, Date.now());
   }
 
-  recordFailure(accountId: string, message: string): void {
+  async recordFailure(accountId: string, message: string): Promise<void> {
     metricInc(METRICS.providerFetchErrors);
     const f = this.failures.get(accountId) ?? { count: 0, until: 0 };
     f.count += 1;
     f.until = Date.now() + Math.min(2 ** f.count, 30) * 60_000;
     this.failures.set(accountId, f);
-    void prisma.providerAccount
+    await prisma.providerAccount
       .update({ where: { id: accountId }, data: { lastError: message.slice(0, 500) } })
       .catch(() => undefined);
   }
@@ -274,6 +274,6 @@ export async function processTelemetryJob(payload: {
       }
       return;
     }
-    poller.recordFailure(account.id, msg);
+    await poller.recordFailure(account.id, msg);
   }
 }

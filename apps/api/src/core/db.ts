@@ -11,6 +11,7 @@ export const pool = new pg.Pool({
   connectionString: env.DATABASE_URL,
   max: 10,
 });
+pool.on('error', (err) => console.warn('[voltlink] pg idle client error:', err.message));
 
 export interface PgResult {
   rows: unknown[];

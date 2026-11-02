@@ -2,7 +2,7 @@
   "name": "voltlink",
   "private": true,
   "version": "1.0.0",
-  "description": "VoltLink — self-hosted connected-vehicle platform: vehicle telemetry, secure controls, drives, charging, battery analytics, automations, notifications, fleet management, and a full status platform.",
+  "description": "VoltLink \u2014 self-hosted connected-vehicle platform: vehicle telemetry, secure controls, drives, charging, battery analytics, automations, notifications, fleet management, and a full status platform.",
   "license": "MIT",
   "author": "Atvriders",
   "homepage": "https://github.com/Atvriders/voltlink#readme",
@@ -27,7 +27,7 @@
     "dev:api": "npm -w @voltlink/api run dev",
     "dev:web": "npm -w @voltlink/web run dev",
     "build": "npm run prisma:generate && npm -w @voltlink/shared run build && npm -w @voltlink/api run build && npm -w @voltlink/web run build && node scripts/stage-web-dist.mjs",
-    "test": "npm -w @voltlink/shared run test && npm -w @voltlink/api run test && npm -w @voltlink/web run test",
+    "test": "vitest run",
     "typecheck": "npm -w @voltlink/shared run typecheck && npm -w @voltlink/api run typecheck && npm -w @voltlink/web run typecheck",
     "lint": "eslint . --max-warnings=0",
     "legacy:scan": "tsx scripts/legacy-scan.ts",
@@ -37,7 +37,11 @@
     "check:compose": "tsx scripts/check-compose.ts",
     "check:bundle": "tsx scripts/check-bundle.ts",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test:unit": "vitest run --project shared --project api-unit --project web",
+    "test:int": "vitest run --project api-int",
+    "test:coverage": "vitest run --coverage --reporter=default --reporter=json --outputFile.json=test-results/vitest.json",
+    "test:inventory": "tsx scripts/test-inventory.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",

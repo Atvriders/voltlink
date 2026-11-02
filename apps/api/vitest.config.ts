@@ -21,11 +21,11 @@ config({ path: resolve(__dirname, '.env') });
 // cleanly. (vitest 4 removed poolOptions; `forks + singleFork:true` is now
 // expressed as `pool:'forks' + maxWorkers:1`. Default isolation is kept
 // deliberately — do NOT set isolate:false.)
+// Per-worker databases (test/setup/worker-db.ts) make parallel files safe,
+// so the serial single-fork settings from the SQLite era are gone (guide 08 §5).
 export default defineConfig({
   test: {
     pool: 'forks',
-    maxWorkers: 1,
-    fileParallelism: false,
     testTimeout: 30000,
     hookTimeout: 60000,
     teardownTimeout: 15000,
