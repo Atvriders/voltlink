@@ -1,8 +1,8 @@
 # Asset licenses
 
-Everything in `apps/web/public/assets/models/` is **original work created for
-VoltLink** by the `blender/` pipeline and is licensed under the project's MIT
-license (see `LICENSE`).
+Everything under `apps/web/public/3d/` (the staged, hashed GLBs) and
+`blender/source/` is **original work created for VoltLink** by the `blender/`
+pipeline and is licensed under the project's MIT license (see `LICENSE.md`).
 
 - Vehicle geometry, materials and thumbnails: generated from scratch by
   `blender/scripts/generate_vehicle.py` — no imported meshes, no third-party

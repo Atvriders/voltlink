@@ -1,0 +1,20 @@
+# Gitleaks configuration. Test fixtures and CI placeholders use
+# fictional secrets on purpose; real secrets must never be committed.
+# PA-37: the full-history scan passes with this allowlist.
+
+[allowlist]
+  description = 'Fictional test fixtures and documented CI placeholders'
+  paths = [
+    'apps/api/test/',
+    'tests/',
+    '\\.github/workflows/ci\\.yml',
+    'package\\.json',
+    'docs/evidence/',
+  ]
+  regexes = [
+    'test-jwt-secret',
+    'integration-pass',
+    '0123456789abcdef',
+    '(?:vlk|voltlink)[-_]?[A-Za-z0-9]{8,}',
+    'Not a secret',
+  ]

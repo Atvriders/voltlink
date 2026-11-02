@@ -1,11 +1,11 @@
 {
-  "commit": "206cc321452d5283d83e08dd84882614e1d1a1c7",
+  "commit": "24f0d09eef5626eeaf3d3c90d66942bc6e747d97",
   "vitest": {
-    "total": 1916,
-    "passed": 1916
+    "total": 1949,
+    "passed": 1949
   },
   "playwright": {
-    "total": 28,
+    "total": 51,
     "skipped": 1
   },
   "categories": {
@@ -26,5 +26,5 @@
     "scheduler": 1,
     "telemetry": 1
   },
-  "generatedAt": "2026-11-02T14:19:19.264Z"
+  "generatedAt": "2026-11-02T15:28:35.395Z"
 }

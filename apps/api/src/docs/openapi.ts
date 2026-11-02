@@ -116,7 +116,10 @@ const commandRequestBody = z.object({
   type: z.enum(COMMAND_TYPES),
   params: z
     .object({
-      pin: z.string().regex(/^\d{4}$/).optional(),
+      pin: z
+        .string()
+        .regex(/^\d{4}$/)
+        .optional(),
     })
     .optional(),
 });
@@ -328,7 +331,11 @@ function operationFor(method: string, path: string, policy: RoutePolicy): Record
         description: 'Success',
         content: {
           'application/json': {
-            schema: zodToSchema(doc?.responses?.['200'] ? dataEnvelope(doc.responses['200']) : z.object({ data: z.unknown() })),
+            schema: zodToSchema(
+              doc?.responses?.['200']
+                ? dataEnvelope(doc.responses['200'])
+                : z.object({ data: z.unknown() }),
+            ),
           },
         },
       },

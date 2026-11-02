@@ -79,12 +79,7 @@ export default defineConfig({
         'apps/api/src/**/*.ts',
         'apps/web/src/**/*.{ts,tsx}',
       ],
-      exclude: [
-        '**/*.test.*',
-        '**/*.d.ts',
-        'apps/web/src/main.tsx',
-        'apps/api/src/cli/**',
-      ],
+      exclude: ['**/*.test.*', '**/*.d.ts', 'apps/web/src/main.tsx', 'apps/api/src/cli/**'],
       reporter: ['text-summary', 'json-summary', 'lcov', 'html'],
       thresholds: { lines: 30, statements: 30, functions: 28, branches: 25 },
     },

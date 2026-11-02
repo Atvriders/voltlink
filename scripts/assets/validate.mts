@@ -366,7 +366,7 @@ for (const file of readdirSync(STAGED).filter((f) => f.endsWith('.glb') && !f.in
         if (ex.axis && typeof ex.openDeg === 'number') {
           const closedBox = worldBox(doc, node);
           const openBox = worldBoxOpened(doc, node, { axis: ex.axis, openDeg: ex.openDeg });
-          if (file === 'compact_crossover.glb' && name === 'door_fl') {
+          if (process.env.VL_DEBUG && file === 'compact_crossover.glb' && name === 'door_fl') {
             console.error(
               'DOORDBG closed',
               closedBox.min

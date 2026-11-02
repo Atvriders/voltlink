@@ -16,10 +16,10 @@ interface GeoResult {
 
 const DEMO_POIS: GeoResult[] = [
   { label: 'VoltLink HQ', lat: 39.0734, lon: -104.6211, kind: 'office' },
-  { label: 'Denver Union Station', lat: 39.7532, lon: -105.0002, kind: 'transit' },
-  { label: 'Boulder Charging Hub', lat: 40.015, lon: -105.2705, kind: 'charger' },
-  { label: 'Red Rocks Amphitheatre', lat: 39.6655, lon: -105.2056, kind: 'venue' },
-  { label: 'Cherry Creek Mall', lat: 39.7168, lon: -104.9551, kind: 'shop' },
+  { label: 'Rivermark Transit Center', lat: 39.0612, lon: -104.615, kind: 'transit' },
+  { label: 'Rivermark Supercharge', lat: 39.0877, lon: -104.6033, kind: 'charger' },
+  { label: 'Hawk Ridge Trailhead', lat: 39.2211, lon: -104.4933, kind: 'venue' },
+  { label: 'Copper Creek Station', lat: 39.1134, lon: -104.5841, kind: 'shop' },
 ];
 
 export default function GeocodeSearch({ onChoose }: { onChoose: (r: GeoResult) => void }) {

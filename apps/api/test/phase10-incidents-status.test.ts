@@ -57,7 +57,10 @@ describe('status platform', () => {
     const outsiderSession = await createSession(outsider.id);
     const postWithCsrf = async (sessionToken: string, url: string, body: unknown) => {
       // First attempt: no CSRF cookie yet → 403 issues one; retry with it.
-      let res = await request(base).post(url).set('Cookie', `vl_session=${sessionToken}`).send(body);
+      let res = await request(base)
+        .post(url)
+        .set('Cookie', `vl_session=${sessionToken}`)
+        .send(body);
       if (res.status === 403 && res.body?.error?.code === 'CSRF') {
         const setCookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
         const csrf =

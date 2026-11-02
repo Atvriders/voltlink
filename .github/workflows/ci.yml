@@ -123,7 +123,10 @@ jobs:
       - run: npm -w @voltlink/shared run build
       - run: npx prisma generate --schema apps/api/prisma/schema.prisma
       - run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
-      - run: npm test
+      - name: Full vitest suite with JSON report
+        run: npx vitest run --maxWorkers=4 --reporter=default --reporter=json --outputFile.json=test-results/vitest.json
+      - name: Test inventory (every required category non-zero)
+        run: npx tsx scripts/test-inventory.ts
 
   migrations:
     runs-on: ubuntu-latest
@@ -184,6 +187,14 @@ jobs:
         run: node scripts/smoke.mjs
         env:
           SMOKE_BASE: http://127.0.0.1:3111
+      - name: Playwright matrix (desktop/tablet/mobile/webgl/a11y/visual/legacy)
+        run: |
+          npx playwright install --with-deps chromium
+          npx playwright test
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3111
+      - name: Tesla e2e against the fake Fleet API
+        run: bash scripts/e2e/tesla-e2e.sh
       - name: API log
         if: always()
         run: tail -60 /tmp/voltlink-api.log

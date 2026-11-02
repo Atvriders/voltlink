@@ -102,7 +102,19 @@ describe('OpenAPI route coverage', () => {
 
   it('uses the real command types in the command request schema', () => {
     const spec = buildOpenApiSpec() as {
-      paths: Record<string, Record<string, { requestBody?: { content: { 'application/json': { schema: { properties: { type: { enum: string[] } } } } } } }>>;
+      paths: Record<
+        string,
+        Record<
+          string,
+          {
+            requestBody?: {
+              content: {
+                'application/json': { schema: { properties: { type: { enum: string[] } } } };
+              };
+            };
+          }
+        >
+      >;
     };
     const cmd = spec.paths['/api/v1/commands']?.post;
     expect(cmd).toBeDefined();

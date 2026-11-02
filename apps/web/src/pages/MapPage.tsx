@@ -629,11 +629,7 @@ function Section({
         <span>{title}</span>
         <span className="text-xs text-faint">{count}</span>
         {onAdd && (
-          <Button
-            variant="ghost"
-            className="ml-auto px-2 py-1 text-xs"
-            onClick={() => onAdd()}
-          >
+          <Button variant="ghost" className="ml-auto px-2 py-1 text-xs" onClick={() => onAdd()}>
             <Plus size={12} /> Add
           </Button>
         )}

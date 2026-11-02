@@ -4,7 +4,19 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import { enableDemo, register } from './helpers';
 
-const PAGES = ['/', '/vehicles', '/showroom', '/map', '/drives', '/charging', '/battery', '/automations', '/fleet', '/providers', '/settings'] as const;
+const PAGES = [
+  '/',
+  '/vehicles',
+  '/showroom',
+  '/map',
+  '/drives',
+  '/charging',
+  '/battery',
+  '/automations',
+  '/fleet',
+  '/providers',
+  '/settings',
+] as const;
 
 test('core pages have no serious a11y violations', async ({ page }) => {
   test.slow();

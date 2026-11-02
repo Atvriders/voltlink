@@ -8,6 +8,10 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   // list for humans; json for scripts/test-inventory.ts (guide 08 §5).
+  // Keep Playwright artifacts out of test-results/ root: vitest's JSON
+  // report (vitest.json) and the inventory live there, and Playwright wipes
+  // its outputDir on every run.
+  outputDir: 'test-results/pw',
   reporter: [['list'], ['json', { outputFile: 'test-results/playwright.json' }]],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3111',

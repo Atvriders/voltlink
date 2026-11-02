@@ -25,18 +25,18 @@ imported from a prior project, `Atvriders/ham-net-assistant`.
 
 Every major foundation component was classified before work started:
 
-| Component | Classification | What happened |
-|---|---|---|
-| npm workspaces skeleton (tsconfigs, scripts, CI stub) | **Preserve** | Kept as the repo skeleton |
-| Shared zod schemas and role helpers | **Refactor** | Rebuilt for the vehicle domain |
-| Express app shell / route wiring | **Refactor** | policyRouter + route table added |
-| Auth (argon2, TOTP, passkeys, sessions) | **Improve** | Extended with tenancy, step-up, CSRF |
-| PostgreSQL schema | **Replace** | New voltlink schema with partitioned telemetry |
-| SQLite dev fallback | **Remove** | Postgres-only |
-| Ham-radio domain models (check-ins, net sessions, callbooks) | **Remove** | No traces remain; `scripts/legacy-scan.ts` guards this |
-| Old Dockerfile with private hostname | **Remove** | Deleted (Phase 11); new multi-role image |
-| Old theme bundle and college-branding references | **Remove** | Five original themes; third-party asset notes moved to docs/ASSET_LICENSES.md |
-| Web UI (React SPA) | **Improve** | React 19 + Vite, vehicle platform pages |
+| Component                                                    | Classification | What happened                                                                 |
+| ------------------------------------------------------------ | -------------- | ----------------------------------------------------------------------------- |
+| npm workspaces skeleton (tsconfigs, scripts, CI stub)        | **Preserve**   | Kept as the repo skeleton                                                     |
+| Shared zod schemas and role helpers                          | **Refactor**   | Rebuilt for the vehicle domain                                                |
+| Express app shell / route wiring                             | **Refactor**   | policyRouter + route table added                                              |
+| Auth (argon2, TOTP, passkeys, sessions)                      | **Improve**    | Extended with tenancy, step-up, CSRF                                          |
+| PostgreSQL schema                                            | **Replace**    | New voltlink schema with partitioned telemetry                                |
+| SQLite dev fallback                                          | **Remove**     | Postgres-only                                                                 |
+| Ham-radio domain models (check-ins, net sessions, callbooks) | **Remove**     | No traces remain; `scripts/legacy-scan.ts` guards this                        |
+| Old Dockerfile with private hostname                         | **Remove**     | Deleted (Phase 11); new multi-role image                                      |
+| Old theme bundle and college-branding references             | **Remove**     | Five original themes; third-party asset notes moved to docs/ASSET_LICENSES.md |
+| Web UI (React SPA)                                           | **Improve**    | React 19 + Vite, vehicle platform pages                                       |
 
 ## What VoltLink is today
 

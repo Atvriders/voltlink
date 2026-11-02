@@ -101,7 +101,6 @@ Demo seeding uses a fixed PRNG per account: identical schedules, drives,
 charges, automations and status content — reproducible in tests and
 demos.
 
-
 ## AD-17 — Multi-organization tenancy
 
 Every user belongs to organizations through `Membership` rows (OWNER /

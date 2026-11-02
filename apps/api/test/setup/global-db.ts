@@ -27,7 +27,13 @@ export default async function setup(project: TestProject) {
   await admin.end();
   execFileSync(
     'npx',
-    ['prisma', 'migrate', 'deploy', '--schema', fileURLToPath(new URL('../../prisma/schema.prisma', import.meta.url))],
+    [
+      'prisma',
+      'migrate',
+      'deploy',
+      '--schema',
+      fileURLToPath(new URL('../../prisma/schema.prisma', import.meta.url)),
+    ],
     { stdio: 'inherit', env: { ...process.env, DATABASE_URL: withDb(adminUrl, TEMPLATE) } },
   );
   // Open registration in the template so API tests can register over HTTP.

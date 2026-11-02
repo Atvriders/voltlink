@@ -17,19 +17,13 @@ const base = {
 
 describe('scheduler polling plan', () => {
   it('only plans free state checks for a suspended vehicle', () => {
-    const plan = planNextPoll(
-      { ...base, suspendedUntil: Date.now() + 60_000 },
-      DEFAULT_TUNING,
-    );
+    const plan = planNextPoll({ ...base, suspendedUntil: Date.now() + 60_000 }, DEFAULT_TUNING);
     expect(plan.action).toBe('state');
     expect(plan.mode).toBe('suspended');
   });
 
   it('honours provider backoff', () => {
-    const plan = planNextPoll(
-      { ...base, backoffUntil: Date.now() + 60_000 },
-      DEFAULT_TUNING,
-    );
+    const plan = planNextPoll({ ...base, backoffUntil: Date.now() + 60_000 }, DEFAULT_TUNING);
     expect(plan.action).toBe('none');
   });
 

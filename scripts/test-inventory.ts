@@ -85,11 +85,15 @@ function main(): void {
   if (vitest) {
     const missing = Object.keys(REQUIRED).filter((c) => !categories[c]);
     if (missing.length > 0) {
-      console.error(`test-inventory: no test file matched required categories: ${missing.join(', ')}`);
+      console.error(
+        `test-inventory: no test file matched required categories: ${missing.join(', ')}`,
+      );
       process.exit(1);
     }
   } else {
-    console.warn('test-inventory: test-results/vitest.json missing — run `npm run test:coverage` first.');
+    console.warn(
+      'test-inventory: test-results/vitest.json missing — run `npm run test:coverage` first.',
+    );
   }
   console.log('test-inventory written to docs/evidence/test-inventory.json');
 }
