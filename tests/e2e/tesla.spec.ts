@@ -7,6 +7,8 @@ import { test, expect } from '@playwright/test';
 const FAKE = process.env.E2E_TESLA_FAKE_URL;
 
 test.describe('Tesla connect + virtual key (fake Fleet API)', () => {
+  test.skip(!process.env.E2E_TESLA_FAKE_URL, 'Tesla e2e runs via scripts/e2e/tesla-e2e.sh only');
+
   test('connect, import, pair, readiness flips', async ({ page }) => {
     // The stack was seeded by scripts/e2e/tesla-e2e.sh with a login-ready user.
     await page.goto('/login');

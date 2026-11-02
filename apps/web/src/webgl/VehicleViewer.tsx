@@ -342,6 +342,16 @@ export default function VehicleViewer({
   const p = preset ?? autoPreset();
   const cfg = PRESETS[p];
   const [missing, setMissing] = useState(false);
+  // Deterministic WebGL preflight: without a context we never mount <Canvas>,
+  // so an unavailable renderer cannot crash the whole route (G-14).
+  const [webglSupported] = useState(() => {
+    try {
+      const c = document.createElement('canvas');
+      return !!(c.getContext('webgl2') || c.getContext('webgl'));
+    } catch {
+      return false;
+    }
+  });
   const [assetOk, setAssetOk] = useState<boolean | null>(null);
   const [glbLoaded, setGlbLoaded] = useState(false);
   const signal = useRef({ ok: false });
@@ -379,6 +389,19 @@ export default function VehicleViewer({
   }, [asset]);
 
   const useGlb = assetOk === true && !missing;
+
+  if (!webglSupported) {
+    return (
+      <div
+        className={`flex items-center justify-center rounded-xl border border-line bg-canvas ${className}`}
+        style={{ height }}
+        data-testid="vehicle-viewer"
+        data-asset="fallback"
+      >
+        <p className="text-xs text-faint">3D preview unavailable on this device</p>
+      </div>
+    );
+  }
 
   return (
     <div
