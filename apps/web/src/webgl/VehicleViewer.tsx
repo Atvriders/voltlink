@@ -95,9 +95,7 @@ function VehicleModel({
   signal: { ok: boolean };
   onLoaded?: () => void;
 }) {
-  const [gltf, setGltf] = useState<Awaited<ReturnType<GLTFLoader['loadAsync']>> | null>(
-    null,
-  );
+  const [gltf, setGltf] = useState<Awaited<ReturnType<GLTFLoader['loadAsync']>> | null>(null);
   useEffect(() => {
     let cancelled = false;
     meshoptLoader()
@@ -113,7 +111,16 @@ function VehicleModel({
     };
   }, [url]);
   if (!gltf) return null;
-  return <VehicleScene gltf={gltf} vehicle={vehicle} state={state} preset={preset} signal={signal} onLoaded={onLoaded} />;
+  return (
+    <VehicleScene
+      gltf={gltf}
+      vehicle={vehicle}
+      state={state}
+      preset={preset}
+      signal={signal}
+      onLoaded={onLoaded}
+    />
+  );
 }
 
 function VehicleScene({

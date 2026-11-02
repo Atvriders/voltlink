@@ -26,39 +26,39 @@ const issueSchema = z.object({
 
 /** Shared handler for POST /commands and the per-vehicle alias (L1536). */
 export async function issueCommandHandler(req: Request, res: Response): Promise<void> {
-    const parsed = issueSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res
-        .status(400)
-        .json({ error: { code: 'VALIDATION', message: 'Valid command type required.' } });
+  const parsed = issueSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res
+      .status(400)
+      .json({ error: { code: 'VALIDATION', message: 'Valid command type required.' } });
+    return;
+  }
+  const { vehicleId } = (req.body ?? {}) as { vehicleId?: string };
+  if (!vehicleId) {
+    res.status(400).json({ error: { code: 'VALIDATION', message: 'vehicleId is required.' } });
+    return;
+  }
+  try {
+    const result = await issueCommand(
+      req.actor!,
+      vehicleId,
+      parsed.data.type as never,
+      parsed.data.params as never,
+      {
+        idempotencyKey:
+          typeof parsed.data.idempotencyKey === 'string' ? parsed.data.idempotencyKey : undefined,
+      },
+      { ip: req.ip, requestId: (req as never as { id?: string }).id },
+    );
+    if (result.replayed) res.setHeader('Idempotent-Replayed', 'true');
+    res.status(result.replayed ? 200 : 201).json({ data: result.command });
+  } catch (err) {
+    if (err instanceof CommandError) {
+      res.status(err.status).json({ error: { code: err.code, message: err.message } });
       return;
     }
-    const { vehicleId } = (req.body ?? {}) as { vehicleId?: string };
-    if (!vehicleId) {
-      res.status(400).json({ error: { code: 'VALIDATION', message: 'vehicleId is required.' } });
-      return;
-    }
-    try {
-      const result = await issueCommand(
-        req.actor!,
-        vehicleId,
-        parsed.data.type as never,
-        parsed.data.params as never,
-        {
-          idempotencyKey:
-            typeof parsed.data.idempotencyKey === 'string' ? parsed.data.idempotencyKey : undefined,
-        },
-        { ip: req.ip, requestId: (req as never as { id?: string }).id },
-      );
-      if (result.replayed) res.setHeader('Idempotent-Replayed', 'true');
-      res.status(result.replayed ? 200 : 201).json({ data: result.command });
-    } catch (err) {
-      if (err instanceof CommandError) {
-        res.status(err.status).json({ error: { code: err.code, message: err.message } });
-        return;
-      }
-      throw err;
-    }
+    throw err;
+  }
 }
 
 commandsRouter.post(

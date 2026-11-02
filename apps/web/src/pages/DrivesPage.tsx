@@ -43,9 +43,13 @@ export default function DrivesPage() {
   const { data: totals } = useQuery({
     queryKey: ['drives-totals', totalsQs.toString()],
     queryFn: () =>
-      api<{ count: number; distanceKm: number; energyKwh: number; estCost: number; costPerKm: number }>(
-        `/api/v1/drives/totals?${totalsQs.toString()}`,
-      ),
+      api<{
+        count: number;
+        distanceKm: number;
+        energyKwh: number;
+        estCost: number;
+        costPerKm: number;
+      }>(`/api/v1/drives/totals?${totalsQs.toString()}`),
   });
   const { data: vehicles } = useQuery({
     queryKey: ['vehicles'],
@@ -70,7 +74,8 @@ export default function DrivesPage() {
         {totals && (
           <span className="text-xs text-subtle">
             {totals.count} drives · {fmtDist(totals.distanceKm, units, 0)} ·{' '}
-            {fmtEnergy(totals.energyKwh)} · {fmtMoney(totals.estCost)} ({fmtMoney(totals.costPerKm)}/km)
+            {fmtEnergy(totals.energyKwh)} · {fmtMoney(totals.estCost)} ({fmtMoney(totals.costPerKm)}
+            /km)
           </span>
         )}
         <div className="ml-auto flex gap-2">

@@ -15,7 +15,11 @@ export default defineConfig({
     viewport: { width: 1360, height: 900 },
   },
   projects: [
-    { name: 'desktop', use: { ...devices['Desktop Chrome'] }, testIgnore: /no-webgl\.spec\.ts|tesla\.spec\.ts/ },
+    {
+      name: 'desktop',
+      use: { ...devices['Desktop Chrome'] },
+      testIgnore: /no-webgl\.spec\.ts|tesla\.spec\.ts/,
+    },
     // Gate 7: every page is exercised at desktop, tablet and mobile sizes.
     // Visual snapshots are desktop-only (viewport coverage lives in the
     // acceptance spec, which asserts layout on Pixel 7 and iPad profiles).

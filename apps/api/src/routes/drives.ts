@@ -84,7 +84,8 @@ drivesRouter.get('/totals', readAll, async (req, res) => {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No vehicles accessible.' } });
     return;
   }
-  const from = typeof req.query.from === 'string' && req.query.from ? new Date(req.query.from) : undefined;
+  const from =
+    typeof req.query.from === 'string' && req.query.from ? new Date(req.query.from) : undefined;
   const to = typeof req.query.to === 'string' && req.query.to ? new Date(req.query.to) : undefined;
   const startAt: { gte?: Date; lte?: Date } = {
     ...(from && !Number.isNaN(from.getTime()) ? { gte: from } : {}),

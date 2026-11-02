@@ -32,7 +32,12 @@ export function sseAddClient(_userId: string, _res: unknown): void {
 /** Publish to a single user (audience must be resolved by the caller). */
 export function ssePublish(event: { userId?: string; type: string; data: unknown }): void {
   if (!event.userId) return;
-  void publishToUsers([event.userId], { type: event.type, data: event.data });
+  // Redis may be absent (tests, cold boot): publishing must never throw.
+  try {
+    void publishToUsers([event.userId], { type: event.type, data: event.data });
+  } catch {
+    /* bus unavailable — events are best-effort */
+  }
 }
 
 /** End every SSE stream of a user (A-SSEREVOKE). */

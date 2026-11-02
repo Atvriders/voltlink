@@ -32,14 +32,18 @@ export async function publishToUsers(
 ): Promise<void> {
   const json = JSON.stringify({ ...ev, at: new Date().toISOString() });
   const audience = [...new Set(userIds.filter(Boolean))];
-  await Promise.all(
-    audience.map(
-      (u) =>
-        conn()
-          .voltlinkRtPublish(userKey(u), 200, json, REPLAY_MS)
-          .catch(() => undefined), // Redis down must never take a request down
-    ),
-  );
+  try {
+    await Promise.all(
+      audience.map(
+        (u) =>
+          conn()
+            .voltlinkRtPublish(userKey(u), 200, json, REPLAY_MS)
+            .catch(() => undefined), // Redis down must never take a request down
+      ),
+    );
+  } catch {
+    // initRedis() not run (tests/cold boot): publishing is best-effort.
+  }
 }
 
 export type RevokeMsg = { userId: string } & (
