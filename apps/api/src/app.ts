@@ -10,7 +10,8 @@ import fs from 'node:fs';
 import { env, parseTrustProxy } from './core/env';
 import { requestId, csrf, notFound, errorHandler } from './middleware/core';
 import { loadMapConfig } from './core/mapConfig';
-import { policyRouter } from './authz/policy';
+import { policyRouter, registerRoute } from './authz/policy';
+import { buildOpenApiSpec } from './docs/openapi';
 import { authRouter } from './routes/auth';
 import { hooksRouter } from './routes/hooks';
 import { usersRouter } from './routes/users';
@@ -36,7 +37,19 @@ import { PATHS } from './core/paths';
 import { metricsText, metricSet } from './core/metrics';
 import { APP_VERSION } from '@voltlink/shared';
 
-const OPENAPI_SPEC: string = (() => {
+// The spec is generated from the live route table at request time, so
+// /api/docs can never drift from the registered routes. The committed
+// snapshot (apps/api/openapi.json) only serves as the artifact for docs and
+// the drift test; it is not what the running server answers with.
+function openApiSpecString(): string {
+  try {
+    const spec = buildOpenApiSpec();
+    if (Object.keys(spec.paths as Record<string, unknown>).length > 0) {
+      return JSON.stringify(spec);
+    }
+  } catch {
+    // fall through to the committed snapshot
+  }
   try {
     if (fs.existsSync(PATHS.openapi)) return fs.readFileSync(PATHS.openapi, 'utf8');
   } catch {
@@ -47,7 +60,26 @@ const OPENAPI_SPEC: string = (() => {
     info: { title: 'VoltLink API', version: APP_VERSION },
     paths: {},
   });
-})();
+}
+
+registerRoute('GET', '/api/v1/realtime', {
+  auth: 'session',
+  target: { kind: 'none' },
+});
+
+const configRouter = policyRouter('/api/v1/config');
+configRouter.get('/client', { auth: 'session', target: { kind: 'none' } }, (_req, res) => {
+  const mapCfg = loadMapConfig(process.env);
+  res.json({
+    data: {
+      map: mapCfg.client,
+      geocoder: {
+        enabled: env.VL_GEOCODER !== 'off',
+        autocomplete: env.VL_GEOCODER === 'photon',
+      },
+    },
+  });
+});
 
 export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
   const app = express();
@@ -72,7 +104,7 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
     );
   }
   // Inbound hooks need the raw body: mount before express.json() and CSRF.
-  app.use('/api/v1/hooks', hooksRouter);
+  app.use('/api/v1/hooks', hooksRouter.router);
   app.use(express.json({ limit: '2mb' }));
   app.use(cookieParser());
   app.use(
@@ -88,7 +120,7 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
   app.use('/api', csrf);
 
   app.get('/api/docs', (_req, res) => {
-    res.type('application/json').send(OPENAPI_SPEC);
+    res.type('application/json').send(openApiSpecString());
   });
 
   app.get('/healthz', (_req, res) =>
@@ -154,9 +186,9 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
   app.use(adminRouter.prefix, adminRouter.router);
   app.use(orgsRouter.prefix, orgsRouter.router);
   app.use(invitationsRouter.prefix, invitationsRouter.router);
-  app.use('/api/v1/exports', usersRouter.router);
 
-  // Real-time events (SSE).
+  // Real-time events (SSE). The route itself is registered in the table
+  // at module scope (see below) so repeated buildApp() calls stay idempotent.
   app.get('/api/v1/realtime', async (req, res) => {
     const actor = await authenticate(req, 'session');
     if (actor.kind !== 'session')
@@ -170,19 +202,7 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
   });
 
   // F-MAPGRID: SPA-visible instance configuration (basemap + geocoder).
-  const config = policyRouter('/api/v1/config');
-  config.get('/client', { auth: 'session', target: { kind: 'none' } }, (_req, res) => {
-    res.json({
-      data: {
-        map: mapCfg.client,
-        geocoder: {
-          enabled: env.VL_GEOCODER !== 'off',
-          autocomplete: env.VL_GEOCODER === 'photon',
-        },
-      },
-    });
-  });
-  app.use(config.prefix, config.router);
+  app.use(configRouter.prefix, configRouter.router);
 
   // API root / 404.
   app.use('/api', notFound);

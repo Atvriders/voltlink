@@ -71,6 +71,16 @@ export const ROUTE_TABLE: {
   policy: RoutePolicy;
 }[] = [];
 
+/** Register an ad-hoc route (mounted outside policyRouter) so it appears in
+ * ROUTE_TABLE: authorization-matrix coverage and the generated OpenAPI spec. */
+export function registerRoute(
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  path: string,
+  policy: RoutePolicy,
+): void {
+  ROUTE_TABLE.push({ method, path, policy });
+}
+
 function sourceValue(req: Request, src: Source): string | undefined {
   const [where, name] = src.split(':') as [string, string];
   if (where === 'param') return typeof req.params[name] === 'string' ? req.params[name] : undefined;

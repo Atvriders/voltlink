@@ -2,18 +2,20 @@
 // :publicId with Standard Webhooks headers. Mounted before express.json() so
 // the raw body is available for signature verification; no session, no CSRF.
 
-import { Router, type Request, type Response } from 'express';
+import { type Request, type Response } from 'express';
 import express from 'express';
 import { prisma } from '../core/db';
 import { openJson } from '../core/crypto';
 import { verifyIncoming } from '../webhooks/standardWebhooks';
 import { dispatchTrigger } from '../automations/engine';
 import { audit } from '../core/settings';
+import { policyRouter } from '../authz/policy';
 
-export const hooksRouter = Router();
+export const hooksRouter = policyRouter('/api/v1/hooks');
 
 hooksRouter.post(
   '/automations/:publicId',
+  { auth: 'public', target: { kind: 'none' } },
   express.raw({ type: '*/*', limit: '64kb' }),
   async (req: Request, res: Response) => {
     const publicId = String(req.params.publicId);
