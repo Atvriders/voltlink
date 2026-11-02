@@ -12,10 +12,22 @@
 //   cleanup, reduced-motion support.
 
 import { Component, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Canvas, useFrame, useLoader } from '@react-three/fiber';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+
+// The staged GLBs are meshopt-compressed (guide 06 §10): the loader must decode
+// them. One shared, preconfigured loader is reused for every vehicle.
+let sharedLoader: GLTFLoader | null = null;
+function meshoptLoader(): GLTFLoader {
+  if (!sharedLoader) {
+    sharedLoader = new GLTFLoader();
+    sharedLoader.setMeshoptDecoder(MeshoptDecoder as never);
+  }
+  return sharedLoader;
+}
 import type { VehicleState, VehicleWithState } from '@voltlink/shared';
 import { resolveAssetUrl } from './vehicleAssets';
 
@@ -83,7 +95,42 @@ function VehicleModel({
   signal: { ok: boolean };
   onLoaded?: () => void;
 }) {
-  const gltf = useLoader(GLTFLoader, url);
+  const [gltf, setGltf] = useState<Awaited<ReturnType<GLTFLoader['loadAsync']>> | null>(
+    null,
+  );
+  useEffect(() => {
+    let cancelled = false;
+    meshoptLoader()
+      .loadAsync(url)
+      .then((g) => {
+        if (!cancelled) setGltf(g);
+      })
+      .catch(() => {
+        if (!cancelled) setGltf(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+  if (!gltf) return null;
+  return <VehicleScene gltf={gltf} vehicle={vehicle} state={state} preset={preset} signal={signal} onLoaded={onLoaded} />;
+}
+
+function VehicleScene({
+  gltf,
+  vehicle,
+  state,
+  preset,
+  signal,
+  onLoaded,
+}: {
+  gltf: NonNullable<Awaited<ReturnType<GLTFLoader['loadAsync']>>>;
+  vehicle: VehicleWithState;
+  state: VehicleState | null;
+  preset: GraphicsPreset;
+  signal: { ok: boolean };
+  onLoaded?: () => void;
+}) {
   const ref = useRef<THREE.Group>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
