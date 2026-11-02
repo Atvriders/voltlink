@@ -38,10 +38,10 @@ statusRouter.get('/rss', { auth: 'public', target: { kind: 'none' } }, async (_r
   };
   const items = bundle.incidents
     .slice(0, 20)
-    .map(
-      (i) =>
-        `<item><title>${escapeXml(i.title)}</title><link>${statusPublicUrl}</link><guid>${i.id}</guid><pubDate>${new Date(bundle.updatedAt).toUTCString()}</pubDate><description>${escapeXml(i.updates[0]?.message ?? i.status)}</description></item>`,
-    )
+    .map((i) => {
+      const latest = i.updates[0]?.createdAt ?? bundle.updatedAt;
+      return `<item><title>${escapeXml(i.title)}</title><link>${statusPublicUrl}#incident-${i.id}</link><guid>${i.id}</guid><pubDate>${new Date(latest).toUTCString()}</pubDate><description>${escapeXml(i.updates[0]?.message ?? i.status)}</description></item>`;
+    })
     .join('');
   const xml = `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>VoltLink Status</title><link>${statusPublicUrl}</link><description>VoltLink platform status updates</description>${items}</channel></rss>`;
   res.setHeader('Content-Type', 'application/rss+xml; charset=utf-8');
@@ -244,6 +244,7 @@ statusRouter.post(
           JSON.stringify(Array.isArray(components) ? components.slice(0, 20) : []),
         ),
         public: isPublic !== false,
+        createdById: sessionActor(req).userId,
       },
     });
     if (message) {

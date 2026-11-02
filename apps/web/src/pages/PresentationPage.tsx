@@ -144,7 +144,7 @@ export default function PresentationPage() {
               }
             >
               {scene === 'viewer' ? (
-                <VehicleViewer vehicle={vehicle} state={vehicle.state} height={480} />
+                <VehicleViewer hideDebugLabel vehicle={vehicle} state={vehicle.state} height={480} />
               ) : (
                 <PresentationStats vehicle={vehicle} />
               )}

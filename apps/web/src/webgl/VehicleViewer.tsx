@@ -329,6 +329,7 @@ export default function VehicleViewer({
   height = 380,
   interactive = true,
   className = '',
+  hideDebugLabel = false,
 }: {
   vehicle: VehicleWithState;
   state: VehicleState | null;
@@ -336,6 +337,7 @@ export default function VehicleViewer({
   height?: number;
   interactive?: boolean;
   className?: string;
+  hideDebugLabel?: boolean;
 }) {
   const p = preset ?? autoPreset();
   const cfg = PRESETS[p];
@@ -455,9 +457,11 @@ export default function VehicleViewer({
           />
         </div>
       ) : null}
-      <div className="pointer-events-none absolute bottom-2 left-2 text-[10px] text-faint">
-        WebGL · {p}
-      </div>
+      {!hideDebugLabel && (
+        <div className="pointer-events-none absolute bottom-2 left-2 text-[10px] text-faint">
+          WebGL · {p}
+        </div>
+      )}
     </div>
   );
 }

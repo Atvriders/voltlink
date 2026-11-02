@@ -25,7 +25,8 @@ async function main(): Promise<void> {
   // Scheduled automations: evaluate each minute.
   const minute = setInterval(async () => {
     try {
-      await setSetting('schedulerBeat', '1');
+      // Expiring heartbeat (spec L1217): the health check accepts beats < 5 min old.
+      await setSetting('schedulerBeat', String(Date.now()));
       const rows = await prisma.automation.findMany({
         where: { enabled: true, triggerType: 'scheduled' },
       });

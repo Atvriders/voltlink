@@ -226,7 +226,13 @@ adminRouter.get(
         migrationsCurrent,
         queueDepth: depth,
         workersActive,
-        schedulerActive: (await getSetting('schedulerBeat')) === '1' || env.NODE_ENV === 'test',
+        schedulerActive: await (async () => {
+          const beat = await getSetting('schedulerBeat').catch(() => null);
+          if (!beat) return env.NODE_ENV === 'test';
+          const ms = Number(beat);
+          const at = Number.isFinite(ms) ? ms : new Date(beat).getTime();
+          return Number.isFinite(at) && Date.now() - at < 5 * 60_000;
+        })(),
         telemetryFresh: !!freshSnap,
         memoryMb: Math.round(process.memoryUsage().rss / 1048576),
         sseClients: sseCount(),
