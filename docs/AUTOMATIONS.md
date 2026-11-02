@@ -7,7 +7,7 @@ actions**, with cooldowns, dry-run and full execution history.
 
 ```
 Automation
-├── trigger        one of 12 trigger events
+├── trigger        one of 17 trigger events
 ├── conditions     optional filters (battery below X%, outside geofence, time…)
 ├── actions        one or more: notify / webhook / create incident /
 │                  generate report / vehicle command

@@ -100,3 +100,23 @@ run under a PostgreSQL advisory lock so replicas can't race.
 Demo seeding uses a fixed PRNG per account: identical schedules, drives,
 charges, automations and status content — reproducible in tests and
 demos.
+
+
+## AD-17 — Multi-organization tenancy
+
+Every user belongs to organizations through `Membership` rows (OWNER /
+DRIVER / VIEWER), and every resource resolves through that membership at
+access time — vehicles, drives, places, automations and provider accounts are
+organization-scoped. The route policy table derives the target organization
+from params/query/body only, never from a client-supplied id alone
+(Z-IDOR), and instance-admin actions bypass org scoping explicitly.
+
+## AD-18 — Foundation replacement and rename
+
+The imported foundation (see FOUNDATION_AUDIT.md) was replaced component by
+component rather than rewritten in one pass: the domain models, the SQLite
+fallback, the old Dockerfile and the college-branding residue were removed;
+the auth stack, Express shell and SPA were improved in place; the database,
+queue and asset pipeline were replaced outright. The repository and every
+technical identifier were renamed to VoltLink in a single migration pair, and
+the naming scanner keeps the old identifier out of tracked files.

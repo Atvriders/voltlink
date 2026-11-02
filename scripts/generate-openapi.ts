@@ -20,10 +20,7 @@ async function main(): Promise<void> {
   const spec = buildOpenApiSpec();
   const json = `${JSON.stringify(spec, null, 2)}\n`;
 
-  const targets = [
-    path.join(root, 'apps/api/openapi.json'),
-    path.join(root, 'docs/openapi.json'),
-  ];
+  const targets = [path.join(root, 'apps/api/openapi.json'), path.join(root, 'docs/openapi.json')];
   for (const target of targets) {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, json);

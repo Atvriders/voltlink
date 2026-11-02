@@ -560,6 +560,9 @@ const SKIP_ROUTES: ReadonlySet<string> = new Set([
   'GET /api/v1/geocode', // 404 GEOCODER_DISABLED when unconfigured
   'POST /api/v1/invitations/:token/accept',
   'POST /api/v1/automations/webhook/:token', // removed: replaced by inbound hooks
+  // Raw-body inbound webhook (mounted before express.json, no CSRF): a matrix
+  // probe with an empty body always gets 400/404. Covered by webhooks.test.ts.
+  'POST /api/v1/hooks/automations/:publicId',
 ]);
 
 function personaHas(policy: RoutePolicy, persona: Persona): boolean {

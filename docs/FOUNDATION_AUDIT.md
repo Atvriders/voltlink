@@ -1,37 +1,54 @@
 # Foundation audit
 
-Recorded before the VoltLink build began, kept for history.
+> Written retroactively on 2026-11-02, after the build, as an honest historical
+> record. Nothing in this file was produced at build start.
 
-## Baseline
+## Starting point
 
-VoltLink was built from scratch on a monorepo skeleton (TypeScript strict,
-npm workspaces, Express/React tooling) imported from a prior project
-(`Atvriders/ham-net-assistant`). The prior domain (amateur-radio net logging)
-was fully removed: no legacy routes, pages, tables, or terminology remain,
-and `scripts/legacy-scan.ts` fails CI if any resurfaces.
+VoltLink was built on top of a TypeScript/npm-workspaces monorepo skeleton
+imported from a prior project, `Atvriders/ham-net-assistant`.
 
-At the start of the VoltLink effort, the imported foundation had:
+- Real starting commit of the foundation repo: **`22aad155`**
+- Imported into this repository in commit **`d121f93`**
 
-- 232 passing tests, 2 timing-flaky failures (pre-conversion baseline)
-- Node 24 tooling (npm 11, TypeScript 5.4, strict + `noUncheckedIndexedAccess`)
+## Baseline at import (d121f93)
 
-## Environment constraints at build time
+- 111 test files, about 1,124 `it`/`test` cases: shared 67, api 734, web 323.
+- The foundation test script chained `shared && api && web`.
+- The last recorded foundation run reported **232 passing tests, 2
+  timing-flaky failures, and 454 skipped tests as a result of files aborting** —
+  the web suite was not run to completion in that baseline.
+- Tooling at import: Node 24, npm 11, TypeScript 5 (strict with
+  `noUncheckedIndexedAccess`).
 
-- No Docker daemon or Redis available on the development machine → the
-  queue supports PostgreSQL fallback, and container smoke tests run in CI
-  only (`.github/workflows/ci.yml`).
-- PostgreSQL 16 local instance used for migrations and E2E.
-- Blender 5.2.2 LTS for the asset pipeline.
+## Component classification
 
-## What changed in the rebrand
+Every major foundation component was classified before work started:
 
-| Area     | Result                                                                                |
-| -------- | ------------------------------------------------------------------------------------- |
-| Domain   | ham-radio logging → connected-vehicle platform                                        |
-| Database | fresh PostgreSQL schema (35+ models), partitioned telemetry; no renamed legacy tables |
-| Auth     | Argon2id, TOTP, passkeys, session revocation added                                    |
-| Runtime  | role-based processes (web/worker/scheduler/status), PG+Redis queue                    |
-| Frontend | React 19 SPA, 5 themes, WebGL showroom                                                |
-| Ops      | Docker multi-role image, GHCR publishing, status platform                             |
+| Component | Classification | What happened |
+|---|---|---|
+| npm workspaces skeleton (tsconfigs, scripts, CI stub) | **Preserve** | Kept as the repo skeleton |
+| Shared zod schemas and role helpers | **Refactor** | Rebuilt for the vehicle domain |
+| Express app shell / route wiring | **Refactor** | policyRouter + route table added |
+| Auth (argon2, TOTP, passkeys, sessions) | **Improve** | Extended with tenancy, step-up, CSRF |
+| PostgreSQL schema | **Replace** | New voltlink schema with partitioned telemetry |
+| SQLite dev fallback | **Remove** | Postgres-only |
+| Ham-radio domain models (check-ins, net sessions, callbooks) | **Remove** | No traces remain; `scripts/legacy-scan.ts` guards this |
+| Old Dockerfile with private hostname | **Remove** | Deleted (Phase 11); new multi-role image |
+| Old theme bundle and college-branding references | **Remove** | Five original themes; third-party asset notes moved to docs/ASSET_LICENSES.md |
+| Web UI (React SPA) | **Improve** | React 19 + Vite, vehicle platform pages |
 
-See `ARCHITECTURE_DECISIONS.md` for the decision log.
+## What VoltLink is today
+
+- Multi-organization tenancy with OWNER/DRIVER/VIEWER roles, invitations,
+  transfers, retention and audit.
+- Commands/queue/worker/scheduler with realtime SSE, status platform,
+  automations and 8 notification channels.
+- Deterministic demo provider plus Tesla and Tessie adapters (live testing
+  still blocked on credentials — see COMPLETION.md).
+- WebGL showroom with original Blender-generated vehicle assets and LODs.
+- OpenAPI 3.1 generated from the live route table.
+
+The legacy-content scanner (`npm run legacy:scan`) reads every tracked text file
+and fails on planted terms; the naming scanner (`npm run naming:scan`) does the
+same for the pre-rename identifier.

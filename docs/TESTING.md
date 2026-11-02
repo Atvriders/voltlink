@@ -42,17 +42,17 @@ cd apps/api && PORT=3111 node dist/index.cjs
 
 ## Visual regression
 
-Snapshot pages under `tests/e2e/` using Playwright's `toHaveScreenshot` for:
-sign-in, onboarding, overview (desktop + mobile), live vehicle, WebGL
-fallback, map, drives, charging, battery, automations, fleet, public status,
-incident, admin, settings, dark/light themes, reduced-motion, provider outage,
-and command pending/failure states.
+`tests/e2e/visual.spec.ts` snapshots 12 pages under `toHaveScreenshot`:
+sign-in, overview (desktop, light theme, mobile), live vehicle, drives,
+charging, automations, fleet, map, public status, admin, settings.
+Baselines live in `tests/e2e/visual.spec.ts-snapshots/` and are reviewed by eye
+before committing; every test asserts its own demo data first.
 
 ## Blender assets
 
 `blender/rebuild_all.sh` regenerates the five vehicle GLBs (+ LOD variants and
 thumbnails) and fails if any asset is missing parts or invalid. CI validates
-the committed artifacts with `python3 blender/scripts/validate_assets.py`.
+the committed artifacts with `npx tsx scripts/assets/validate.mts`.
 
 ## CI
 

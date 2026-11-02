@@ -1,0 +1,671 @@
+{
+  "levels": [
+    "not-started",
+    "source-implemented",
+    "asset-generated",
+    "asset-validated",
+    "unit-tested",
+    "integration-tested",
+    "browser-tested",
+    "visual-regression-tested",
+    "accessibility-tested",
+    "mobile-tested",
+    "container-tested",
+    "compose-tested",
+    "provider-mock-tested",
+    "live-provider-tested",
+    "production-image-tested",
+    "manually-inspected",
+    "blocked-external-credentials",
+    "blocked-external-service"
+  ],
+  "features": [
+    {
+      "id": "tenancy-accounts",
+      "name": "Tenancy, accounts, orgs and roles",
+      "description": "Multi-organization tenancy, registration, invitations, sessions, TOTP, passkeys and the OWNER/DRIVER/VIEWER matrix.",
+      "na": [],
+      "evidence": {
+        "source-implemented": "EV-0001",
+        "unit-tested": "EV-0029",
+        "integration-tested": "EV-0035",
+        "browser-tested": "EV-0063",
+        "mobile-tested": "EV-0070",
+        "manually-inspected": "EV-0079",
+        "visual-regression-tested": "EV-0091"
+      }
+    },
+    {
+      "id": "providers-demo",
+      "name": "Deterministic demo provider",
+      "description": "Seeded, deterministic demo fleet with per-account degradation guard.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "container-tested",
+        "compose-tested",
+        "production-image-tested",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0002",
+        "provider-mock-tested": "EV-0062"
+      }
+    },
+    {
+      "id": "providers-tesla",
+      "name": "Tesla Fleet API provider",
+      "description": "OAuth PKCE, command map, sleep-aware poller. Live testing blocked on credentials (LP-0001).",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "container-tested",
+        "compose-tested",
+        "production-image-tested",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0003",
+        "integration-tested": "EV-0037",
+        "provider-mock-tested": "EV-0060",
+        "blocked-external-credentials": "LP-0001"
+      }
+    },
+    {
+      "id": "providers-tessie",
+      "name": "Tessie provider",
+      "description": "Optional Tessie adapter with token webhook. Live testing blocked on credentials (LP-0002).",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "container-tested",
+        "compose-tested",
+        "production-image-tested",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0004",
+        "integration-tested": "EV-0038",
+        "provider-mock-tested": "EV-0061",
+        "blocked-external-credentials": "LP-0002"
+      }
+    },
+    {
+      "id": "commands",
+      "name": "Vehicle commands",
+      "description": "20 command types, zod parameters, kill switches, step-up and lifecycle states.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "container-tested",
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0005",
+        "unit-tested": "EV-0030",
+        "integration-tested": "EV-0039"
+      }
+    },
+    {
+      "id": "queue-worker",
+      "name": "Command queue and worker",
+      "description": "BullMQ job handling with idempotent terminal transitions.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "browser-tested",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "mobile-tested",
+        "container-tested",
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0006",
+        "integration-tested": "EV-0040"
+      }
+    },
+    {
+      "id": "scheduler",
+      "name": "Leader-elected scheduler",
+      "description": "Heartbeat leader election, user-TZ cron, retention and poll planning.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "browser-tested",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "mobile-tested",
+        "container-tested",
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0007",
+        "integration-tested": "EV-0041"
+      }
+    },
+    {
+      "id": "telemetry-drives",
+      "name": "Telemetry, drives and partitions",
+      "description": "Partitioned ingest, drive/charge detection, freshness and month boundaries.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "browser-tested",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "mobile-tested",
+        "container-tested",
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0008",
+        "integration-tested": "EV-0042"
+      }
+    },
+    {
+      "id": "automations",
+      "name": "Automations engine",
+      "description": "Triggers, conditions, actions, dry-run with zero side effects, cooldowns.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "accessibility-tested",
+        "mobile-tested",
+        "container-tested",
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0009",
+        "integration-tested": "EV-0043",
+        "browser-tested": "EV-0087",
+        "visual-regression-tested": "EV-0088"
+      }
+    },
+    {
+      "id": "notifications",
+      "name": "Notifications (8 channels)",
+      "description": "In-app, email, push, webhook, ntfy, Gotify, Discord, Teams with per-channel failure isolation.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "mobile-tested",
+        "container-tested",
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0010",
+        "integration-tested": "EV-0044",
+        "browser-tested": "EV-0092"
+      }
+    },
+    {
+      "id": "status-page",
+      "name": "Public status platform",
+      "description": "Components, uptime, RSS, badge and subscriptions.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "unit-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "container-tested",
+        "compose-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0011",
+        "integration-tested": "EV-0045",
+        "browser-tested": "EV-0085",
+        "visual-regression-tested": "EV-0086"
+      }
+    },
+    {
+      "id": "incidents",
+      "name": "Incident lifecycle",
+      "description": "Operator-gated creation, updates, resolve; public page follows state.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "unit-tested",
+        "browser-tested",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "mobile-tested",
+        "container-tested",
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0012",
+        "integration-tested": "EV-0046"
+      }
+    },
+    {
+      "id": "fleet-management",
+      "name": "Fleet management",
+      "description": "Groups, drivers, departments, cost centers, assignments, maintenance and report.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "unit-tested",
+        "accessibility-tested",
+        "container-tested",
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0013",
+        "integration-tested": "EV-0047",
+        "browser-tested": "EV-0064",
+        "visual-regression-tested": "EV-0089"
+      }
+    },
+    {
+      "id": "realtime-sse",
+      "name": "SSE realtime",
+      "description": "Per-user channels, revocation and polling fallback.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "browser-tested",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "mobile-tested",
+        "container-tested",
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0014",
+        "integration-tested": "EV-0048"
+      }
+    },
+    {
+      "id": "observability",
+      "name": "Observability",
+      "description": "Metrics families, request IDs, liveness/readiness, log redaction.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "browser-tested",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "mobile-tested",
+        "container-tested",
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0015",
+        "integration-tested": "EV-0049"
+      }
+    },
+    {
+      "id": "security",
+      "name": "Security controls",
+      "description": "CSRF, rate limits, envelope encryption, SSRF policy, step-up, mutation-proven regression tests.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "browser-tested",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "mobile-tested",
+        "container-tested",
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0016",
+        "unit-tested": "EV-0031",
+        "integration-tested": "EV-0084"
+      }
+    },
+    {
+      "id": "retention-privacy",
+      "name": "Retention and privacy",
+      "description": "Per-org retention, privacy zones, export without secrets, hard delete.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "browser-tested",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "mobile-tested",
+        "container-tested",
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0017",
+        "integration-tested": "EV-0053"
+      }
+    },
+    {
+      "id": "webgl-showroom",
+      "name": "WebGL showroom",
+      "description": "R3F viewer, articulation, real paint, day/night lighting, disposal and no-WebGL fallback.",
+      "na": [
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0018",
+        "unit-tested": "EV-0032",
+        "browser-tested": "EV-0065",
+        "mobile-tested": "EV-0072",
+        "asset-validated": "EV-0075",
+        "manually-inspected": "EV-0080"
+      }
+    },
+    {
+      "id": "blender-assets",
+      "name": "Blender asset pipeline",
+      "description": "Headless Blender generation, LODs, meshopt staging, manifest.",
+      "na": [
+        "unit-tested",
+        "integration-tested",
+        "browser-tested",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "mobile-tested",
+        "container-tested",
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0019",
+        "asset-generated": "EV-0073",
+        "asset-validated": "EV-0074"
+      }
+    },
+    {
+      "id": "map",
+      "name": "Map and places",
+      "description": "Self-hosted tiles, places, routes, charging locations, privacy-zone clipping.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "unit-tested",
+        "accessibility-tested",
+        "container-tested",
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0020",
+        "integration-tested": "EV-0058",
+        "browser-tested": "EV-0066",
+        "mobile-tested": "EV-0071",
+        "visual-regression-tested": "EV-0090"
+      }
+    },
+    {
+      "id": "demo-mode",
+      "name": "Demo mode",
+      "description": "Every e2e test enables its own demo fleet; degradation never escapes the account.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "unit-tested",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "mobile-tested",
+        "container-tested",
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0021",
+        "integration-tested": "EV-0057",
+        "browser-tested": "EV-0067"
+      }
+    },
+    {
+      "id": "openapi",
+      "name": "OpenAPI specification",
+      "description": "Generated from the route table; served at /api/docs; drift and phantom-op tests.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "unit-tested",
+        "browser-tested",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "mobile-tested",
+        "container-tested",
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0022",
+        "integration-tested": "EV-0059",
+        "manually-inspected": "EV-0083"
+      }
+    },
+    {
+      "id": "backup-restore",
+      "name": "Backup and restore",
+      "description": "pg_dump/pg_restore script + restore smoke. Container/compose/image levels run in CI after the Phase 12 push.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "unit-tested",
+        "integration-tested",
+        "browser-tested",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "mobile-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0023"
+      }
+    },
+    {
+      "id": "ci-workflow",
+      "name": "GitHub Actions CI",
+      "description": "SHA-pinned jobs; actual run results land in the ledger after the Phase 12 push.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "unit-tested",
+        "integration-tested",
+        "browser-tested",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "mobile-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0078"
+      }
+    },
+    {
+      "id": "migrations",
+      "name": "Database migrations",
+      "description": "Rename, tenancy, labels/FKs, expand-then-contract upgrade path.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "browser-tested",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "mobile-tested",
+        "container-tested",
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0025",
+        "integration-tested": "EV-0055"
+      }
+    },
+    {
+      "id": "visual-regression",
+      "name": "Visual regression",
+      "description": "12 deterministic screenshot baselines with data assertions.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "unit-tested",
+        "integration-tested",
+        "container-tested",
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0026",
+        "visual-regression-tested": "EV-0068",
+        "manually-inspected": "EV-0081"
+      }
+    },
+    {
+      "id": "accessibility",
+      "name": "Accessibility",
+      "description": "axe wcag2a/aa over 11 core routes; two real violations fixed.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "unit-tested",
+        "integration-tested",
+        "container-tested",
+        "compose-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "production-image-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0027",
+        "accessibility-tested": "EV-0069"
+      }
+    },
+    {
+      "id": "deployment-compose",
+      "name": "Docker Compose deployment",
+      "description": "Production + dev compose with ENV_SPEC contract; container/image boots run in CI after push.",
+      "na": [
+        "asset-generated",
+        "asset-validated",
+        "unit-tested",
+        "integration-tested",
+        "browser-tested",
+        "visual-regression-tested",
+        "accessibility-tested",
+        "mobile-tested",
+        "provider-mock-tested",
+        "live-provider-tested",
+        "blocked-external-credentials",
+        "blocked-external-service"
+      ],
+      "evidence": {
+        "source-implemented": "EV-0077",
+        "compose-tested": "EV-0076",
+        "manually-inspected": "EV-0082"
+      }
+    }
+  ]
+}
