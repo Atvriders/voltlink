@@ -34,6 +34,12 @@ The model's named parts follow live vehicle state every frame:
 Context-loss events are caught and recovered; components dispose GPU resources
 on unmount.
 
+## Camera, paint and lighting
+
+Every vehicle class gets its own camera framing with smooth transitions; the
+body mesh is tinted with the vehicle's real paint color; studio lighting
+follows the local hour (day/night).
+
 ## Reduced motion
 
 The viewer respects the system reduced-motion preference (no continuous

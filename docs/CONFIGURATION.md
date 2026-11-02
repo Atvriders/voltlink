@@ -23,6 +23,7 @@ All configuration is environment variables. In Docker Compose they come from
 | `REDIS_URL`               | _(empty)_     | Redis URL; when empty the queue falls back to PostgreSQL  |
 | `VL_RATE_LIMIT_PER_MIN`   | `900`         | Global API rate limit per IP per minute                   |
 | `TRUST_PROXY`             | `false`       | Honour `X-Forwarded-*` behind a proxy                     |
+| `STATUS_PORT`             | `3001`        | Port the `status` role listens on
 | `LOG_LEVEL`               | `info`        | Log level                                                 |
 | `VL_DEMO_DEFAULT_ENABLED` | `false`       | Auto-enable demo mode for new accounts (development only) |
 

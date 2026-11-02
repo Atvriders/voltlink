@@ -8,7 +8,7 @@
 | API               | Vitest + supertest against PostgreSQL | `apps/api/test/`                                                       |
 | E2E               | Playwright (desktop + Pixel 7 mobile) | `tests/e2e/`                                                           |
 | Visual regression | Playwright snapshots                  | `tests/e2e/`                                                           |
-| WebGL assets      | Playwright + GLB validation           | `tests/e2e/webgl-assets.spec.ts`, `blender/scripts/validate_assets.py` |
+| WebGL assets      | Playwright + GLB validation           | `tests/e2e/webgl-assets.spec.ts`, `scripts/assets/validate.mts` |
 | Security          | auth/CSRF/rate-limit tests            | `apps/api/test/`                                                       |
 | Legacy content    | grep-based scan                       | `scripts/legacy-scan.ts`                                               |
 
@@ -23,7 +23,9 @@ npm run legacy:scan               # fails on leftover pre-rebrand content
 
 ## E2E details
 
-`playwright.config.ts` defines two projects (`desktop`, `mobile`) against
+`playwright.config.ts` defines five projects — `desktop`, `tablet` (iPad
+Pro 11 Chromium), `mobile` (Pixel 7), `webgl-swiftshader` (software GL) and
+`no-webgl` (WebGL disabled, graceful-degradation smoke) — against
 `http://127.0.0.1:3111`. The suite:
 
 - registers fresh users, enables demo mode, walks the whole product
