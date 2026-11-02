@@ -3,7 +3,8 @@
 # a Postgres + Redis (provided by CI services or compose). Used by the
 # e2e-fullstack job (guide 08 §14). Not a substitute for the image smoke test.
 set -euo pipefail
-cd "$(dirname "$0")/../.."
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR/../.."
 export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
 
 # A previous stack on port 3111 would win the health check; kill it first.
@@ -15,7 +16,7 @@ sleep 1
 
 cd apps/api
 node dist/cli/migrate.cjs >/tmp/voltlink-migrate.log 2>&1 || { tail -40 /tmp/voltlink-migrate.log; exit 1; }
-node "$(dirname "$0")/fake-smtp.mjs" >/tmp/voltlink-smtp.log 2>&1 &
+node "$SCRIPT_DIR/fake-smtp.mjs" >/tmp/voltlink-smtp.log 2>&1 &
 echo $! >/tmp/voltlink-smtp.pid
 VL_DEV_ECHO_TOKENS=true NODE_ENV=development PORT=3111 node dist/index.cjs >/tmp/voltlink-api.log 2>&1 &
 echo $! >/tmp/voltlink-api.pid
