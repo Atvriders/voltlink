@@ -10,6 +10,8 @@ export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
 # Bootstrap token: e2e needs first-run setup (open registration). A local
 # default keeps `bash scripts/e2e/start-stack.sh` working from a fresh shell.
 export VL_SETUP_TOKEN="${VL_SETUP_TOKEN:-e2e-local-setup-token-0123456789abcdef}"
+# Open registration requires an SMTP sink; the fake server below provides it.
+export SMTP_URL="${SMTP_URL:-smtp://127.0.0.1:1025}"
 
 # A previous stack on port 3111 would win the health check; kill it first.
 pkill -f 'dist/index.cjs' || true
@@ -50,8 +52,8 @@ if [ -n "${VL_SETUP_TOKEN:-}" ]; then
     const { Client } = require("pg");
     const c = new Client({ connectionString: process.env.DATABASE_URL });
     c.connect()
-      .then(() => c.query("INSERT INTO \"AppSetting\" (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", ["instance.registrationMode", "open"])).then(() => c.query('UPDATE "AppSetting" SET "updatedAt" = now() WHERE key = $1', ["instance.registrationMode"]))
-      .catch(() => {})
+      .then(() => c.query("INSERT INTO \"AppSetting\" (key, value, \"updatedAt\") VALUES ($1, $2, now()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, \"updatedAt\" = now()", ["instance.registrationMode", "open"]))
+      .catch((e) => console.error("open-registration:", e.message))
       .finally(() => c.end());
   ' || true
 fi
