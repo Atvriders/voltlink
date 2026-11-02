@@ -18,7 +18,7 @@ export default defineConfig({
     {
       name: 'desktop',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: /no-webgl\.spec\.ts|tesla\.spec\.ts/,
+      testIgnore: /no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts/,
     },
     // Gate 7: every page is exercised at desktop, tablet and mobile sizes.
     // Visual snapshots are desktop-only (viewport coverage lives in the
@@ -26,16 +26,18 @@ export default defineConfig({
     {
       name: 'tablet',
       use: { ...devices['iPad Pro 11'], defaultBrowserType: 'chromium', browserName: 'chromium' },
-      testIgnore: /visual\.spec\.ts|no-webgl\.spec\.ts|tesla\.spec\.ts/,
+      testIgnore: /visual\.spec\.ts|no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts/,
     },
     {
       name: 'mobile',
       use: { ...devices['Pixel 7'] },
-      testIgnore: /visual\.spec\.ts|no-webgl\.spec\.ts|tesla\.spec\.ts/,
+      testIgnore: /visual\.spec\.ts|no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts/,
     },
     // Tesla spec runs only through scripts/e2e/tesla-e2e.sh (fake Fleet
     // API + seeded user); the device projects above ignore it.
     { name: 'tesla', use: { ...devices['Desktop Chrome'] }, testMatch: /tesla\.spec\.ts/ },
+    // Accessibility scan (guide 08 §12): axe on every core page, desktop only.
+    { name: 'a11y', use: { ...devices['Desktop Chrome'] }, testMatch: /a11y\.spec\.ts/ },
     // Guide 06 §12: WebGL rendering is exercised both on real GL and on the
     // SwiftShader software path, and WebGL-disabled browsers degrade instead
     // of crashing (G-14).
