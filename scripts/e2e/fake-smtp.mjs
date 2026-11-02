@@ -3,7 +3,17 @@
 import net from 'node:net';
 
 const server = net.createServer((socket) => {
-  socket.write('220 voltlink-e2e ESMTP\r\n');
+  // Survive abrupt client disconnects (curl probes, aborted handshakes):
+  // a write error must never kill the sink.
+  socket.on('error', () => {});
+  const safe = (text) => {
+    try {
+      socket.write(text);
+    } catch {
+      /* client gone */
+    }
+  };
+  safe('220 voltlink-e2e ESMTP\r\n');
   let inData = false;
   let buf = '';
   socket.on('data', (chunk) => {
@@ -15,21 +25,21 @@ const server = net.createServer((socket) => {
       if (inData) {
         if (line === '.') {
           inData = false;
-          socket.write('250 OK: queued\r\n');
+          safe('250 OK: queued\r\n');
         }
         continue;
       }
       const verb = line.split(' ')[0]?.toUpperCase();
-      if (verb === 'EHLO' || verb === 'HELO') socket.write('250-voltlink-e2e\r\n250 OK\r\n');
-      else if (verb === 'MAIL' || verb === 'RCPT') socket.write('250 OK\r\n');
+      if (verb === 'EHLO' || verb === 'HELO') safe('250-voltlink-e2e\r\n250 OK\r\n');
+      else if (verb === 'MAIL' || verb === 'RCPT') safe('250 OK\r\n');
       else if (verb === 'DATA') {
         inData = true;
-        socket.write('354 End data with <CR><LF>.<CR><LF>\r\n');
+        safe('354 End data with <CR><LF>.<CR><LF>\r\n');
       } else if (verb === 'QUIT') {
-        socket.write('221 Bye\r\n');
+        safe('221 Bye\r\n');
         socket.end();
-      } else if (verb === 'RSET' || verb === 'NOOP') socket.write('250 OK\r\n');
-      else socket.write('250 OK\r\n');
+      } else if (verb === 'RSET' || verb === 'NOOP') safe('250 OK\r\n');
+      else safe('250 OK\r\n');
     }
   });
 });
