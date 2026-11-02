@@ -52,14 +52,17 @@ export default function OverviewPage() {
     queryKey: ['providers'],
     queryFn: () => api<ProviderInfo[]>('/api/v1/providers'),
   });
+  const hasVehicles = (vehicles?.length ?? 0) > 0;
   const { data: drives } = useQuery({
     queryKey: ['drives', 'recent'],
     queryFn: () => api<{ items: Drive[] }>('/api/v1/drives?pageSize=4').then((d) => d.items),
+    enabled: hasVehicles,
   });
   const { data: charges } = useQuery({
     queryKey: ['charging', 'recent'],
     queryFn: () =>
       api<{ items: ChargeSession[] }>('/api/v1/charging?pageSize=4').then((d) => d.items),
+    enabled: hasVehicles,
   });
   const { data: automations } = useQuery({
     queryKey: ['automations'],
