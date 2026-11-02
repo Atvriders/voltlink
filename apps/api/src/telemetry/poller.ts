@@ -188,6 +188,8 @@ export async function processTelemetryJob(payload: {
   if (!vehicle) return;
   const account = vehicle.providerAccount;
   if (account.status !== 'connected' && account.status !== 'reauth_required') return;
+  // L1615: production-provider jobs never touch demo accounts or demo vehicles.
+  if (account.demo || (vehicle.demo && account.provider !== 'demo')) return;
   // P-SLEEP: record the vehicle_data time BEFORE the call, so 408s count.
   if (payload.action !== 'state') {
     await prisma.vehiclePollState.upsert({

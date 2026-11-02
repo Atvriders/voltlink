@@ -156,6 +156,12 @@ export default function BatteryPage() {
                       minTickGap={40}
                     />
                     <YAxis domain={[0, 100]} stroke="var(--vl-faint)" fontSize={11} />
+                    <YAxis
+                      yAxisId="range"
+                      orientation="right"
+                      stroke="var(--vl-faint)"
+                      fontSize={11}
+                    />
                     <Tooltip
                       contentStyle={{
                         background: 'var(--vl-panel)',
@@ -171,6 +177,15 @@ export default function BatteryPage() {
                       stroke={color}
                       dot={false}
                       strokeWidth={2}
+                    />
+                    <Line
+                      yAxisId="range"
+                      type="monotone"
+                      dataKey="rangeKm"
+                      name="Est. range km"
+                      stroke="#22d3ee"
+                      dot={false}
+                      strokeWidth={1.5}
                     />
                   </LineChart>
                 </ResponsiveContainer>

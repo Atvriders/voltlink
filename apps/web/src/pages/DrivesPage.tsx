@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Download, Gauge } from 'lucide-react';
 import { api, apiCsv } from '../api/client';
 import { Badge, Button, Card, EmptyState, Input, Select, Spinner } from '../components/ui';
-import { fmtClock, fmtDist, fmtDuration, fmtEfficiency, fmtEnergy } from '../lib/format';
+import { fmtClock, fmtDist, fmtDuration, fmtEfficiency, fmtEnergy, fmtMoney } from '../lib/format';
 import { useAuth } from '../auth/AuthContext';
 import type { Drive } from '@voltlink/shared';
 
@@ -20,11 +20,15 @@ export default function DrivesPage() {
   const [vehicleId, setVehicleId] = useState('');
   const [sort, setSort] = useState('startAt');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
 
   const qs = new URLSearchParams({ page: String(page), pageSize: '20', sort, order });
   if (search) qs.set('search', search);
   if (classification) qs.set('classification', classification);
   if (vehicleId) qs.set('vehicleId', vehicleId);
+  if (from) qs.set('from', from);
+  if (to) qs.set('to', to);
 
   const { data, isLoading } = useQuery({
     queryKey: ['drives', qs.toString()],
@@ -33,10 +37,15 @@ export default function DrivesPage() {
         `/api/v1/drives?${qs.toString()}`,
       ),
   });
+  const totalsQs = new URLSearchParams();
+  if (from) totalsQs.set('from', from);
+  if (to) totalsQs.set('to', to);
   const { data: totals } = useQuery({
-    queryKey: ['drives-totals'],
+    queryKey: ['drives-totals', totalsQs.toString()],
     queryFn: () =>
-      api<{ count: number; distanceKm: number; energyKwh: number }>('/api/v1/drives/totals'),
+      api<{ count: number; distanceKm: number; energyKwh: number; estCost: number; costPerKm: number }>(
+        `/api/v1/drives/totals?${totalsQs.toString()}`,
+      ),
   });
   const { data: vehicles } = useQuery({
     queryKey: ['vehicles'],
@@ -61,7 +70,7 @@ export default function DrivesPage() {
         {totals && (
           <span className="text-xs text-subtle">
             {totals.count} drives · {fmtDist(totals.distanceKm, units, 0)} ·{' '}
-            {fmtEnergy(totals.energyKwh)}
+            {fmtEnergy(totals.energyKwh)} · {fmtMoney(totals.estCost)} ({fmtMoney(totals.costPerKm)}/km)
           </span>
         )}
         <div className="ml-auto flex gap-2">
@@ -76,6 +85,32 @@ export default function DrivesPage() {
 
       <Card pad={false}>
         <div className="flex flex-wrap gap-2 border-b border-line p-3">
+          <label className="flex items-center gap-1.5 text-xs text-subtle">
+            From
+            <Input
+              type="date"
+              value={from}
+              onChange={(e) => {
+                setFrom(e.target.value);
+                setPage(1);
+              }}
+              aria-label="From date"
+              className="w-40"
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-subtle">
+            To
+            <Input
+              type="date"
+              value={to}
+              onChange={(e) => {
+                setTo(e.target.value);
+                setPage(1);
+              }}
+              aria-label="To date"
+              className="w-40"
+            />
+          </label>
           <Input
             placeholder="Search address or driver…"
             value={search}

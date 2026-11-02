@@ -1,5 +1,7 @@
 // Drives routes: listing, route replay, totals, CSV/JSON export, tags.
 
+import type { Prisma } from '@prisma/client';
+
 import { policyRouter, type RoutePolicy } from '../authz/policy';
 import { prisma } from '../core/db';
 import { csv } from '../core/util';
@@ -82,16 +84,30 @@ drivesRouter.get('/totals', readAll, async (req, res) => {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No vehicles accessible.' } });
     return;
   }
+  const from = typeof req.query.from === 'string' && req.query.from ? new Date(req.query.from) : undefined;
+  const to = typeof req.query.to === 'string' && req.query.to ? new Date(req.query.to) : undefined;
+  const startAt: { gte?: Date; lte?: Date } = {
+    ...(from && !Number.isNaN(from.getTime()) ? { gte: from } : {}),
+    ...(to && !Number.isNaN(to.getTime()) ? { lte: to } : {}),
+  };
+  const where: Prisma.DriveWhereInput = {
+    vehicleId: { in: ids },
+    ...(Object.keys(startAt).length > 0 ? { startAt } : {}),
+  };
   const agg = await prisma.drive.aggregate({
-    where: { vehicleId: { in: ids } },
-    _sum: { distanceKm: true, energyKwh: true },
+    where,
+    _sum: { distanceKm: true, energyKwh: true, estCost: true },
     _count: true,
   });
+  const distanceKm = agg._sum.distanceKm ?? 0;
+  const cost = agg._sum.estCost ?? 0;
   res.json({
     data: {
       count: agg._count,
-      distanceKm: Math.round((agg._sum.distanceKm ?? 0) * 10) / 10,
+      distanceKm: Math.round(distanceKm * 10) / 10,
       energyKwh: Math.round((agg._sum.energyKwh ?? 0) * 10) / 10,
+      estCost: Math.round(cost * 100) / 100,
+      costPerKm: distanceKm > 0 ? Math.round((cost / distanceKm) * 100) / 100 : 0,
     },
   });
 });
