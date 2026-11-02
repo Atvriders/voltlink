@@ -9,6 +9,7 @@ import { policyRouter, sessionActor, type RoutePolicy } from '../authz/policy';
 import { invalidateZonesForOrg } from '../privacy/zones';
 import { accessibleVehicleIds } from '../authz/access';
 import { AccessDenied } from '../authz/errors';
+import { issueCommandHandler } from './commands';
 import { ingestVehicleState } from '../telemetry/ingest';
 import { getProvider, buildContext } from '../providers/registry';
 import { getQueue } from '../core/queue';
@@ -317,6 +318,22 @@ vehiclesRouter.patch(
     if (Object.keys(data).length > 0)
       await prisma.vehicle.update({ where: { id: vehicle.id }, data });
     res.json({ data: { ok: true } });
+  },
+);
+
+// Spec L1536: per-vehicle command alias. POST /api/v1/vehicles/{id}/commands
+// behaves exactly like POST /api/v1/commands with vehicleId in the body.
+vehiclesRouter.post(
+  '/:id/commands',
+  {
+    auth: 'any',
+    apiScope: 'commands:write',
+    verifiedEmail: true,
+    target: { kind: 'vehicle', from: 'param:id', perm: 'vehicles.command' },
+  },
+  async (req, res) => {
+    req.body = { ...(req.body ?? {}), vehicleId: req.access!.vehicle!.id };
+    await issueCommandHandler(req, res);
   },
 );
 

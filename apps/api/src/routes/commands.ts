@@ -1,5 +1,6 @@
 // Command routes: issue, list, detail, cancel, and safety switches.
 
+import type { Request, Response } from 'express';
 import { policyRouter, sessionActor } from '../authz/policy';
 import { accessibleVehicleIds } from '../authz/access';
 import { z } from 'zod';
@@ -23,15 +24,8 @@ const issueSchema = z.object({
   stepUp: z.object({ password: z.string().optional(), totp: z.string().optional() }).optional(),
 });
 
-commandsRouter.post(
-  '/',
-  {
-    auth: 'any',
-    apiScope: 'commands:write',
-    verifiedEmail: true,
-    target: { kind: 'vehicle', from: 'body:vehicleId', perm: 'vehicles.command' },
-  },
-  async (req, res) => {
+/** Shared handler for POST /commands and the per-vehicle alias (L1536). */
+export async function issueCommandHandler(req: Request, res: Response): Promise<void> {
     const parsed = issueSchema.safeParse(req.body);
     if (!parsed.success) {
       res
@@ -65,7 +59,17 @@ commandsRouter.post(
       }
       throw err;
     }
+}
+
+commandsRouter.post(
+  '/',
+  {
+    auth: 'any',
+    apiScope: 'commands:write',
+    verifiedEmail: true,
+    target: { kind: 'vehicle', from: 'body:vehicleId', perm: 'vehicles.command' },
   },
+  issueCommandHandler,
 );
 
 commandsRouter.get(
