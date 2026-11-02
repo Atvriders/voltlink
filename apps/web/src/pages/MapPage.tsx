@@ -624,28 +624,25 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <details className="card p-2" open>
-      <summary className="flex cursor-pointer items-center gap-2 px-2 py-1 text-sm font-semibold">
+    <section className="card p-2">
+      <div className="flex items-center gap-2 px-2 py-1 text-sm font-semibold">
         <span>{title}</span>
         <span className="text-xs text-faint">{count}</span>
         {onAdd && (
           <Button
             variant="ghost"
             className="ml-auto px-2 py-1 text-xs"
-            onClick={(ev) => {
-              ev.preventDefault();
-              onAdd();
-            }}
+            onClick={() => onAdd()}
           >
             <Plus size={12} /> Add
           </Button>
         )}
-      </summary>
+      </div>
       <ul className="mt-1 space-y-1">
         {count === 0 && <p className="px-2 py-1 text-xs text-faint">None yet.</p>}
         {children}
       </ul>
-    </details>
+    </section>
   );
 }
 

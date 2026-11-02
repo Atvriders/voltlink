@@ -127,13 +127,13 @@ export default function OverviewPage() {
             {v.state?.chargingState === 'charging' && <Zap size={13} className="text-charging" />}
           </button>
         ))}
-        <Link
-          to="/showroom"
-          className="flex shrink-0 items-center gap-1 rounded-xl border border-dashed border-line px-3 py-2 text-sm text-faint hover:text-accent"
-        >
-          Showroom <ArrowRight size={13} />
-        </Link>
       </div>
+      <Link
+        to="/showroom"
+        className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-dashed border-line px-3 py-2 text-sm text-faint hover:text-accent"
+      >
+        Showroom <ArrowRight size={13} />
+      </Link>
 
       {/* Main grid */}
       <div className="grid gap-4 lg:grid-cols-3">
