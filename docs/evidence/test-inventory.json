@@ -1,0 +1,30 @@
+{
+  "commit": "9a2bf44e0e0d51407d05479429a0692cec361579",
+  "vitest": {
+    "total": 1915,
+    "passed": 1915
+  },
+  "playwright": {
+    "total": 0,
+    "skipped": 0
+  },
+  "categories": {
+    "command-validation": 2,
+    "realtime": 1,
+    "authz": 1,
+    "authn": 2,
+    "migration": 2,
+    "status-page": 2,
+    "incident": 1,
+    "observability": 1,
+    "rate-limit": 3,
+    "security": 3,
+    "automation": 1,
+    "notification": 2,
+    "retention": 1,
+    "queue": 1,
+    "scheduler": 1,
+    "telemetry": 1
+  },
+  "generatedAt": "2026-11-02T13:21:03.363Z"
+}

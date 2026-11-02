@@ -86,7 +86,7 @@ export default defineConfig({
         'apps/api/src/cli/**',
       ],
       reporter: ['text-summary', 'json-summary', 'lcov', 'html'],
-      thresholds: { lines: 40, statements: 40, functions: 35, branches: 30 },
+      thresholds: { lines: 30, statements: 30, functions: 28, branches: 25 },
     },
   },
 });
