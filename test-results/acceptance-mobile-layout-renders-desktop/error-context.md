@@ -12,11 +12,11 @@
 # Error details
 
 ```
-Test timeout of 60000ms exceeded.
+Error: Channel closed
 ```
 
 ```
-Error: page.waitForResponse: Test timeout of 60000ms exceeded.
+Error: page.waitForResponse: Test ended.
 ```
 
 # Page snapshot
@@ -34,7 +34,7 @@ Error: page.waitForResponse: Test timeout of 60000ms exceeded.
         - textbox "Name" [ref=e12]: E2E Tester
       - generic [ref=e13]:
         - generic [ref=e14]: Email
-        - textbox "Email" [ref=e15]: e2e-m-1793618195881@voltlink.test
+        - textbox "Email" [ref=e15]: e2e-m-1793619335544@voltlink.test
       - generic [ref=e16]:
         - generic [ref=e17]: Password
         - textbox "Password" [ref=e18]: e2e-password-123
@@ -79,7 +79,7 @@ Error: page.waitForResponse: Test timeout of 60000ms exceeded.
   25 |     (r) => r.url().includes('/auth/register') && r.request().method() === 'POST',
   26 |   );
 > 27 |   const meOk = page.waitForResponse((r) => r.url().includes('/api/v1/auth/me') && r.ok());
-     |                     ^ Error: page.waitForResponse: Test timeout of 60000ms exceeded.
+     |                     ^ Error: page.waitForResponse: Test ended.
   28 |   await page.getByRole('button', { name: 'Create account' }).click();
   29 |   const regRes = await postDone;
   30 |   if (regRes.status() === 202) {

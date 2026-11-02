@@ -7,6 +7,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR/../.."
 export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
 
+# Bootstrap token: e2e needs first-run setup (open registration). A local
+# default keeps `bash scripts/e2e/start-stack.sh` working from a fresh shell.
+export VL_SETUP_TOKEN="${VL_SETUP_TOKEN:-e2e-local-setup-token-0123456789abcdef}"
+
 # A previous stack on port 3111 would win the health check; kill it first.
 pkill -f 'dist/index.cjs' || true
 pkill -f 'dist/worker.cjs' || true
@@ -15,6 +19,9 @@ pkill -f 'fake-smtp.mjs' || true
 sleep 1
 
 cd apps/api
+set -a
+. ./.env 2>/dev/null || true
+set +a
 node dist/cli/migrate.cjs >/tmp/voltlink-migrate.log 2>&1 || { tail -40 /tmp/voltlink-migrate.log; exit 1; }
 node "$SCRIPT_DIR/fake-smtp.mjs" >/tmp/voltlink-smtp.log 2>&1 &
 echo $! >/tmp/voltlink-smtp.pid
@@ -43,7 +50,7 @@ if [ -n "${VL_SETUP_TOKEN:-}" ]; then
     const { Client } = require("pg");
     const c = new Client({ connectionString: process.env.DATABASE_URL });
     c.connect()
-      .then(() => c.query("INSERT INTO \"AppSetting\" (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", ["instance.registrationMode", "open"]))
+      .then(() => c.query("INSERT INTO \"AppSetting\" (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", ["instance.registrationMode", "open"])).then(() => c.query('UPDATE "AppSetting" SET "updatedAt" = now() WHERE key = $1', ["instance.registrationMode"]))
       .catch(() => {})
       .finally(() => c.end());
   ' || true
