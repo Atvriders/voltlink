@@ -138,12 +138,23 @@ function VehicleModel({
     return { scene, map };
   }, [gltf, preset, vehicle.exteriorColor]);
 
+  const onLoadedRef = useRef(onLoaded);
+  onLoadedRef.current = onLoaded;
+
+  // Load signal: stable deps only (onLoaded identity changes with every parent
+  // render and must never re-run the cleanup below).
   useEffect(() => {
     signal.ok = true;
-    onLoaded?.();
+    onLoadedRef.current?.();
     return () => {
       signal.ok = false;
-      // Spec L1316/L1679: dispose every cloned geometry and material on unmount.
+    };
+  }, [signal]);
+
+  // Spec L1316/L1679: dispose every cloned geometry and material once, when the
+  // loaded asset (or this model instance) goes away — never on parent re-renders.
+  useEffect(() => {
+    return () => {
       parts.scene.traverse((o) => {
         if ((o as THREE.Mesh).isMesh) {
           const mesh = o as THREE.Mesh;
@@ -153,7 +164,7 @@ function VehicleModel({
         }
       });
     };
-  }, [signal, onLoaded, parts.scene]);
+  }, [parts]);
 
   useFrame(({ clock }) => {
     const s = stateRef.current;
