@@ -24,18 +24,28 @@ export default defineConfig({
       use: { ...devices['iPad Pro 11'], defaultBrowserType: 'chromium', browserName: 'chromium' },
       testIgnore: /visual\.spec\.ts|no-webgl\.spec\.ts/,
     },
-    { name: 'mobile', use: { ...devices['Pixel 7'] }, testIgnore: /visual\.spec\.ts|no-webgl\.spec\.ts/ },
+    {
+      name: 'mobile',
+      use: { ...devices['Pixel 7'] },
+      testIgnore: /visual\.spec\.ts|no-webgl\.spec\.ts/,
+    },
     // Guide 06 §12: WebGL rendering is exercised both on real GL and on the
     // SwiftShader software path, and WebGL-disabled browsers degrade instead
     // of crashing (G-14).
     {
       name: 'webgl-swiftshader',
-      use: { ...devices['Desktop Chrome'], launchOptions: { args: ['--use-gl=swiftshader', '--disable-gpu'] } },
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: { args: ['--use-gl=swiftshader', '--disable-gpu'] },
+      },
       testMatch: /webgl-assets\.spec\.ts/,
     },
     {
       name: 'no-webgl',
-      use: { ...devices['Desktop Chrome'], launchOptions: { args: ['--disable-webgl', '--disable-gpu'] } },
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: { args: ['--disable-webgl', '--disable-gpu'] },
+      },
       testMatch: /no-webgl\.spec\.ts/,
     },
   ],

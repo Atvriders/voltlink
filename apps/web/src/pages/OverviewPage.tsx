@@ -386,9 +386,7 @@ function OverviewState({ state, units }: { state: VehicleState; units: 'metric' 
           label="Tire pressure"
           value={
             state.tirePressureKpa ? (
-              <span className="text-sm">
-                {Math.round(state.tirePressureKpa.frontLeft)} kPa
-              </span>
+              <span className="text-sm">{Math.round(state.tirePressureKpa.frontLeft)} kPa</span>
             ) : (
               '—'
             )

@@ -39,3 +39,7 @@ apps/api/web-dist/
 # Hand-off and progress material: never committed.
 context/
 /PROGRESS.md
+
+# Playwright output
+test-results/
+playwright-report/

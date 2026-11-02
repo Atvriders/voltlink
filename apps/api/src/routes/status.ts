@@ -11,6 +11,7 @@ import {
   ensureComponents,
 } from '../status/service';
 import { randomToken } from '../core/crypto';
+import { ssePublish } from '../core/sse';
 import { sendMail } from '../auth/service';
 
 const statusPublicUrl = `${env.PUBLIC_URL}/status`;
@@ -255,6 +256,11 @@ statusRouter.post(
         },
       });
     }
+    void ssePublish({
+      userId: sessionActor(req).userId,
+      type: 'status.incident',
+      data: { incidentId: incident.id, title: incident.title, severity: incident.severity },
+    });
     void notifyStatusSubscribers(
       `New incident: ${incident.title}`,
       `${incident.title} — ${message ?? 'Investigating'}`,

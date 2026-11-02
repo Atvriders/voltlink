@@ -6,6 +6,8 @@ import { audit } from '../core/settings';
 import { notify } from '../notifications/service';
 import { getQueue } from '../core/queue';
 import { haversineKm } from '../core/geo';
+import { ssePublish } from '../core/sse';
+import { METRICS, metricInc } from '../core/metrics';
 import type { Automation, TriggerType, ConditionType, ActionType } from '@voltlink/shared';
 
 export interface TriggerEvent {
@@ -387,6 +389,12 @@ export async function runAutomation(
       },
     });
   }
+  if (result === 'failed') metricInc(METRICS.automationFailures);
+  void ssePublish({
+    userId: row.userId,
+    type: 'automation.execution',
+    data: { automationId: row.id, result, vehicleId: event.vehicleId ?? null },
+  });
   await audit({
     actorId: null,
     action: 'automation.run',

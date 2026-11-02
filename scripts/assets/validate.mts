@@ -24,10 +24,24 @@ interface DoorSpec {
   openDeg: number;
 }
 interface ClassSpec {
-  envelope: { length: number; width: number; height: number; wheelbase: number; frontOverhang: number; groundClearance: number; track: [number, number] };
+  envelope: {
+    length: number;
+    width: number;
+    height: number;
+    wheelbase: number;
+    frontOverhang: number;
+    groundClearance: number;
+    track: [number, number];
+  };
   tire: { rimIn: number; widthMm: number; aspect: number };
   doors: DoorSpec[];
-  rearClosure: { id: string; z: [number, number]; y: [number, number]; hinge: string; openDeg: number };
+  rearClosure: {
+    id: string;
+    z: [number, number];
+    y: [number, number];
+    hinge: string;
+    openDeg: number;
+  };
   frunk: { z: [number, number]; openDeg: number };
   chargePort: { side: 'left' | 'right'; z: number; y: number; openDeg: number };
   budgets: { lod0: [number, number]; lod1: number; lod2: number; lod0Bytes: number };
@@ -58,11 +72,14 @@ async function load(file: string) {
 }
 
 interface ArticNode {
-  node: InstanceType<typeof import('@gltf-transform/core')['Node']>;
+  node: InstanceType<(typeof import('@gltf-transform/core'))['Node']>;
   def: { kind: string; axis: number[]; openDeg?: number; distance?: number; state?: string };
 }
 
-function worldBox(doc: import('@gltf-transform/core').Document, node: import('@gltf-transform/core').Node): Box3 {
+function worldBox(
+  doc: import('@gltf-transform/core').Document,
+  node: import('@gltf-transform/core').Node,
+): Box3 {
   const box = new Box3();
   const v = new Vector3();
   const m = new Matrix4();
@@ -83,15 +100,24 @@ function worldBox(doc: import('@gltf-transform/core').Document, node: import('@g
   return box;
 }
 
-function worldBoxOpened(doc: import('@gltf-transform/core').Document, node: import('@gltf-transform/core').Node, def: { axis: number[]; openDeg: number }): Box3 {
+function worldBoxOpened(
+  doc: import('@gltf-transform/core').Document,
+  node: import('@gltf-transform/core').Node,
+  def: { axis: number[]; openDeg: number },
+): Box3 {
   const box = new Box3();
   const v = new Vector3();
   const m = new Matrix4();
-  const q = new Quaternion().setFromAxisAngle(new Vector3().fromArray(def.axis).normalize(), (def.openDeg * Math.PI) / 180);
+  const q = new Quaternion().setFromAxisAngle(
+    new Vector3().fromArray(def.axis).normalize(),
+    (def.openDeg * Math.PI) / 180,
+  );
   const visit = (n: import('@gltf-transform/core').Node, parentWorld: Matrix4) => {
     let local: Matrix4;
     if (n === node) {
-      local = new Matrix4().fromArray(n.getMatrix()).multiply(new Matrix4().makeRotationFromQuaternion(q));
+      local = new Matrix4()
+        .fromArray(n.getMatrix())
+        .multiply(new Matrix4().makeRotationFromQuaternion(q));
     } else {
       local = new Matrix4().fromArray(n.getMatrix());
     }
@@ -131,18 +157,34 @@ function collectNodes(doc: import('@gltf-transform/core').Document) {
   return byName;
 }
 
-function extras(node: import('@gltf-transform/core').Node): { kind?: string; axis?: number[]; openDeg?: number; distance?: number; state?: string; class?: string; lod?: number } | null {
+function extras(node: import('@gltf-transform/core').Node): {
+  kind?: string;
+  axis?: number[];
+  openDeg?: number;
+  distance?: number;
+  state?: string;
+  class?: string;
+  lod?: number;
+} | null {
   const e = node.getExtras() as { voltlink?: unknown } | null;
   if (!e || typeof e !== 'object') return null;
   const v = (e as { voltlink?: Record<string, unknown> }).voltlink;
   if (!v || typeof v !== 'object') return null;
-  return v as { kind: string; axis?: number[]; openDeg?: number; distance?: number; state?: string };
+  return v as {
+    kind: string;
+    axis?: number[];
+    openDeg?: number;
+    distance?: number;
+    state?: string;
+  };
 }
 
 function modelBounds(doc: import('@gltf-transform/core').Document, names?: string[]) {
   const nodes = collectNodes(doc);
   const box = new Box3();
-  const list = names ? names.map((n) => nodes.get(n)).filter((n): n is import('@gltf-transform/core').Node => !!n) : doc.getRoot().listNodes();
+  const list = names
+    ? names.map((n) => nodes.get(n)).filter((n): n is import('@gltf-transform/core').Node => !!n)
+    : doc.getRoot().listNodes();
   for (const node of list) box.union(worldBox(doc, node));
   return box;
 }
@@ -166,8 +208,12 @@ for (const file of readdirSync(STAGED).filter((f) => f.endsWith('.glb') && !f.in
 
   // SPEC_INVALID — glTF structure (staged files are uncompressed)
   const { default: validator } = await import('gltf-validator');
-  const report = await validator.validateBytes(new Uint8Array(readFileSync(full)), { uri: file, externalResourceFunction: async () => ({ status: 404, error: {} }) });
-  if (report.issues.numErrors > 0) fail(full, 'SPEC_INVALID', `gltf-validator: ${report.issues.numErrors} errors`);
+  const report = await validator.validateBytes(new Uint8Array(readFileSync(full)), {
+    uri: file,
+    externalResourceFunction: async () => ({ status: 404, error: {} }),
+  });
+  if (report.issues.numErrors > 0)
+    fail(full, 'SPEC_INVALID', `gltf-validator: ${report.issues.numErrors} errors`);
 
   // BIN_EMPTY
   const buf = readFileSync(full);
@@ -199,26 +245,65 @@ for (const file of readdirSync(STAGED).filter((f) => f.endsWith('.glb') && !f.in
 
   // NAME_INVALID
   for (const name of nodes.keys()) {
-    if (!/^[a-z0-9_]+$/.test(name) || name.includes('.')) fail(full, 'NAME_INVALID', `bad name: ${name}`);
+    if (!/^[a-z0-9_]+$/.test(name) || name.includes('.'))
+      fail(full, 'NAME_INVALID', `bad name: ${name}`);
   }
 
   // PART_MISSING — required part set per class
   const required = [
-    'body_mesh', 'trim_mesh', 'underbody_mesh', 'wheel_well_mesh',
-    'windshield', 'rear_glass', 'window_fixed_l', 'window_fixed_r',
-    'mirror_l', 'mirror_r',
-    'wheel_fl', 'wheel_fr', 'wheel_rl', 'wheel_rr',
-    'tire_fl', 'rim_fl', 'brake_fl', 'tire_fr', 'rim_fr', 'brake_fr',
-    'tire_rl', 'rim_rl', 'brake_rl', 'tire_rr', 'rim_rr', 'brake_rr',
+    'body_mesh',
+    'trim_mesh',
+    'underbody_mesh',
+    'wheel_well_mesh',
+    'windshield',
+    'rear_glass',
+    'window_fixed_l',
+    'window_fixed_r',
+    'mirror_l',
+    'mirror_r',
+    'wheel_fl',
+    'wheel_fr',
+    'wheel_rl',
+    'wheel_rr',
+    'tire_fl',
+    'rim_fl',
+    'brake_fl',
+    'tire_fr',
+    'rim_fr',
+    'brake_fr',
+    'tire_rl',
+    'rim_rl',
+    'brake_rl',
+    'tire_rr',
+    'rim_rr',
+    'brake_rr',
     ...spec.doors.map((d) => d.id),
     ...spec.doors.map((d) => `${d.id}_mesh`),
     ...spec.doors.map((d) => `window_${d.id.slice(-2)}`),
-    spec.rearClosure.id, `${spec.rearClosure.id}_mesh`,
-    'frunk', 'frunk_mesh',
-    'charge_port', 'charge_port_mesh', 'charge_inlet', 'charge_port_led',
-    'charge_connector', 'charge_connector_mesh', 'charging_cable_mesh', 'charge_dock',
-    'headlight_l', 'headlight_r', 'taillight_l', 'taillight_r', 'brake_l', 'brake_r',
-    'dash', 'seat_l', 'seat_r', 'seat_rear', 'steering_wheel_mesh', 'battery_mesh',
+    spec.rearClosure.id,
+    `${spec.rearClosure.id}_mesh`,
+    'frunk',
+    'frunk_mesh',
+    'charge_port',
+    'charge_port_mesh',
+    'charge_inlet',
+    'charge_port_led',
+    'charge_connector',
+    'charge_connector_mesh',
+    'charging_cable_mesh',
+    'charge_dock',
+    'headlight_l',
+    'headlight_r',
+    'taillight_l',
+    'taillight_r',
+    'brake_l',
+    'brake_r',
+    'dash',
+    'seat_l',
+    'seat_r',
+    'seat_rear',
+    'steering_wheel_mesh',
+    'battery_mesh',
   ];
   for (const part of required) {
     if (!nodes.has(part)) fail(full, 'PART_MISSING', `missing ${part}`);
@@ -232,9 +317,15 @@ for (const file of readdirSync(STAGED).filter((f) => f.endsWith('.glb') && !f.in
     const t = node.getTranslation();
     const r = node.getRotation();
     const s = node.getScale();
-    if (Math.abs(r[0]!) > 1e-6 || Math.abs(r[1]!) > 1e-6 || Math.abs(r[2]!) > 1e-6 || Math.abs(r[3]! - 1) > 1e-6)
+    if (
+      Math.abs(r[0]!) > 1e-6 ||
+      Math.abs(r[1]!) > 1e-6 ||
+      Math.abs(r[2]!) > 1e-6 ||
+      Math.abs(r[3]! - 1) > 1e-6
+    )
       fail(full, 'PIVOT_TRANSFORM', `${name} pivot rotated`);
-    if (s.some((x) => Math.abs(x - 1) > 1e-6)) fail(full, 'PIVOT_TRANSFORM', `${name} pivot not unit scale`);
+    if (s.some((x) => Math.abs(x - 1) > 1e-6))
+      fail(full, 'PIVOT_TRANSFORM', `${name} pivot not unit scale`);
 
     if (ex.kind === 'hinge' && ex.state) {
       let expected: [number, number, number] | null = null;
@@ -252,7 +343,11 @@ for (const file of readdirSync(STAGED).filter((f) => f.endsWith('.glb') && !f.in
           expected = [0, rc.y[1], (rc.z[0] + rc.z[1]) / 2];
         }
       } else if (ex.state === 'frunk') {
-        expected = [0, spec.envelope.groundClearance + spec.envelope.height * 0.42, spec.frunk.z[1]];
+        expected = [
+          0,
+          spec.envelope.groundClearance + spec.envelope.height * 0.42,
+          spec.frunk.z[1],
+        ];
       } else if (ex.state === 'charge_port') {
         const x = (spec.envelope.width / 2 - 0.03) * (spec.chargePort.side === 'left' ? 1 : -1);
         expected = [x, spec.chargePort.y, spec.chargePort.z + 0.05];
@@ -260,43 +355,86 @@ for (const file of readdirSync(STAGED).filter((f) => f.endsWith('.glb') && !f.in
       if (expected) {
         const pos = new Vector3().fromArray(node.getWorldTranslation());
         const dist = pos.distanceTo(new Vector3().fromArray(expected));
-        if (dist > 0.01) fail(full, 'PIVOT_POSITION', `${name} hinge ${dist.toFixed(3)} m from spec (${expected.map((n) => n.toFixed(2)).join(',')})`);
+        if (dist > 0.01)
+          fail(
+            full,
+            'PIVOT_POSITION',
+            `${name} hinge ${dist.toFixed(3)} m from spec (${expected.map((n) => n.toFixed(2)).join(',')})`,
+          );
         const partBox = worldBox(doc, node);
         const closed = new Vector3().fromArray(node.getWorldTranslation());
-        if (partBox.distanceToPoint(closed) > 0.015) fail(full, 'PIVOT_POSITION', `${name} pivot ${partBox.distanceToPoint(closed).toFixed(3)} m from its part bbox`);
+        if (partBox.distanceToPoint(closed) > 0.015)
+          fail(
+            full,
+            'PIVOT_POSITION',
+            `${name} pivot ${partBox.distanceToPoint(closed).toFixed(3)} m from its part bbox`,
+          );
         // OPENS_INWARD
         if (ex.axis && typeof ex.openDeg === 'number') {
           const closedBox = worldBox(doc, node);
           const openBox = worldBoxOpened(doc, node, { axis: ex.axis, openDeg: ex.openDeg });
           if (file === 'compact_crossover.glb' && name === 'door_fl') {
-            console.error('DOORDBG closed', closedBox.min.toArray().map((x)=>x.toFixed(2)).join(','), closedBox.max.toArray().map((x)=>x.toFixed(2)).join(','));
-            console.error('DOORDBG open  ', openBox.min.toArray().map((x)=>x.toFixed(2)).join(','), openBox.max.toArray().map((x)=>x.toFixed(2)).join(','));
+            console.error(
+              'DOORDBG closed',
+              closedBox.min
+                .toArray()
+                .map((x) => x.toFixed(2))
+                .join(','),
+              closedBox.max
+                .toArray()
+                .map((x) => x.toFixed(2))
+                .join(','),
+            );
+            console.error(
+              'DOORDBG open  ',
+              openBox.min
+                .toArray()
+                .map((x) => x.toFixed(2))
+                .join(','),
+              openBox.max
+                .toArray()
+                .map((x) => x.toFixed(2))
+                .join(','),
+            );
           }
           const st = ex.state;
           if (st.startsWith('door_')) {
             const d = spec.doors.find((dd) => dd.id === st)!;
             if (d.side === 'left') {
-              if (!(openBox.max.x - closedBox.max.x >= 0.3)) fail(full, 'OPENS_INWARD', `${name} does not open outward`);
-              if (openBox.min.x < closedBox.min.x - 0.02) fail(full, 'OPENS_INWARD', `${name} swings inward`);
+              if (!(openBox.max.x - closedBox.max.x >= 0.3))
+                fail(full, 'OPENS_INWARD', `${name} does not open outward`);
+              if (openBox.min.x < closedBox.min.x - 0.02)
+                fail(full, 'OPENS_INWARD', `${name} swings inward`);
             } else {
-              if (!(closedBox.min.x - openBox.min.x >= 0.3)) fail(full, 'OPENS_INWARD', `${name} does not open outward`);
-              if (openBox.max.x > closedBox.max.x + 0.02) fail(full, 'OPENS_INWARD', `${name} swings inward`);
+              if (!(closedBox.min.x - openBox.min.x >= 0.3))
+                fail(full, 'OPENS_INWARD', `${name} does not open outward`);
+              if (openBox.max.x > closedBox.max.x + 0.02)
+                fail(full, 'OPENS_INWARD', `${name} swings inward`);
             }
           } else if (st === 'rear_closure') {
             const kind = spec.rearClosure.id;
             if (kind === 'trunk') {
-              if (openBox.max.y - closedBox.max.y < 0.25) fail(full, 'OPENS_INWARD', `${name} does not lift`);
+              if (openBox.max.y - closedBox.max.y < 0.25)
+                fail(full, 'OPENS_INWARD', `${name} does not lift`);
             } else if (kind === 'liftgate') {
-              if (openBox.min.y - closedBox.min.y < 0.4) fail(full, 'OPENS_INWARD', `${name} does not rise`);
-              if (openBox.max.z > closedBox.max.z + 0.05) fail(full, 'OPENS_INWARD', `${name} swings forward`);
+              if (openBox.min.y - closedBox.min.y < 0.4)
+                fail(full, 'OPENS_INWARD', `${name} does not rise`);
+              if (openBox.max.z > closedBox.max.z + 0.05)
+                fail(full, 'OPENS_INWARD', `${name} swings forward`);
             } else if (kind === 'tailgate') {
-              if (!(closedBox.min.z - openBox.min.z >= 0.3)) fail(full, 'OPENS_INWARD', `${name} does not fold down`);
+              if (!(closedBox.min.z - openBox.min.z >= 0.3))
+                fail(full, 'OPENS_INWARD', `${name} does not fold down`);
             }
           } else if (st === 'frunk') {
-            if (openBox.max.y - closedBox.max.y < 0.25) fail(full, 'OPENS_INWARD', `${name} does not lift`);
+            if (openBox.max.y - closedBox.max.y < 0.25)
+              fail(full, 'OPENS_INWARD', `${name} does not lift`);
           } else if (st === 'charge_port') {
-            const outward = spec.chargePort.side === 'left' ? openBox.max.x - closedBox.max.x : closedBox.min.x - openBox.min.x;
-            if (!(outward > 0.05 && outward < 0.3)) fail(full, 'OPENS_INWARD', `${name} travel ${outward.toFixed(2)} m`);
+            const outward =
+              spec.chargePort.side === 'left'
+                ? openBox.max.x - closedBox.max.x
+                : closedBox.min.x - openBox.min.x;
+            if (!(outward > 0.05 && outward < 0.3))
+              fail(full, 'OPENS_INWARD', `${name} travel ${outward.toFixed(2)} m`);
           }
         }
       }
@@ -309,21 +447,33 @@ for (const file of readdirSync(STAGED).filter((f) => f.endsWith('.glb') && !f.in
   for (const k of ['length', 'width', 'height'] as const) {
     const target = spec.envelope[k];
     const got = dims[k];
-    if (Math.abs(got - target) / target > 0.02) fail(full, 'ENVELOPE', `${k} ${got.toFixed(3)} vs spec ${target} (±2%)`);
+    if (Math.abs(got - target) / target > 0.02)
+      fail(full, 'ENVELOPE', `${k} ${got.toFixed(3)} vs spec ${target} (±2%)`);
   }
-  const wb = Math.abs(new Vector3().fromArray(nodes.get('wheel_fl')!.getWorldTranslation()).z - new Vector3().fromArray(nodes.get('wheel_rl')!.getWorldTranslation()).z);
-  if (Math.abs(wb - spec.envelope.wheelbase) / spec.envelope.wheelbase > 0.01) fail(full, 'ENVELOPE', `wheelbase ${wb.toFixed(3)} vs spec ${spec.envelope.wheelbase} (±1%)`);
+  const wb = Math.abs(
+    new Vector3().fromArray(nodes.get('wheel_fl')!.getWorldTranslation()).z -
+      new Vector3().fromArray(nodes.get('wheel_rl')!.getWorldTranslation()).z,
+  );
+  if (Math.abs(wb - spec.envelope.wheelbase) / spec.envelope.wheelbase > 0.01)
+    fail(full, 'ENVELOPE', `wheelbase ${wb.toFixed(3)} vs spec ${spec.envelope.wheelbase} (±1%)`);
   const under = nodes.get('underbody_mesh');
   if (under) {
     const ub = worldBox(doc, under);
-    if (Math.abs(ub.min.y - spec.envelope.groundClearance) > 0.01) fail(full, 'ENVELOPE', `ground clearance ${ub.min.y.toFixed(3)} vs spec ${spec.envelope.groundClearance} (±10mm)`);
+    if (Math.abs(ub.min.y - spec.envelope.groundClearance) > 0.01)
+      fail(
+        full,
+        'ENVELOPE',
+        `ground clearance ${ub.min.y.toFixed(3)} vs spec ${spec.envelope.groundClearance} (±10mm)`,
+      );
   }
   const tire = nodes.get('tire_fl');
   if (tire) {
     const tb = worldBox(doc, tire);
     const od = Math.max(tb.max.y - tb.min.y, tb.max.z - tb.min.z);
-    const target = (spec.tire.rimIn * 25.4 + 2 * spec.tire.widthMm * spec.tire.aspect / 100) / 1000;
-    if (Math.abs(od - target) > 0.005) fail(full, 'ENVELOPE', `tire OD ${od.toFixed(3)} vs spec ${target.toFixed(3)} (±5mm)`);
+    const target =
+      (spec.tire.rimIn * 25.4 + (2 * spec.tire.widthMm * spec.tire.aspect) / 100) / 1000;
+    if (Math.abs(od - target) > 0.005)
+      fail(full, 'ENVELOPE', `tire OD ${od.toFixed(3)} vs spec ${target.toFixed(3)} (±5mm)`);
   }
 
   // ANTI_PRIMITIVE (representative checks)
@@ -337,7 +487,9 @@ for (const file of readdirSync(STAGED).filter((f) => f.endsWith('.glb') && !f.in
       if (!piv) continue;
       wheelDefs.push({
         c: new Vector3().fromArray(piv.getWorldTranslation()),
-        r: (spec.tire.rimIn * 25.4 + 2 * spec.tire.widthMm * spec.tire.aspect / 100) / 1000 / 2 + 0.02,
+        r:
+          (spec.tire.rimIn * 25.4 + (2 * spec.tire.widthMm * spec.tire.aspect) / 100) / 1000 / 2 +
+          0.02,
         hw: spec.tire.widthMm / 2000 + 0.02,
       });
     }
@@ -352,7 +504,11 @@ for (const file of readdirSync(STAGED).filter((f) => f.endsWith('.glb') && !f.in
           const dx = Math.abs(p.x - w.c.x);
           const dyz = Math.hypot(p.y - w.c.y, p.z - w.c.z);
           if (dx < w.hw && dyz < w.r) {
-            fail(full, 'ANTI_PRIMITIVE', `body_mesh vertex inside ${w.c.x.toFixed(2)} wheel cylinder`);
+            fail(
+              full,
+              'ANTI_PRIMITIVE',
+              `body_mesh vertex inside ${w.c.x.toFixed(2)} wheel cylinder`,
+            );
             break;
           }
         }
@@ -375,7 +531,8 @@ for (const file of readdirSync(STAGED).filter((f) => f.endsWith('.glb') && !f.in
       }
     }
     if (ys.length === 0) return 0;
-    const target = which === 'top' ? Math.max(...ys.map((p) => p.y)) : Math.min(...ys.map((p) => p.y));
+    const target =
+      which === 'top' ? Math.max(...ys.map((p) => p.y)) : Math.min(...ys.map((p) => p.y));
     const sel = ys.filter((p) => Math.abs(p.y - target) < 0.02);
     return sel.reduce((a, p) => a + p.z, 0) / sel.length;
   };
@@ -387,7 +544,8 @@ for (const file of readdirSync(STAGED).filter((f) => f.endsWith('.glb') && !f.in
   const dash = nodes.get('dash');
   if (dash && windshield) {
     const db = worldBox(doc, dash);
-    if (db.max.z > windshieldEdgeZ('bottom') + 0.05) fail(full, 'ANTI_PRIMITIVE', 'dash in front of windshield base');
+    if (db.max.z > windshieldEdgeZ('bottom') + 0.05)
+      fail(full, 'ANTI_PRIMITIVE', 'dash in front of windshield base');
   }
   const rim = nodes.get('rim_fl');
   const tireN = nodes.get('tire_fl');
@@ -399,7 +557,8 @@ for (const file of readdirSync(STAGED).filter((f) => f.endsWith('.glb') && !f.in
   const frunk = nodes.get('frunk_mesh');
   if (frunk) {
     const fb = worldBox(doc, frunk);
-    if (fb.max.y - fb.min.y >= 0.35 * (fb.max.z - fb.min.z)) fail(full, 'ANTI_PRIMITIVE', 'frunk too tall');
+    if (fb.max.y - fb.min.y >= 0.35 * (fb.max.z - fb.min.z))
+      fail(full, 'ANTI_PRIMITIVE', 'frunk too tall');
   }
 
   // BUDGET (staged triangle counts + processed byte size)
@@ -429,12 +588,14 @@ for (const cls of classes) {
     const nodes = collectNodes(doc);
     names.push([...nodes.keys()].sort());
     for (const [name, node] of nodes) {
-      if (extras(node)) (pivots[name] ??= []).push(node.getWorldTranslation() as [number, number, number]);
+      if (extras(node))
+        (pivots[name] ??= []).push(node.getWorldTranslation() as [number, number, number]);
     }
   }
   if (names.length === 3) {
     const base = names[0]!.join('|');
-    for (const n of names) if (n.join('|') !== base) fail(`${cls}.glb`, 'LOD_MISMATCH', 'node set differs across LODs');
+    for (const n of names)
+      if (n.join('|') !== base) fail(`${cls}.glb`, 'LOD_MISMATCH', 'node set differs across LODs');
     for (const [name, positions] of Object.entries(pivots)) {
       if (positions.length < 3) continue;
       for (const p of positions) {
@@ -451,25 +612,32 @@ for (const cls of classes) {
 const wheelbases = classes.map((c) => SPEC.classes[c]!.envelope.wheelbase);
 for (let i = 0; i < wheelbases.length; i++) {
   for (let j = i + 1; j < wheelbases.length; j++) {
-    if (Math.abs(wheelbases[i]! - wheelbases[j]!) < 0.015) fail('spec', 'DISTINCT', `wheelbases ${classes[i]}/${classes[j]} within 15mm`);
+    if (Math.abs(wheelbases[i]! - wheelbases[j]!) < 0.015)
+      fail('spec', 'DISTINCT', `wheelbases ${classes[i]}/${classes[j]} within 15mm`);
   }
 }
 const closureTypes = new Set(classes.map((c) => SPEC.classes[c]!.rearClosure.id));
 if (closureTypes.size < 3) fail('spec', 'DISTINCT', `only ${closureTypes.size} rear-closure types`);
-const ports = classes.map((c) => `${SPEC.classes[c]!.chargePort.z.toFixed(2)},${SPEC.classes[c]!.chargePort.y.toFixed(2)}`);
-if (new Set(ports).size !== ports.length) fail('spec', 'DISTINCT', 'charge-port positions not distinct');
+const ports = classes.map(
+  (c) => `${SPEC.classes[c]!.chargePort.z.toFixed(2)},${SPEC.classes[c]!.chargePort.y.toFixed(2)}`,
+);
+if (new Set(ports).size !== ports.length)
+  fail('spec', 'DISTINCT', 'charge-port positions not distinct');
 
 // MANIFEST_DRIFT
 const manifestPath = path.join(root, 'apps', 'web', 'public', '3d', 'manifest.json');
 if (CHECK && existsSync(manifestPath)) {
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { files: Record<string, { bytes: number }> };
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+    files: Record<string, { bytes: number }>;
+  };
   for (const [name, meta] of Object.entries(manifest.files ?? {})) {
     const f = path.join(root, 'apps', 'web', 'public', '3d', name);
     if (!existsSync(f)) {
       fail(manifestPath, 'MANIFEST_DRIFT', `missing ${name}`);
       continue;
     }
-    if (statSync(f).size !== meta.bytes) fail(manifestPath, 'MANIFEST_DRIFT', `${name} bytes changed`);
+    if (statSync(f).size !== meta.bytes)
+      fail(manifestPath, 'MANIFEST_DRIFT', `${name} bytes changed`);
   }
 }
 

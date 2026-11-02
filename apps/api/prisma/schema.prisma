@@ -61,7 +61,6 @@ model User {
   geofencesCreated       Geofence[]         @relation("GeofenceCreatedBy")
   privacyZonesCreated    PrivacyZone[]      @relation("PrivacyZoneCreatedBy")
   rateRulesCreated       RateRule[]         @relation("RateRuleCreatedBy")
-  vehicleCommands        VehicleCommand[]
 }
 
 model UserSession {
@@ -786,7 +785,6 @@ model VehicleCommand {
   vehicleName       String             @default("")
   providerAccountId String
   userId            String
-  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   actorKind         String             @default("user")
   apiKeyId          String?
   automationId      String?

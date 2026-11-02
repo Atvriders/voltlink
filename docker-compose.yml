@@ -151,6 +151,24 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # Optional status service: serves the public status platform from a
+  # dedicated process (guide 04 / spec L1698). Enable with `--profile status`.
+  status:
+    <<: *voltlink
+    profiles: ['status']
+    environment:
+      <<: *app_env
+      VL_ROLE: status
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - '127.0.0.1:${STATUS_PORT:-3112}:3001'
+
   tesla-proxy:
     image: tesla/vehicle-command:0.4.1
     profiles: ['tesla']

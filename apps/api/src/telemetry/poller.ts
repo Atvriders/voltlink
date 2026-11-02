@@ -2,6 +2,7 @@
 // backoff-aware. Runs in the scheduler process; never ties ingestion to a
 // browser session.
 
+import { METRICS, metricInc, metricObserve, metricSet } from '../core/metrics';
 import { prisma } from '../core/db';
 import { getQueue } from '../core/queue';
 import { getProvider } from '../providers/registry';
@@ -126,6 +127,7 @@ export class PollingScheduler {
   }
 
   recordFailure(accountId: string, message: string): void {
+    metricInc(METRICS.providerFetchErrors);
     const f = this.failures.get(accountId) ?? { count: 0, until: 0 };
     f.count += 1;
     f.until = Date.now() + Math.min(2 ** f.count, 30) * 60_000;
@@ -197,7 +199,10 @@ export async function processTelemetryJob(payload: {
   try {
     const ctx = await buildContext(account);
     const provider = getProvider(account.provider);
+    const t0 = Date.now();
     const result = await provider.fetchState(ctx, payload.providerVehicleId);
+    metricObserve(METRICS.providerFetchMs, Date.now() - t0);
+    metricSet(METRICS.lastPollSuccessEpoch, Math.floor(Date.now() / 1000));
     const { ingestVehicleState } = await import('./ingest');
     await ingestVehicleState(
       vehicle,

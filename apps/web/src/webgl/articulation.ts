@@ -28,8 +28,7 @@ const _v = new THREE.Vector3();
 /** Read the articulation extras off a node (the pivot EMPTY carries them). */
 export function readExtras(node: THREE.Object3D): ArticulationExtras | undefined {
   const extras = (node.userData?.voltlink ?? node.userData?.extras?.voltlink) as
-    | ArticulationExtras
-    | undefined;
+    ArticulationExtras | undefined;
   return extras?.kind ? extras : undefined;
 }
 

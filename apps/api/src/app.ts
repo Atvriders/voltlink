@@ -33,6 +33,7 @@ import { AccessDenied } from './authz/errors';
 import { getQueue } from './core/queue';
 import { prisma } from './core/db';
 import { PATHS } from './core/paths';
+import { metricsText, metricSet } from './core/metrics';
 import { APP_VERSION } from '@voltlink/shared';
 
 const OPENAPI_SPEC: string = (() => {
@@ -115,7 +116,15 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
       res.status(503).json({ ready: false, reason: 'database_unavailable', version: APP_VERSION });
     }
   });
-  app.get('/metrics', (_req, res) => {
+  app.get('/metrics', async (_req, res) => {
+    try {
+      const depth = await getQueue()
+        .depth('commands')
+        .catch(() => -1);
+      metricSet('voltlink_queue_depth', Math.max(0, depth));
+    } catch {
+      // metrics must never throw
+    }
     const body = [
       '# HELP voltlink_process_info VoltLink process information',
       `voltlink_process_info{version="${APP_VERSION}",role="${process.env.VL_ROLE ?? 'web'}"} 1`,
@@ -123,6 +132,7 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
       `voltlink_process_uptime_seconds ${Math.round(process.uptime())}`,
       '# HELP voltlink_process_memory_rss_bytes Resident memory in bytes',
       `voltlink_process_memory_rss_bytes ${process.memoryUsage().rss}`,
+      metricsText(),
     ].join('\n');
     res.setHeader('Content-Type', 'text/plain; version=0.0.4');
     res.send(`${body}\n`);

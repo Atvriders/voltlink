@@ -9,12 +9,18 @@ import type * as maplibregl from 'maplibre-gl';
 import { api } from '../api/client';
 import { useAnnounce } from '../lib/announcer';
 import { ErrorState } from '../components/QueryState';
-import MapView, { circleGeoJson } from '../components/MapView';
+import MapView, { circleGeoJson, routeGeoJson } from '../components/MapView';
 import GeocodeSearch from '../components/map/GeocodeSearch';
 import { useMapStyle } from '../components/map/useMapStyle';
 import { useSelectedVehicle } from '../lib/vehicleSelection';
 import { Button, Field, Input, Select } from '../components/ui';
-import type { Geofence, Place, PrivacyZone, VehicleWithState } from '@voltlink/shared';
+import type {
+  ChargeSession,
+  Geofence,
+  Place,
+  PrivacyZone,
+  VehicleWithState,
+} from '@voltlink/shared';
 
 type Draft = { kind: 'place' | 'geofence' | 'privacy'; point?: { lat: number; lon: number } };
 
@@ -82,6 +88,28 @@ export default function MapPage() {
     queryKey: ['privacy'],
     queryFn: () => api<PrivacyZone[]>('/api/v1/vehicles/privacy-zones'),
   });
+  const { data: charges } = useQuery({
+    queryKey: ['map-charging'],
+    queryFn: () =>
+      api<{ items: ChargeSession[] }>('/api/v1/charging?pageSize=50').then((d) => d.items),
+  });
+  const { data: drivesForMap } = useQuery({
+    queryKey: ['map-drives', selected],
+    queryFn: () => {
+      const qs = new URLSearchParams({ pageSize: '1' });
+      if (selected !== 'all') qs.set('vehicleId', selected);
+      return api<{ items: { id: string }[] }>(`/api/v1/drives?${qs.toString()}`);
+    },
+  });
+  const driveId = drivesForMap?.items?.[0]?.id;
+  const { data: latestRoute } = useQuery({
+    queryKey: ['map-route', driveId],
+    enabled: !!driveId,
+    queryFn: () =>
+      api<{ data: { route?: { lat: number; lon: number }[] } }>(
+        `/api/v1/drives/${driveId}?route=true`,
+      ).then((d) => d.data.route),
+  });
 
   const layerError =
     vehiclesError || placesError || fencesError || zonesError
@@ -94,7 +122,7 @@ export default function MapPage() {
   const layers = useMemo(() => {
     const out: {
       id: string;
-      kind: 'vehicle' | 'place' | 'charger' | 'geofence' | 'privacy';
+      kind: 'vehicle' | 'heading' | 'route' | 'place' | 'charger' | 'geofence' | 'privacy';
       feature: unknown;
       color?: string;
     }[] = [];
@@ -111,6 +139,46 @@ export default function MapPage() {
           geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
           properties: { name: v.displayName, address: s.address ?? '' },
         },
+      });
+      // L813: heading indicator — a short line drawn from the vehicle marker.
+      if (typeof s.headingDeg === 'number') {
+        const rad = (s.headingDeg * Math.PI) / 180;
+        const d = 0.0009; // ~100 m
+        out.push({
+          id: `heading-${v.id}`,
+          kind: 'heading',
+          color: v.exteriorColor ?? '#0ea5e9',
+          feature: {
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [s.lon, s.lat],
+                [s.lon + d * Math.sin(rad), s.lat + d * Math.cos(rad)],
+              ],
+            },
+            properties: { name: v.displayName },
+          },
+        });
+      }
+    }
+    for (const c of charges ?? []) {
+      if (c.lat === undefined || c.lon === undefined) continue;
+      out.push({
+        id: `charge-session-${c.id}`,
+        kind: 'charger',
+        feature: {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [c.lon, c.lat] },
+          properties: { name: c.locationName ?? c.vehicleName },
+        },
+      });
+    }
+    if (latestRoute && latestRoute.length > 1) {
+      out.push({
+        id: 'latest-route',
+        kind: 'route',
+        feature: routeGeoJson(latestRoute.map((p) => ({ lat: p.lat, lon: p.lon }))),
       });
     }
     for (const p of places ?? []) {
@@ -140,7 +208,7 @@ export default function MapPage() {
       });
     }
     return out;
-  }, [vehicles, places, fences, zones, selected]);
+  }, [vehicles, places, fences, zones, selected, charges, latestRoute]);
 
   const flyTo = (lat: number, lon: number) => {
     map?.flyTo({ center: [lon, lat], zoom: 14, duration: 1200 });

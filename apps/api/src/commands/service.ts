@@ -8,6 +8,10 @@ import { enqueue } from '../jobs/queues';
 import { producerConnection } from '../core/redis';
 import { audit, getSetting } from '../core/settings';
 import { ssePublish } from '../core/sse';
+import { METRICS, metricInc, metricObserve } from '../core/metrics';
+
+/** In-process submit timestamps for the command-latency metric. */
+const submitTimes = new Map<string, number>();
 import { assertVehicleAccess } from '../authz/access';
 import { requireRecentStepUp } from '../authz/policy';
 import { AccessDenied } from '../authz/errors';
@@ -89,8 +93,19 @@ export async function transitionStatus(
   } = {},
 ): Promise<boolean> {
   const data: Record<string, unknown> = { status: to };
-  if (to === 'submitted') data.submittedAt = new Date();
-  if (TERMINAL.includes(to)) data.completedAt = new Date();
+  if (to === 'submitted') {
+    data.submittedAt = new Date();
+    submitTimes.set(commandId, Date.now());
+  }
+  if (TERMINAL.includes(to)) {
+    data.completedAt = new Date();
+    metricInc(METRICS.commandTotal, to);
+    const submittedMs = submitTimes.get(commandId);
+    if (submittedMs) {
+      metricObserve(METRICS.commandLatencyMs, Date.now() - submittedMs);
+      submitTimes.delete(commandId);
+    }
+  }
   if (extra.providerResponse) data.providerResponse = extra.providerResponse;
   if (extra.responseCategory) data.responseCategory = extra.responseCategory;
   if (extra.confirmation) data.confirmation = extra.confirmation;

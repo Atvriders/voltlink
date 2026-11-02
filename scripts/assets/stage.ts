@@ -1,7 +1,15 @@
 // scripts/assets/stage.ts — copy processed GLBs into apps/web/public/3d as
 // <name>.<sha256:10>.<ext> and write /3d/manifest.json (guide 06 §11).
 import { createHash } from 'node:crypto';
-import { copyFileSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 

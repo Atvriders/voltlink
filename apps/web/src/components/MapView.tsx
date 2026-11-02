@@ -9,7 +9,16 @@ import type { MapStyleRef } from './map/useMapStyle';
 
 export interface MapLayer {
   id: string;
-  kind: 'route' | 'vehicle' | 'place' | 'charger' | 'geofence' | 'privacy' | 'marker' | 'replay';
+  kind:
+    | 'route'
+    | 'vehicle'
+    | 'heading'
+    | 'place'
+    | 'charger'
+    | 'geofence'
+    | 'privacy'
+    | 'marker'
+    | 'replay';
   feature: unknown;
   color?: string;
   label?: string;
@@ -156,6 +165,17 @@ function buildLayer(l: MapLayer, sourceId: string): maplibregl.LayerSpecificatio
         paint: {
           'fill-color': l.kind === 'geofence' ? '#0ea5e9' : '#8b5cf6',
           'fill-opacity': l.kind === 'geofence' ? 0.08 : 0.12,
+        },
+      };
+    case 'heading':
+      return {
+        id: `lyr-${l.id}`,
+        type: 'line',
+        source: sourceId,
+        paint: {
+          'line-color': color,
+          'line-width': 2.5,
+          'line-opacity': 0.85,
         },
       };
     case 'vehicle':

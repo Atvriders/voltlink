@@ -1,0 +1,14 @@
+# docker-compose.dev.yml — development overrides (spec L1701). Brings source
+# code from the host and runs the web role in development mode with live
+# reload. Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml
+# up web  (API/worker/scheduler still come from the published image).
+services:
+  web:
+    environment:
+      NODE_ENV: development
+      DEBUG: 'voltlink:*'
+    volumes:
+      - ./apps/api/dist:/app/dist:ro
+      - ./apps/api/web-dist:/app/web-dist:ro
+    ports:
+      - '127.0.0.1:${WEB_PORT:-3110}:3000'

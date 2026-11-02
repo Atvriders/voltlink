@@ -16,7 +16,10 @@ test('showroom survives without WebGL and never blanks', async ({ page }) => {
   await page.goto('/showroom');
   await page.waitForURL(/showroom/);
   await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
-  await page.getByRole('button', { name: /Aurora/ }).first().click();
+  await page
+    .getByRole('button', { name: /Aurora/ })
+    .first()
+    .click();
 
   const viewer = page.locator('[data-testid="vehicle-viewer"]');
   await expect(viewer).toBeVisible({ timeout: 20000 });
