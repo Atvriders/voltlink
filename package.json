@@ -2,7 +2,7 @@
   "name": "voltlink",
   "private": true,
   "version": "1.0.0",
-  "description": "VoltLink \u2014 self-hosted connected-vehicle platform: vehicle telemetry, secure controls, drives, charging, battery analytics, automations, notifications, fleet management, and a full status platform.",
+  "description": "VoltLink — self-hosted connected-vehicle platform: vehicle telemetry, secure controls, drives, charging, battery analytics, automations, notifications, fleet management, and a full status platform.",
   "license": "MIT",
   "author": "Atvriders",
   "homepage": "https://github.com/Atvriders/voltlink#readme",
@@ -40,6 +40,7 @@
     "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@eslint/js": "^10.0.0",
     "@gltf-transform/cli": "^4.5.1",
     "@gltf-transform/core": "^4.5.1",
@@ -48,6 +49,7 @@
     "@playwright/test": "^1.55.0",
     "@typescript-eslint/eslint-plugin": "^8.64.0",
     "@typescript-eslint/parser": "^8.64.0",
+    "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^10.0.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^7.1.1",
