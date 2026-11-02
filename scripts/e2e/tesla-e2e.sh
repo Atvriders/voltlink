@@ -3,6 +3,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
+set -a
+. apps/api/.env 2>/dev/null || true
+set +a
 
 pkill -f fake-tesla-server || true
 rm -f /tmp/fake-tesla.url
@@ -29,4 +32,4 @@ export E2E_TESLA_FAKE_URL="$FAKE"
 npx tsx apps/api/scripts/e2e-seed-tesla-user.ts
 bash scripts/e2e/start-stack.sh
 trap 'pkill -f fake-tesla-server || true' EXIT
-npx playwright test tests/e2e/tesla.spec.ts --project=desktop "$@"
+npx playwright test tests/e2e/tesla.spec.ts --project=tesla "$@"

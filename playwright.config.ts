@@ -29,6 +29,9 @@ export default defineConfig({
       use: { ...devices['Pixel 7'] },
       testIgnore: /visual\.spec\.ts|no-webgl\.spec\.ts|tesla\.spec\.ts/,
     },
+    // Tesla spec runs only through scripts/e2e/tesla-e2e.sh (fake Fleet
+    // API + seeded user); the device projects above ignore it.
+    { name: 'tesla', use: { ...devices['Desktop Chrome'] }, testMatch: /tesla\.spec\.ts/ },
     // Guide 06 §12: WebGL rendering is exercised both on real GL and on the
     // SwiftShader software path, and WebGL-disabled browsers degrade instead
     // of crashing (G-14).
