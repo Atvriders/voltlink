@@ -24,7 +24,7 @@ SOFTWARE.
 
 Third-party notes
 
-College names, marks, and logos referenced by the bundled themes belong to
-their respective owners. This repository ships colors only — no trademarked
-logo files (see themes/README.md). Nothing in this license grants any right to
-use those marks.
+Third-party asset licensing lives in
+[docs/ASSET_LICENSES.md](docs/ASSET_LICENSES.md) (Blender materials, fonts, map
+data and vehicle assets). Nothing in this license grants any right to
+third-party marks or assets.

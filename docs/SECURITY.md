@@ -10,13 +10,16 @@
 
 ## Authorization
 
-- Role model: owner, admin, operator, member, viewer with a permission matrix.
+- Role model: OWNER / DRIVER / VIEWER per organization (instance-admin
+  account plus status/incidents operator personas), enforced server-side with a
+  permission matrix.
 - Vehicle sharing via explicit grants with permission levels.
 - API and UI enforce the same rules server-side.
 
 ## Transport & requests
 
-- Helmet security headers with a locked-down CSP.
+- Hardened security headers with a locked-down CSP (custom middleware,
+  not helmet).
 - CSRF tokens for every mutating request (cookie + header double-submit).
 - Rate limiting per IP (configurable `VL_RATE_LIMIT_PER_MIN`), plus dedicated
   auth-endpoint limits and brute-force lockout.
@@ -37,10 +40,20 @@
 
 ## Input handling
 
-- zod validation on all write endpoints.
+- Typed request validation: zod schemas on command parameters and key
+  flows; all handlers reject invalid input with typed error codes.
 - Webhook URL validation (scheme/host allowlist) before saving.
 - HTML in user content is sanitized in the SPA (DOMPurify) and limited
   server-side; notifications render safely.
+
+## Dependency scanning
+
+- `npm audit` (2026-11-02): **0 critical, 0 high, 3 moderate** advisories —
+  all three are dev-only tooling (`@eslint-community/eslint-utils`,
+  `@eslint/config-array`, `@donmccurdy/caporal` used by the gltfpack CLI);
+  no runtime dependency is affected.
+- CI runs a container image scan (Trivy) with an expiry-checked ignore file
+  and a full-history secret scan (gitleaks) on every push.
 
 ## Operational hardening checklist
 

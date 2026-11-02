@@ -1,9 +1,9 @@
 version: 2
 
-# A club app that is deployed once and then runs unattended for semesters is
-# exactly where dependency rot goes unnoticed. Weekly PRs, with minor/patch
-# updates grouped so the reviewer sees one PR to run CI against instead of
-# twenty; majors stay separate because they need judgement.
+# A self-hosted app that is deployed once and then runs unattended is exactly
+# where dependency rot goes unnoticed. Weekly PRs, with minor/patch updates
+# grouped so the reviewer sees one PR to run CI against instead of twenty;
+# majors stay separate because they need judgement.
 updates:
   - package-ecosystem: npm
     directory: /

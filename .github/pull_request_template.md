@@ -25,9 +25,9 @@ locally — CI runs the same chain and blocks the image publish on it.
 - [ ] **API contract:** no response shape or status code changed — or, if it did,
       I grepped `apps/web/src` for every caller and updated them
 - [ ] **Roles:** any new endpoint is gated at the _lowest_ role that genuinely
-      needs it (`requireRole` / `roleAtLeast`, MEMBER < NET_CONTROL < OFFICER < ADMIN)
+      needs it (`requireRole` / `roleAtLeast`, VIEWER < DRIVER < OWNER)
 - [ ] **Migrations:** no shipped migration was edited; new ones are additive and
-      safe to apply to a live club database on container start
+      safe to apply to a live database on container start
 - [ ] **Automation:** anything that posts to Discord or acts without a human
       press is documented, idempotent, and safe to run twice
 - [ ] **Secrets/PII:** no tokens, real member data, or `.db` files in the diff

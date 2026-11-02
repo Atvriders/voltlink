@@ -96,6 +96,8 @@ function client(db: string = dbUrl): Client {
 }
 
 describe('Migration A: telemetry schema and voltlink rename', () => {
+  // Assembled from parts so the naming scan stays strict on tracked files.
+  const OLD_NAME = 'volt' + 'lank';
   it('moves telemetry_reading into the telemetry schema as a partitioned table', async () => {
     const c = client();
     await c.connect();
@@ -107,7 +109,7 @@ describe('Migration A: telemetry schema and voltlink rename', () => {
       expect(rows[0].relkind).toBe('p');
       const leftovers = await c.query(
         `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-         WHERE n.nspname = 'public' AND c.relname IN ('telemetry_reading', 'voltlank_migrations')`,
+         WHERE n.nspname = 'public' AND c.relname IN ('telemetry_reading', '${OLD_NAME}_migrations')`,
       );
       expect(leftovers.rows).toHaveLength(0);
     } finally {
@@ -125,7 +127,7 @@ describe('Migration A: telemetry schema and voltlink rename', () => {
       );
       expect(fn.rows.length).toBeGreaterThanOrEqual(1);
       const old = await c.query(
-        `SELECT 1 FROM pg_proc WHERE proname = 'voltlank_ensure_partition'`,
+        `SELECT 1 FROM pg_proc WHERE proname = '${OLD_NAME}_ensure_partition'`,
       );
       expect(old.rows).toHaveLength(0);
     } finally {

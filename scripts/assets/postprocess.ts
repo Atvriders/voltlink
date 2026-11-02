@@ -2,7 +2,7 @@
 // Uses the pinned @gltf-transform/cli; pivots stay safe because articulated
 // meshes live on child nodes under pivot empties (guide 06 §1.3).
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, mkdirSync } from 'node:fs';
+import { rmSync, existsSync, readdirSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -44,7 +44,7 @@ for (const { files, rel } of groups) {
     run(['dedup', src, t1]);
     run(['prune', t1, t2, '--keep-leaves', 'true']);
     run(['meshopt', t2, out]);
-    for (const tmp of [t1, t2]) if (existsSync(tmp)) require('node:fs').rmSync(tmp);
+    for (const tmp of [t1, t2]) if (existsSync(tmp)) rmSync(tmp);
     console.log(`postprocessed ${rel}/${file}`);
   }
 }

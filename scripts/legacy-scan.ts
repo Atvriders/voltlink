@@ -3,16 +3,20 @@
 //
 //   npm run legacy:scan
 //
-// Fails when any legacy domain term appears in a tracked text file outside
-// the allowlisted historical documents and migration history.
+// Reads every `git ls-files` text file (no extension filter: Dockerfile,
+// .gitignore, .env.example and LICENSEs are scanned too - C-LEGACY). Binary
+// files are skipped by content (a NUL byte in the first 8 KiB). Terms are
+// separator-tolerant so net_control / net-control / NET_CONTROL all match.
+//
+//   npx tsx scripts/legacy-scan.ts --self-test   # planted terms must be found
 
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
 const LEGACY_TERMS = [
   'ham-net-assistant',
   'netlog',
-  'callsign',
   'callbook',
   'ham radio',
   'ham-radio',
@@ -20,11 +24,20 @@ const LEGACY_TERMS = [
   'amateur-radio',
   'hamclock',
   'dxpedition',
-  'net control',
-  'club call',
   'netlogger',
   'arrl',
   'qrz',
+];
+
+// Separator-tolerant patterns (spaces, underscores and hyphens all match).
+const LEGACY_PATTERNS = [
+  /net[ _-]?control/i,
+  /call[ _-]?signs?/i,
+  /\bhna\b/i,
+  /ham\.db/i,
+  /club\b/i,
+  /college\b/i,
+  /club call/i,
 ];
 
 const ALLOWED = [
@@ -34,71 +47,78 @@ const ALLOWED = [
   'scripts/legacy-scan.ts', // the term list itself
 ];
 
-const SCAN_EXTS = new Set([
-  '.ts',
-  '.tsx',
-  '.js',
-  '.mjs',
-  '.cjs',
-  '.json',
-  '.md',
-  '.sql',
-  '.prisma',
-  '.yml',
-  '.yaml',
-  '.html',
-  '.css',
-  '.sh',
-  '.py',
-  '.env.example',
-]);
-
-const SKIP_DIRS = new Set([
-  'node_modules',
-  '.git',
-  'dist',
-  'test-results',
-  'playwright-report',
-  'web-dist',
-  '.blend',
-]);
-
 export interface LegacyFinding {
   file: string;
   term: string;
 }
 
-export function scanLegacyContent(root = process.cwd()): LegacyFinding[] {
-  const findings: LegacyFinding[] = [];
+function isBinary(buf: Buffer): boolean {
+  return buf.subarray(0, 8192).includes(0);
+}
+
+export function matchLegacyTerms(text: string): string | undefined {
   const pattern = new RegExp(
     LEGACY_TERMS.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
     'i',
   );
+  const literal = text.match(pattern);
+  if (literal) return literal[0];
+  for (const re of LEGACY_PATTERNS) {
+    const m = text.match(re);
+    if (m) return m[0];
+  }
+  return undefined;
+}
 
-  const walk = (dir: string): void => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (SKIP_DIRS.has(entry.name)) continue;
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-        continue;
-      }
-      const rel = path.relative(root, full).split(path.sep).join('/');
-      if (ALLOWED.includes(rel)) continue;
-      if (!SCAN_EXTS.has(path.extname(entry.name))) continue;
-      const text = fs.readFileSync(full, 'utf8');
-      const match = text.match(pattern);
-      if (match) {
-        findings.push({ file: rel, term: match[0] });
-      }
+export function scanLegacyContent(root = process.cwd()): LegacyFinding[] {
+  const findings: LegacyFinding[] = [];
+  const files = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' })
+    .split('\n')
+    .filter(Boolean);
+
+  for (const rel of files) {
+    if (ALLOWED.includes(rel)) continue;
+    const full = path.join(root, rel);
+    let buf: Buffer;
+    try {
+      buf = fs.readFileSync(full);
+    } catch {
+      continue; // listed by git but gone from disk; git status catches it
     }
-  };
-
-  walk(root);
+    if (isBinary(buf)) continue;
+    const text = buf.toString('utf8');
+    const term = matchLegacyTerms(text);
+    if (term) findings.push({ file: rel, term });
+  }
   return findings;
 }
 
+function selfTest(): void {
+  // The matcher itself is the unit under test; scanning needs a git tree.
+  const planted = [
+    'NET_CONTROL row in a table',
+    'a call-sign here',
+    'uses @hna workspace',
+    'DATABASE_URL=file:/data/ham.db',
+    'a club app and a college name',
+  ];
+  for (const text of planted) {
+    const hit = matchLegacyTerms(text);
+    if (!hit) {
+      console.error(`self-test FAILED: planted term not detected in: ${text}`);
+      process.exit(1);
+    }
+    console.log(`self-test: detected "${hit}" in planted sample`);
+  }
+  if (matchLegacyTerms('no leftovers here at all')) {
+    console.error('self-test FAILED: false positive on clean text');
+    process.exit(1);
+  }
+  console.log('self-test OK: planted terms detected, clean text ignored');
+}
+
 if (process.argv[1]?.endsWith('legacy-scan.ts') || process.argv[1]?.endsWith('legacy-scan.js')) {
+  if (process.argv.includes('--self-test')) selfTest();
   const findings = scanLegacyContent();
   if (findings.length > 0) {
     console.error('Legacy content found outside the allowlist:');

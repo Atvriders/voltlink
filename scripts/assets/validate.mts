@@ -62,18 +62,13 @@ function fail(file: string, code: string, detail: string) {
   failures.push(`FAIL ${path.relative(root, file)} ${code} ${detail}`);
 }
 
-MeshoptDecoder.ready;
+void MeshoptDecoder.ready; // ensure the decoder module is loaded
 const io = new NodeIO()
   .registerExtensions(ALL_EXTENSIONS)
   .registerDependencies({ 'meshopt.decoder': MeshoptDecoder });
 
 async function load(file: string) {
   return io.read(file);
-}
-
-interface ArticNode {
-  node: InstanceType<(typeof import('@gltf-transform/core'))['Node']>;
-  def: { kind: string; axis: number[]; openDeg?: number; distance?: number; state?: string };
 }
 
 function worldBox(
@@ -204,7 +199,6 @@ for (const file of readdirSync(STAGED).filter((f) => f.endsWith('.glb') && !f.in
   const spec = SPEC.classes[cls]!;
   const doc = await load(full);
   const nodes = collectNodes(doc);
-  const rootNode = nodes.get('vehicle_root');
 
   // SPEC_INVALID — glTF structure (staged files are uncompressed)
   const { default: validator } = await import('gltf-validator');
@@ -314,7 +308,6 @@ for (const file of readdirSync(STAGED).filter((f) => f.endsWith('.glb') && !f.in
     const ex = extras(node);
     if (!ex || !['hinge', 'slide', 'spin'].includes(ex.kind ?? '')) continue;
     if (node.getMesh()) fail(full, 'PIVOT_TRANSFORM', `${name} pivot carries a mesh`);
-    const t = node.getTranslation();
     const r = node.getRotation();
     const s = node.getScale();
     if (

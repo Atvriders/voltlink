@@ -24,6 +24,10 @@ const ALLOWED_PREFIXES = [
   'apps/api/prisma/migrations/20261030213636_telemetry_schema_voltlink_rename/',
   // The CHANGELOG entry that records the rename may spell the old name.
   'CHANGELOG.md',
+  // The tenancy/upgrade tests apply this fixture to databases that still run
+  // the pre-rename schema (the rename migration is deliberately not applied),
+  // so the fixture must call the old-named partition function.
+  'apps/api/test/fixtures/legacy-seed.sql',
 ];
 
 export interface NamingFinding {
