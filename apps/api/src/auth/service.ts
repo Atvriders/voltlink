@@ -112,6 +112,11 @@ export async function sendMail(opts: {
   html: string;
 }): Promise<{ sent: boolean; detail: string }> {
   const t = getTransporter();
+  // MAIL_TO_CONSOLE: developer mode — print instead of sending (no SMTP).
+  if (!t && env.MAIL_TO_CONSOLE) {
+    console.log(`[voltlink] MAIL_TO_CONSOLE to=${opts.to} subject="${opts.subject}"\n${opts.text}`);
+    return { sent: true, detail: 'console' };
+  }
   if (t) {
     await t.sendMail({
       from: env.MAIL_FROM,
@@ -340,6 +345,8 @@ export async function registerUser(input: {
         name: input.name.trim() || (email.split('@')[0] ?? 'VoltLink user'),
         passwordHash,
         webauthnUserId: randomToken(32),
+        // VL_DEMO_DEFAULT_ENABLED: brand-new accounts start with demo mode on.
+        demoEnabled: env.DEMO_DEFAULT_ENABLED,
       },
     });
     await prisma.organization.create({

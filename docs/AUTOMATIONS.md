@@ -17,9 +17,11 @@ Automation
 
 ## Trigger events
 
-`charge_started`, `charge_completed`, `drive_started`, `drive_completed`,
-`battery_low`, `battery_high`, `geofence_enter`, `geofence_exit`,
-`vehicle_offline`, `vehicle_online`, `command_finished`, `maintenance_due`.
+`scheduled`, `enter_place`, `leave_place`, `battery_threshold`,
+`charging_started`, `charging_stopped`, `charging_completed`, `plug_connected`,
+`door_open`, `vehicle_parked`, `drive_started`, `temperature_threshold`,
+`vehicle_online`, `provider_reconnected`, `trunk_open`, `fault_detected`,
+`webhook`.
 
 ## Conditions
 

@@ -23,6 +23,42 @@ import { PRESETS, autoPreset, type GraphicsPreset } from './preset';
 export { PRESETS, autoPreset };
 export type { GraphicsPreset };
 
+// Class-specific camera framing (spec L1269/L1626) and day/night lighting.
+const CLASS_CAMERA: Record<string, [number, number, number]> = {
+  compact_sedan: [5.0, 2.4, 5.8],
+  sport_sedan: [5.4, 2.2, 6.2],
+  compact_crossover: [5.6, 2.8, 6.6],
+  suv: [6.0, 3.0, 7.0],
+  pickup: [6.4, 2.8, 7.6],
+  fallback: [5.2, 2.6, 6.2],
+};
+
+const reducedMotion = () =>
+  typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const classCamera = (cls: string): [number, number, number] =>
+  (CLASS_CAMERA[cls] ?? CLASS_CAMERA.fallback) as [number, number, number];
+
+/** Smoothly eases the default camera toward the class framing (spec L1300). */
+function CameraRig({ target }: { target: [number, number, number] }) {
+  const targetRef = useRef(new THREE.Vector3(...target));
+  useEffect(() => {
+    targetRef.current.set(...target);
+  }, [target]);
+  useFrame((state) => {
+    const cam = state.camera;
+    const t = targetRef.current;
+    if (reducedMotion()) {
+      cam.position.copy(t);
+      cam.lookAt(0, 0.7, 0);
+      return;
+    }
+    cam.position.lerp(t, 0.05);
+    cam.lookAt(0, 0.7, 0);
+  });
+  return null;
+}
+
 function findPart(obj: THREE.Object3D, name: string): THREE.Object3D | null {
   if (obj.name === name || obj.name.toLowerCase().endsWith(name.toLowerCase())) return obj;
   for (const child of obj.children) {
@@ -34,6 +70,7 @@ function findPart(obj: THREE.Object3D, name: string): THREE.Object3D | null {
 
 function VehicleModel({
   url,
+  vehicle,
   state,
   preset,
   signal,
@@ -53,6 +90,19 @@ function VehicleModel({
 
   const parts = useMemo(() => {
     const scene = gltf.scene.clone();
+    // Spec L1301: apply the vehicle's real paint color to the body mesh.
+    scene.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh && /body|trim/.test(o.name)) {
+        const mesh = o as THREE.Mesh;
+        const mat = (mesh.material as THREE.Material).clone();
+        if ('color' in mat && vehicle.exteriorColor) {
+          (mat as THREE.MeshStandardMaterial).color.set(vehicle.exteriorColor);
+          (mat as THREE.MeshStandardMaterial).metalness = 0.35;
+          (mat as THREE.MeshStandardMaterial).roughness = 0.5;
+        }
+        mesh.material = mat;
+      }
+    });
     const map: Record<string, THREE.Object3D> = {};
     for (const p of [
       'door_fl',
@@ -86,16 +136,24 @@ function VehicleModel({
       });
     }
     return { scene, map };
-  }, [gltf, preset]);
+  }, [gltf, preset, vehicle.exteriorColor]);
 
   useEffect(() => {
     signal.ok = true;
     onLoaded?.();
     return () => {
       signal.ok = false;
-      // GPU cleanup happens via three disposal in the parent unmount
+      // Spec L1316/L1679: dispose every cloned geometry and material on unmount.
+      parts.scene.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh) {
+          const mesh = o as THREE.Mesh;
+          mesh.geometry?.dispose();
+          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          for (const m of mats) m?.dispose();
+        }
+      });
     };
-  }, [signal, onLoaded]);
+  }, [signal, onLoaded, parts.scene]);
 
   useFrame(({ clock }) => {
     const s = stateRef.current;
@@ -247,13 +305,19 @@ function FallbackVehicle({
   );
 }
 
-function StudioLights() {
+function StudioLights({ hour = 12 }: { hour?: number }) {
+  // Spec L1303: day and night lighting follow the local hour.
+  const night = hour < 7 || hour >= 19;
+  const key = night ? 0.9 : 1.6;
+  const ambient = night ? 0.22 : 0.55;
+  const sky = night ? '#31415e' : '#aad7ff';
+  const accent = night ? '#7dd3fc' : '#22d3ee';
   return (
     <>
-      <ambientLight intensity={0.55} />
-      <directionalLight position={[6, 8, 4]} intensity={1.6} castShadow />
-      <directionalLight position={[-6, 3, -4]} intensity={0.5} color="#aad7ff" />
-      <pointLight position={[0, 3, -8]} intensity={0.4} color="#22d3ee" />
+      <ambientLight intensity={ambient} />
+      <directionalLight position={[6, 8, 4]} intensity={key} castShadow />
+      <directionalLight position={[-6, 3, -4]} intensity={0.5} color={sky} />
+      <pointLight position={[0, 3, -8]} intensity={0.4} color={accent} />
     </>
   );
 }
@@ -337,8 +401,9 @@ export default function VehicleViewer({
         frameloop="always"
       >
         <CanvasBoundary height={height}>
-          <PerspectiveCamera makeDefault position={[5.2, 2.6, 6.2]} fov={40} />
-          <StudioLights />
+          <PerspectiveCamera makeDefault position={classCamera(vehicle.vehicleClass)} fov={40} />
+          <CameraRig target={classCamera(vehicle.vehicleClass)} />
+          <StudioLights hour={new Date().getHours()} />
           <Suspense fallback={<FallbackVehicle vehicle={vehicle} state={state} />}>
             {useGlb ? (
               <ErrorBoundary3D onError={() => setMissing(true)}>
@@ -362,6 +427,8 @@ export default function VehicleViewer({
               minDistance={3.2}
               maxDistance={16}
               maxPolarAngle={Math.PI * 0.62}
+              autoRotate={!reducedMotion()}
+              autoRotateSpeed={0.6}
             />
           )}
         </CanvasBoundary>
