@@ -277,7 +277,10 @@ jobs:
       contents: read
       packages: write
     outputs:
+      # digest keeps the sha256: prefix (used in promote as @<digest>).
       digest: ${{ steps.push.outputs.digest }}
+      # bare hex tag for VOLTLINK_IMAGE_TAG (a colon is not valid inside a tag).
+      tag: ${{ steps.bare.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
@@ -303,6 +306,11 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           provenance: true
           sbom: true
+      - name: 'Bare digest tag (no sha256: prefix)'
+        id: bare
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: echo "digest=${DIGEST#sha256:}" >> "$GITHUB_OUTPUT"
 
   verify-published:
     runs-on: ubuntu-latest
@@ -317,8 +325,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Boot the published digest and smoke it
         env:
-          # build-push-action's digest output already carries the sha256: prefix.
-          VOLTLINK_IMAGE_TAG: ${{ needs.publish.outputs.digest }}
+          # Bare hex digest: a colon is not valid inside an image tag.
+          VOLTLINK_IMAGE_TAG: ${{ needs.publish.outputs.tag }}
         run: |
           POSTGRES_PASSWORD=voltlink JWT_SECRET="$JWT_SECRET" VL_MASTER_KEY="$VL_MASTER_KEY" \
             PUBLIC_URL=http://127.0.0.1:3110 VL_ALLOW_INSECURE_HTTP=true VL_SETUP_TOKEN="$VL_SETUP_TOKEN" \
