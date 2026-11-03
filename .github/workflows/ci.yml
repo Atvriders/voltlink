@@ -94,7 +94,7 @@ jobs:
       - name: Naming scan
         run: npm run naming:scan
       - name: GLB / manifest validation (guide 06)
-        run: python3 blender/scripts/validate_assets.py
+        run: npx tsx scripts/assets/validate.mts
       - name: Dependency audit
         run: npm audit --audit-level=high
 
