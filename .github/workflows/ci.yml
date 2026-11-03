@@ -354,11 +354,11 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: |
           docker buildx imagetools create \
-            --tag "ghcr.io/${{ github.repository }}:latest" \
-            "ghcr.io/${{ github.repository }}@${{ needs.publish.outputs.digest }}"
+            --tag "ghcr.io/atvriders/voltlink:latest" \
+            "ghcr.io/atvriders/voltlink@${{ needs.publish.outputs.digest }}"
       - name: Point the version tag at the verified digest (git tags only)
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           docker buildx imagetools create \
-            --tag "ghcr.io/${{ github.repository }}:${GITHUB_REF_NAME}" \
-            "ghcr.io/${{ github.repository }}@${{ needs.publish.outputs.digest }}"
+            --tag "ghcr.io/atvriders/voltlink:${GITHUB_REF_NAME}" \
+            "ghcr.io/atvriders/voltlink@${{ needs.publish.outputs.digest }}"
