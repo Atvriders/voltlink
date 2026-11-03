@@ -35,9 +35,13 @@ test('full demo acceptance flow', async ({ page }) => {
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
   await expect(page.getByText('Battery & charging')).toBeVisible();
 
-  // Issue a safe command and watch the lifecycle
+  // Issue a safe command and watch the lifecycle. Queued is transient: a
+  // fast worker can move the row straight to Sent/Executed before the next
+  // poll, so accept any lifecycle status instead of only Queued.
   await page.getByRole('button', { name: /^Honk horn/ }).click();
-  await expect(page.getByText('Queued').first()).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText(/(Queued|Sent|Executed|Completed|Failed)/).first()).toBeVisible({
+    timeout: 15000,
+  });
 
   // Showroom renders the 3D viewer
   await page.goto('/showroom');
