@@ -37,7 +37,7 @@ jobs:
           --health-cmd "pg_isready -U voltlank -d voltlank"
           --health-interval 10s --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v5
         with:
           node-version: 24
@@ -73,7 +73,7 @@ jobs:
           --health-cmd "pg_isready -U voltlank -d voltlank"
           --health-interval 10s --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v5
         with:
           node-version: 24
@@ -120,7 +120,7 @@ jobs:
   assets:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # Committed GLBs must pass container/part-name validation and match the
       # manifest (regenerating with Blender happens in development; CI checks
       # the committed artifacts so a broken rebuild cannot ship silently).
@@ -134,7 +134,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
         if: github.event_name == 'push' && github.server_url == 'https://github.com'
@@ -179,7 +179,7 @@ jobs:
   secret-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Gitleaks
