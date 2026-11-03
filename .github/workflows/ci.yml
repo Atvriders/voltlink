@@ -194,7 +194,9 @@ jobs:
       - name: Playwright matrix (desktop/tablet/mobile/webgl/a11y/visual/legacy)
         run: |
           npx playwright install --with-deps chromium
-          npx playwright test
+          # 3 workers cap parallel demo-fleet provisioning so the queue stays ahead
+          # of the 90s demo waits instead of tripping the 30s ones.
+          npx playwright test --workers=3
         env:
           E2E_BASE_URL: http://127.0.0.1:3111
       - name: Tesla e2e against the fake Fleet API

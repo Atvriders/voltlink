@@ -15,7 +15,7 @@ test('showroom renders GLB assets for all demo vehicle classes', async ({ page }
   // The five demo vehicles; each picker button renders the viewer and the
   // GLB loads asynchronously (procedural fallback shows first).
   const demoVehicles = ['Aurora', 'Comet', 'Terra', 'Atlas', 'Bison'];
-  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 90000 });
 
   for (const name of demoVehicles) {
     await page

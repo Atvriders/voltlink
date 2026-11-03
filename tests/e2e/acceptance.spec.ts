@@ -28,7 +28,7 @@ test('full demo acceptance flow', async ({ page }) => {
 
   // Vehicles visible in overview
   await page.goto('/');
-  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 90000 });
 
   // Open a live vehicle page via the overview card action
   await page.getByRole('button', { name: 'Live vehicle' }).first().click();
@@ -76,7 +76,7 @@ test('mobile layout renders', async ({ page }) => {
   await register(page, email);
   await enableDemo(page);
   await page.goto('/');
-  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 90000 });
   await page.getByRole('button', { name: 'Live vehicle' }).first().click();
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
   expect(consoleErrors, `console errors: ${consoleErrors.join(' | ')}`).toHaveLength(0);

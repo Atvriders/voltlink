@@ -61,6 +61,6 @@ export async function enableDemo(page: Page): Promise<void> {
   await demoBtn.waitFor({ state: 'visible', timeout: 15000 }).catch(() => undefined);
   if (await demoBtn.count()) {
     await demoBtn.click();
-    await expect(page.getByText(/demo vehicles/)).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText(/demo vehicles/)).toBeVisible({ timeout: 90000 });
   }
 }

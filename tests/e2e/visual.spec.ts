@@ -17,7 +17,7 @@ test('overview desktop with demo fleet', async ({ page }) => {
   await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await enableDemo(page);
   await page.goto('/');
-  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 90000 });
   await page.waitForTimeout(1500);
   await expect(page).toHaveScreenshot('overview.png', T);
 });
@@ -26,7 +26,7 @@ test('live vehicle controls panel', async ({ page }) => {
   await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await enableDemo(page);
   await page.goto('/');
-  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 90000 });
   await page.getByRole('button', { name: 'Live vehicle' }).first().click();
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
   await page.waitForTimeout(1500);
@@ -109,7 +109,7 @@ test('light theme overview', async ({ page }) => {
   await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await enableDemo(page);
   await page.goto('/');
-  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 90000 });
   // switch to light theme via the theme menu
   await page.locator('[aria-label="Theme"]').click();
   await page.getByRole('menuitem', { name: /Light/i }).click();
@@ -121,7 +121,7 @@ test('mobile overview', async ({ page }) => {
   await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await enableDemo(page);
   await page.goto('/');
-  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 90000 });
   await page.waitForTimeout(1200);
   await expect(page).toHaveScreenshot('overview-mobile.png', T);
 });
