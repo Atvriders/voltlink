@@ -235,11 +235,11 @@ jobs:
           # settings the tenancy migration seeds (upgrade continuity) so the
           # instance starts in setup mode like a genuine fresh install.
           docker compose -f compose.production.yml exec -T postgres psql -U voltlink -d voltlink \
-            -c "DELETE FROM \"AppSetting\" WHERE key IN ('instance.bootstrappedAt','instance.registrationMode')"
+            -c "DELETE FROM \"AppSetting\" WHERE key IN ('instance.bootstrappedAt','instance.registrationMode','instance.operatorOrgId','instance.setupTokenHash')"
           node scripts/smoke.mjs
           docker compose -f compose.production.yml restart worker
           docker compose -f compose.production.yml exec -T postgres psql -U voltlink -d voltlink \
-            -c "DELETE FROM \"AppSetting\" WHERE key IN ('instance.bootstrappedAt','instance.registrationMode')"
+            -c "DELETE FROM \"AppSetting\" WHERE key IN ('instance.bootstrappedAt','instance.registrationMode','instance.operatorOrgId','instance.setupTokenHash')"
           node scripts/smoke.mjs
           docker compose -f compose.production.yml down -v
 
