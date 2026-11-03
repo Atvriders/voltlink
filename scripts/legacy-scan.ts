@@ -45,6 +45,8 @@ const ALLOWED = [
   'docs/ARCHITECTURE_DECISIONS.md',
   'package-lock.json',
   'scripts/legacy-scan.ts', // the term list itself
+  // FM-11: the e2e spec that proves the legacy route list renders NotFound.
+  'tests/e2e/legacy-routes.spec.ts',
 ];
 
 export interface LegacyFinding {

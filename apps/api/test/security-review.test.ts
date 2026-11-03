@@ -68,34 +68,6 @@ function sessionAgent(token: string) {
   return request.agent(base).set('Cookie', `vl_session=${token}`);
 }
 
-// The API issues a CSRF cookie on the first mutating request and expects a
-// matching x-vl-csrf header on the retry (middleware/core.ts csrf()).
-const csrfTokens = new WeakMap<object, string>();
-async function postJson(agent: ReturnType<typeof request.agent>, url: string, body?: unknown) {
-  let csrf = csrfTokens.get(agent);
-  let res = csrf
-    ? await agent
-        .post(url)
-        .set('x-vl-csrf', csrf)
-        .send(body ?? {})
-    : await agent.post(url).send(body ?? {});
-  if (res.status === 403 && res.body?.error?.code === 'CSRF') {
-    const cookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
-    csrf =
-      cookies
-        .map((c) => c.split(';')[0])
-        .find((c) => c.startsWith('vl_csrf='))
-        ?.split('=')[1] ?? csrf;
-    if (!csrf) throw new Error('CSRF cookie was not issued');
-    csrfTokens.set(agent, csrf);
-    res = await agent
-      .post(url)
-      .set('x-vl-csrf', csrf)
-      .send(body ?? {});
-  }
-  return res;
-}
-
 describe('SEC-REVIEW-1: passkey step-up is bound to the user and session', () => {
   it('rejects another account passkey with 403 and records a throttle failure', async () => {
     const a = await createAccount(`sr1-a-${Date.now()}@example.test`, 'A');
@@ -114,7 +86,7 @@ describe('SEC-REVIEW-1: passkey step-up is bound to the user and session', () =>
     const agent = sessionAgent(token);
     const options = await agent.get('/api/v1/auth/step-up/passkey/options');
     expect(options.status).toBe(200);
-    const res = await postJson(agent, '/api/v1/auth/step-up', {
+    const res = await agent.post('/api/v1/auth/step-up').send({
       method: 'passkey',
       response: {
         id: foreign.credentialId,
@@ -147,7 +119,7 @@ describe('SEC-REVIEW-1: passkey step-up is bound to the user and session', () =>
     const agent = sessionAgent(token);
     const options = await agent.get('/api/v1/auth/step-up/passkey/options');
     expect(options.status).toBe(200);
-    const res = await postJson(agent, '/api/v1/auth/step-up', {
+    const res = await agent.post('/api/v1/auth/step-up').send({
       method: 'passkey',
       response: {
         id: own.credentialId,
@@ -198,21 +170,19 @@ describe('SEC-REVIEW-2: invite registration requires the secret token', () => {
     const email = invitation.email;
     const payload = { email, name: 'Invitee', password: 'invite-password-123' };
 
-    const noToken = await postJson(request.agent(base), '/api/v1/auth/register', payload);
+    const noToken = await request(base).post('/api/v1/auth/register').send(payload);
     expect(noToken.status).toBe(403);
     expect(noToken.body.error.code).toBe('INVITE_REQUIRED');
 
-    const wrongToken = await postJson(request.agent(base), '/api/v1/auth/register', {
-      ...payload,
-      inviteToken: 'wrong-token',
-    });
+    const wrongToken = await request(base)
+      .post('/api/v1/auth/register')
+      .send({ ...payload, inviteToken: 'wrong-token' });
     expect(wrongToken.status).toBe(403);
     expect(wrongToken.body.error.code).toBe('INVITE_REQUIRED');
 
-    const rightToken = await postJson(request.agent(base), '/api/v1/auth/register', {
-      ...payload,
-      inviteToken: token,
-    });
+    const rightToken = await request(base)
+      .post('/api/v1/auth/register')
+      .send({ ...payload, inviteToken: token });
     expect(rightToken.status).toBe(201);
     const created = await prisma.user.findUnique({
       where: { email },
@@ -233,7 +203,7 @@ describe('SEC-REVIEW-2: invite registration requires the secret token', () => {
     const { host, token, invitation } = await seedInviteMode();
     const email = invitation.email;
     // If a caller could name a role in the body, the membership would still
-    // be created from the invitation only (default VIEWER) - never from the
+    // be created from the invitation only (default VIEWER) — never from the
     // request. Sending the field proves it is ignored.
     const res = await postJson(request.agent(base), '/api/v1/auth/register', {
       email,
@@ -302,26 +272,22 @@ describe('SEC-REVIEW-3: API-key vehicle lists follow the owner permissions', () 
         grantedById: owner.user.id,
       },
     });
-    const r1 = randomId();
-    const r2 = randomId();
-    const r3 = randomId();
-    const r4 = randomId();
-    const token = `vlk_${r1.slice(0, 12)}_${r2}${r3}${r4.slice(0, 16)}`;
+    const token = `vlk_${'a'.repeat(12)}_${'b'.repeat(64)}`;
     await prisma.apiKey.create({
       data: {
         userId: driver.user.id,
         organizationId: org.id,
         name: 'driver key',
         keyHash: sha256hex(token),
-        prefix: token.slice(0, 16),
+        prefix: `vlk_${'a'.repeat(12)}`,
         scopes: ['vehicles:read'],
         expiresAt: new Date(Date.now() + 86_400_000),
       },
     });
     const res = await request(base).get('/api/v1/vehicles').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    const items = res.body.data as { id: string }[];
-    const ids = items.map((v) => v.id);
+    const items = res.body.data as { items: { id: string }[] };
+    const ids = items.items.map((v) => v.id);
     expect(ids).toContain(v1.id);
     expect(ids).not.toContain(v2.id);
     expect(ids).not.toContain(v3.id);
@@ -349,7 +315,7 @@ describe('SEC-REVIEW-4: POST /passkeys/:id/delete requires possession step-up', 
     const { token, sessionId } = await createSession(a.user.id);
     const agent = sessionAgent(token);
 
-    const denied = await postJson(agent, `/api/v1/auth/passkeys/${key.id}/delete`);
+    const denied = await agent.post(`/api/v1/auth/passkeys/${key.id}/delete`);
     expect(denied.status).toBe(403);
     expect(denied.body.error.code).toBe('STEP_UP_REQUIRED');
     expect(denied.body.error.details.methods).toEqual(['totp', 'recovery_code', 'passkey']);
@@ -358,7 +324,7 @@ describe('SEC-REVIEW-4: POST /passkeys/:id/delete requires possession step-up', 
       where: { id: sessionId },
       data: { stepUpAt: new Date(), stepUpMethod: 'passkey' },
     });
-    const allowed = await postJson(agent, `/api/v1/auth/passkeys/${key.id}/delete`);
+    const allowed = await agent.post(`/api/v1/auth/passkeys/${key.id}/delete`);
     expect(allowed.status).toBe(200);
     expect(await prisma.passkeyCredential.count({ where: { id: key.id } })).toBe(0);
 

@@ -45,6 +45,10 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Shared package build (api/web typecheck imports @voltlink/shared)
+        run: npm -w @voltlink/shared run build
+      - name: Prisma client (typecheck needs the generated client, not the stub)
+        run: npx prisma generate --schema apps/api/prisma/schema.prisma
       - name: Format gate (prettier)
         run: npx prettier --check .
       - name: Lint (zero warnings)
