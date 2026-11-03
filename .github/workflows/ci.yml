@@ -231,8 +231,15 @@ jobs:
           POSTGRES_PASSWORD=voltlink JWT_SECRET="$JWT_SECRET" VL_MASTER_KEY="$VL_MASTER_KEY" \
             PUBLIC_URL=http://127.0.0.1:3110 VL_ALLOW_INSECURE_HTTP=true VL_SETUP_TOKEN="$VL_SETUP_TOKEN" \
             docker compose -f compose.production.yml -f docker-compose.ci.yml up -d --wait
+          # smoke.mjs exercises the true first-run path: clear the bootstrapped
+          # settings the tenancy migration seeds (upgrade continuity) so the
+          # instance starts in setup mode like a genuine fresh install.
+          docker compose -f compose.production.yml exec -T postgres psql -U voltlink -d voltlink \
+            -c "DELETE FROM \"AppSetting\" WHERE key IN ('instance.bootstrappedAt','instance.registrationMode')"
           node scripts/smoke.mjs
           docker compose -f compose.production.yml restart worker
+          docker compose -f compose.production.yml exec -T postgres psql -U voltlink -d voltlink \
+            -c "DELETE FROM \"AppSetting\" WHERE key IN ('instance.bootstrappedAt','instance.registrationMode')"
           node scripts/smoke.mjs
           docker compose -f compose.production.yml down -v
 
