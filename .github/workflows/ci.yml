@@ -187,10 +187,10 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: bash scripts/e2e/start-stack.sh
-      - name: Smoke (register, demo, command, SSE)
-        run: node scripts/smoke.mjs
-        env:
-          SMOKE_BASE: http://127.0.0.1:3111
+      # smoke.mjs assumes first-run setup; start-stack.sh already bootstraps the
+      # instance admin (registration is open), so the smoke belongs to the image
+      # job's fresh compose stack. The Playwright matrix covers register/demo/
+      # command/SSE with stronger assertions here.
       - name: Playwright matrix (desktop/tablet/mobile/webgl/a11y/visual/legacy)
         run: |
           npx playwright install --with-deps chromium
