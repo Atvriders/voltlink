@@ -281,9 +281,9 @@ jobs:
     outputs:
       # digest keeps the sha256: prefix (used in promote as @<digest>).
       digest: ${{ steps.push.outputs.digest }}
-      # The image is pushed under the full commit-SHA tag (metadata type=sha,
-      # format=long), which is exactly github.sha for push/tag events.
-      tag: ${{ github.sha }}
+      # The image is pushed under the commit-SHA tag (metadata type=sha,
+      # format=long renders as "sha-<full sha>").
+      tag: sha-${{ github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
