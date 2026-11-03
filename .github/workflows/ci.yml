@@ -248,6 +248,11 @@ jobs:
     needs: [image]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
       - name: Dev compose parses and interpolates
         run: docker compose -f docker-compose.yml config -q
       - name: ENV_SPEC contract
