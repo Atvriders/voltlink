@@ -240,16 +240,19 @@ export function ProgressBar({
   value,
   max = 100,
   tone = 'bg-charging',
+  label = 'Progress',
 }: {
   value: number;
   max?: number;
   tone?: string;
+  label?: string;
 }) {
   const pct = Math.max(0, Math.min(100, (value / max) * 100));
   return (
     <div
       className="h-2 w-full overflow-hidden rounded-full bg-panel2"
       role="progressbar"
+      aria-label={label}
       aria-valuenow={Math.round(value)}
       aria-valuemin={0}
       aria-valuemax={max}

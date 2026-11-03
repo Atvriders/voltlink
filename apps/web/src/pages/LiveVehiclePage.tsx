@@ -681,6 +681,7 @@ function StateDetails({
           </span>
         </div>
         <ProgressBar
+          label="Battery charge"
           value={state.batteryPercent ?? 0}
           tone={state.chargingState === 'charging' ? 'bg-charging' : 'bg-accent'}
         />

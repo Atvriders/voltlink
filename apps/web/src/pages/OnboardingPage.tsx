@@ -150,7 +150,7 @@ export default function OnboardingPage() {
           Skip — I know what I’m doing
         </Link>
       </div>
-      <ProgressBar value={(step + 1) * (100 / STEPS.length)} />
+      <ProgressBar label="Onboarding progress" value={(step + 1) * (100 / STEPS.length)} />
       <Card title={STEPS[step]!.title}>
         <div className="min-h-64 space-y-4">
           {stepId(step) === 'account' && (
