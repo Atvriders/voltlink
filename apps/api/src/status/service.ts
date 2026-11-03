@@ -48,6 +48,10 @@ export async function ensureComponents(): Promise<void> {
   ];
   await prisma.statusComponent.createMany({
     data: components.map((c) => ({ ...c, status: 'operational' })),
+    // api, worker, scheduler, and statusServer all boot at once and each runs
+    // ensureComponents(); skipDuplicates makes the seed idempotent under that
+    // race instead of failing with P2002 on the unique `key` index.
+    skipDuplicates: true,
   });
 }
 

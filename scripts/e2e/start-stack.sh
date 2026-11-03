@@ -33,7 +33,16 @@ NODE_ENV=development node dist/worker.cjs >/tmp/voltlink-worker.log 2>&1 &
 echo $! >/tmp/voltlink-worker.pid
 NODE_ENV=development node dist/scheduler.cjs >/tmp/voltlink-scheduler.log 2>&1 &
 echo $! >/tmp/voltlink-scheduler.pid
-for i in $(seq 1 60); do curl -sf http://127.0.0.1:3111/healthz >/dev/null && break; sleep 1; done
+ready=0
+for i in $(seq 1 60); do
+  if curl -sf http://127.0.0.1:3111/healthz >/dev/null; then ready=1; break; fi
+  sleep 1
+done
+if [ "$ready" != "1" ]; then
+  echo 'web API did not become healthy within 60s; last 60 lines of the API log:'
+  tail -60 /tmp/voltlink-api.log || true
+  exit 1
+fi
 # First-run setup: a fresh database requires the setup token on the first
 # registration. Bootstrap an instance admin so the e2e specs can register users.
 if [ -n "${VL_SETUP_TOKEN:-}" ]; then
@@ -58,5 +67,3 @@ if [ -n "${VL_SETUP_TOKEN:-}" ]; then
   ' || true
 fi
 exit 0
-tail -40 /tmp/voltlink-api.log
-exit 1
