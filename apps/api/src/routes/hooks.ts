@@ -7,7 +7,7 @@ import express from 'express';
 import { prisma } from '../core/db';
 import { openJson } from '../core/crypto';
 import { verifyIncoming } from '../webhooks/standardWebhooks';
-import { dispatchTrigger } from '../automations/engine';
+import { runAutomation } from '../automations/engine';
 import { audit } from '../core/settings';
 import { policyRouter } from '../authz/policy';
 
@@ -64,12 +64,19 @@ hooksRouter.post(
         return { raw: raw.toString('utf8').slice(0, 8192) };
       }
     })();
-    const count = await dispatchTrigger({
-      type: 'webhook',
-      userId: hook.userId,
-      vehicleId: hook.automation.vehicleId ?? undefined,
-      data: body as Record<string, unknown>,
-    }).catch(() => 0);
+    // R2-28: the hook fires exactly its own automation, never every
+    // webhook automation of the creator.
+    const run = await runAutomation(
+      hook.automationId,
+      {
+        type: 'webhook',
+        userId: hook.userId,
+        organizationId: hook.automation.organizationId,
+        vehicleId: hook.automation.vehicleId ?? undefined,
+        data: body as Record<string, unknown>,
+      },
+    ).catch(() => null);
+    const count = run && run.result !== 'skipped' ? 1 : 0;
     await audit({
       actorId: null,
       organizationId: hook.automation.organizationId,

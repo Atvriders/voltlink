@@ -90,6 +90,18 @@ automationsRouter.post('/', { auth: 'session', target: { kind: 'none' } }, async
     res.status(403).json({ error: { code: 'FORBIDDEN', message: 'No organization available.' } });
     return;
   }
+  // R2-29: creating automations is an organization write; read-only members
+  // cannot.
+  {
+    const { orgPermissions } = await import('../authz/access');
+    const perms = await orgPermissions(sessionActor(req), org.organizationId);
+    if (!perms.has('automations.manage')) {
+      res.status(403).json({
+        error: { code: 'FORBIDDEN', message: 'Missing automations.manage in this organization.' },
+      });
+      return;
+    }
+  }
   if (d.vehicleId) {
     const vehicle = await prisma.vehicle.findUnique({ where: { id: d.vehicleId } });
     if (!vehicle || vehicle.organizationId !== org.organizationId) {

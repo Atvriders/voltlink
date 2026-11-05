@@ -110,6 +110,17 @@ providersRouter.post(
       res.status(403).json({ error: { code: 'FORBIDDEN', message: 'No organization available.' } });
       return;
     }
+    {
+      // R2-29: connecting a provider is an organization write.
+      const { orgPermissions } = await import('../authz/access');
+      const perms = await orgPermissions(actor, membership.organizationId);
+      if (!perms.has('providers.manage')) {
+        res.status(403).json({
+          error: { code: 'FORBIDDEN', message: 'Missing providers.manage in this organization.' },
+        });
+        return;
+      }
+    }
     const { accountId, vehiclesImported } = await connectDemoAccount(
       membership.organizationId,
       actor.userId,
@@ -294,6 +305,17 @@ providersRouter.post(
     if (!membership) {
       res.status(403).json({ error: { code: 'FORBIDDEN', message: 'No organization available.' } });
       return;
+    }
+    {
+      // R2-29: connecting a provider is an organization write.
+      const { orgPermissions } = await import('../authz/access');
+      const perms = await orgPermissions(actor, membership.organizationId);
+      if (!perms.has('providers.manage')) {
+        res.status(403).json({
+          error: { code: 'FORBIDDEN', message: 'Missing providers.manage in this organization.' },
+        });
+        return;
+      }
     }
     // G-05: verify the token against Tessie before storing it, and store the
     // account as 'connected' so Import is available right away.

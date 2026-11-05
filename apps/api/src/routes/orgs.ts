@@ -139,7 +139,8 @@ orgsRouter.patch(
 
 orgsRouter.delete(
   '/:orgId',
-  { auth: 'session', target: { kind: 'org', from: 'param:orgId', perm: 'org.delete' } },
+  // R2-30: deleting an organization is irreversible and needs re-auth.
+  { auth: 'session', stepUp: {}, target: { kind: 'org', from: 'param:orgId', perm: 'org.delete' } },
   async (req, res) => {
     const orgId = req.access!.organizationId!;
     const org = await prisma.organization.findUnique({ where: { id: orgId } });
@@ -194,7 +195,8 @@ orgsRouter.get(
 
 orgsRouter.patch(
   '/:orgId/members/:userId',
-  { auth: 'session', target: { kind: 'org', from: 'param:orgId', perm: 'members.manage' } },
+  // R2-30: role and scope changes need a recent re-authentication.
+  { auth: 'session', stepUp: {}, target: { kind: 'org', from: 'param:orgId', perm: 'members.manage' } },
   async (req, res) => {
     const orgId = req.access!.organizationId!;
     const actor = sessionActor(req);

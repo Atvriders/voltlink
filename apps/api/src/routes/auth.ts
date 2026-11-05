@@ -552,7 +552,8 @@ authRouter.get('/api-keys', { auth: 'session', target: { kind: 'none' } }, async
 
 authRouter.post(
   '/api-keys',
-  { auth: 'session', verifiedEmail: true, target: { kind: 'none' } },
+  // R2-30: minting a credential needs a recent re-authentication.
+  { auth: 'session', verifiedEmail: true, stepUp: {}, target: { kind: 'none' } },
   async (req, res) => {
     const actor = req.actor!;
     if (actor.kind !== 'session')
