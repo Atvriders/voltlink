@@ -23,7 +23,7 @@ import { seal, open } from '../core/keyring';
 import { audit, getSetting, setSetting } from '../core/settings';
 import { AuthError, AccessDenied } from '../authz/errors';
 import { createCeremony, consumeCeremony, readCeremony } from './ceremony';
-import { assertNotThrottled, clearFailures, recordFailure } from './throttle';
+import { assertNotThrottled, clearFailures, recordFailure, userKey } from './throttle';
 import type { Request } from 'express';
 import type { UserPublic, SessionInfo } from '@voltlink/shared';
 
@@ -535,7 +535,7 @@ export async function login(input: {
 }> {
   const email = input.email.trim().toLowerCase();
   const user = await prisma.user.findUnique({ where: { email } });
-  const key = user ? `user:${user.id}` : `email:${sha256hex(email)}`;
+  const key = user ? userKey(user.id, input.ip) : `email:${sha256hex(email)}`;
   await assertNotThrottled(key);
   const ok = await verifyPassword(user?.passwordHash ?? (await dummyHash()), input.password);
   if (!user || !ok || user.lockedAt || user.suspendedAt || user.deletionRequestedAt) {
@@ -556,12 +556,12 @@ export async function loginMfa(
 ): Promise<{ token: string; user: UserPublic }> {
   const ceremony = await readCeremonyFromReq(req);
   const user = await prisma.user.findUniqueOrThrow({ where: { id: ceremony.userId! } });
-  await assertNotThrottled(`user:${user.id}`);
+  await assertNotThrottled(userKey(user.id, input.ip));
   let ok = false;
   if (input.code) ok = await verifyTotpForUser(user.id, input.code);
   else if (input.recoveryCode) ok = await consumeRecoveryCode(user.id, input.recoveryCode);
   if (!ok) {
-    await recordFailure(`user:${user.id}`);
+    await recordFailure(userKey(user.id, input.ip));
     const attempts = await prisma.authChallenge.update({
       where: { id: ceremony.id },
       data: { attempts: { increment: 1 } },
@@ -575,7 +575,7 @@ export async function loginMfa(
     throw new AuthError('MFA_FAILED', 'The code was not accepted.', 401);
   }
   await consumeCeremonyFrom(ceremony.id);
-  await clearFailures(`user:${user.id}`);
+  await clearFailures(userKey(user.id, input.ip));
   const { token } = await createSession(user.id, input.ip, input.userAgent);
   await audit({
     actorId: user.id,
@@ -926,7 +926,7 @@ async function verifyPasskeyAssertion(
   // user, and a wrong-account attempt counts toward the step-up throttle.
   if (purpose === 'stepup_passkey') {
     if (!actor || cred.userId !== actor.userId) {
-      await recordFailure(`user:${actor?.userId ?? cred.userId}`);
+      await recordFailure(userKey(actor?.userId ?? cred.userId, req.ip));
       throw new AccessDenied(
         'PASSKEY_MISMATCH',
         'This passkey does not belong to your account.',
@@ -934,12 +934,12 @@ async function verifyPasskeyAssertion(
       );
     }
   }
-  await assertNotThrottled(`user:${cred.userId}`);
+  await assertNotThrottled(userKey(cred.userId, req.ip));
   const ch = await consumeCeremony(req, purpose);
   // The ceremony must have been created for this user and session.
   if (purpose === 'stepup_passkey') {
     if (ch.userId !== actor!.userId || ch.sessionId !== actor!.sessionId) {
-      await recordFailure(`user:${actor!.userId}`);
+      await recordFailure(userKey(actor!.userId, req.ip));
       throw new AccessDenied(
         'PASSKEY_MISMATCH',
         'This step-up session does not belong to your account.',
@@ -967,7 +967,7 @@ async function verifyPasskeyAssertion(
       backedUp: v.authenticationInfo.credentialBackedUp,
     };
   } catch {
-    await recordFailure(`user:${cred.userId}`);
+    await recordFailure(userKey(cred.userId, req.ip));
     throw new AuthError('PASSKEY_FAILED', 'Passkey sign-in failed.', 401);
   }
 }
@@ -987,7 +987,7 @@ export async function passkeyLogin(
     where: { id: cred.id },
     data: { counter: BigInt(result.newCounter), backedUp: result.backedUp, lastUsedAt: new Date() },
   });
-  await clearFailures(`user:${cred.userId}`);
+  await clearFailures(userKey(cred.userId, ip));
   const { token } = await createSession(cred.userId, ip, userAgent);
   const user = await prisma.user.findUniqueOrThrow({ where: { id: cred.userId } });
   await audit({
@@ -1040,7 +1040,7 @@ export async function stepUp(
     response?: AuthenticationResponseJSON;
   },
 ): Promise<{ stepUpUntil: string }> {
-  await assertNotThrottled(`user:${actor.userId}`);
+  await assertNotThrottled(userKey(actor.userId, req.ip));
   let ok = false;
   const method = input.method;
   const user = await prisma.user.findUniqueOrThrow({ where: { id: actor.userId } });
@@ -1065,7 +1065,7 @@ export async function stepUp(
     }
   }
   if (!ok) {
-    await recordFailure(`user:${actor.userId}`);
+    await recordFailure(userKey(actor.userId, req.ip));
     await audit({
       actorId: actor.userId,
       action: 'auth.step_up_failed',
@@ -1074,7 +1074,7 @@ export async function stepUp(
     });
     throw new AuthError('STEP_UP_FAILED', 'Confirmation failed.', 401);
   }
-  await clearFailures(`user:${actor.userId}`);
+  await clearFailures(userKey(actor.userId, req.ip));
   const until = new Date(Date.now() + env.STEPUP_WINDOW_SEC * 1000);
   await prisma.userSession.update({
     where: { id: actor.sessionId },

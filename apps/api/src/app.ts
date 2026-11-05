@@ -84,7 +84,7 @@ configRouter.get('/client', { auth: 'session', target: { kind: 'none' } }, (_req
 export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
   const app = express();
   app.disable('x-powered-by');
-  const trust = parseTrustProxy(env.TRUST_PROXY);
+  const trust = parseTrustProxy(process.env.TRUST_PROXY ?? env.TRUST_PROXY);
   if (trust !== false) app.set('trust proxy', trust);
 
   const mapCfg = loadMapConfig(process.env);

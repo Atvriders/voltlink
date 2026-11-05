@@ -49,7 +49,19 @@ authRouter.get('/csrf', { auth: 'public', target: { kind: 'none' } }, (req, res)
   if (typeof token !== 'string' || !token) {
     token = randomToken(16);
   }
-  res.cookie('vl_csrf', token, { httpOnly: false, sameSite: 'lax', path: '/' });
+  res.cookie('vl_csrf', token, {
+    httpOnly: false,
+    sameSite: 'lax',
+    path: '/',
+    // R2-53: the double-submit token must be Secure on https deployments.
+    secure: (() => {
+      try {
+        return new URL(process.env.PUBLIC_URL ?? env.PUBLIC_URL).protocol === 'https:';
+      } catch {
+        return false;
+      }
+    })(),
+  });
   res.json({ data: { token } });
 });
 

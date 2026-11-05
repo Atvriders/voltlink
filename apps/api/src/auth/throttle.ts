@@ -4,6 +4,14 @@
 
 import { prisma } from '../core/db';
 import { AuthError } from '../authz/errors';
+import { sha256hex } from '../core/crypto';
+
+// R2-55: lockout counters are scoped to the account AND the client IP, so a
+// remote attacker rotating IPs cannot lock a victim's account. Remote failures
+// never lock the account itself (no session termination).
+export function userKey(userId: string, ip?: string | null): string {
+  return `user:${userId}:ip:${ip ? sha256hex(ip) : 'anon'}`;
+}
 
 export async function assertNotThrottled(key: string): Promise<void> {
   const row = await prisma.authThrottle.findUnique({ where: { key } });
@@ -24,11 +32,6 @@ export async function recordFailure(key: string): Promise<void> {
       where: { key },
       data: { lockedUntil: new Date(Date.now() + sec * 1000) },
     });
-  }
-  if (row.failures >= 100 && key.startsWith('user:')) {
-    await prisma.user
-      .update({ where: { id: key.slice(5) }, data: { lockedAt: new Date() } })
-      .catch(() => undefined);
   }
 }
 
