@@ -175,7 +175,7 @@ export async function issueCommand(
   );
 
   if (highRisk) {
-    if (actor.kind === 'session') requireRecentStepUp(actor);
+    if (actor.kind === 'session') await requireRecentStepUp(actor);
     else if (actor.kind === 'apiKey')
       throw new AccessDenied('FORBIDDEN', 'API keys cannot run high-risk commands.', 403);
     else if (actor.kind === 'automation') {

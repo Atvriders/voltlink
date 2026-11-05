@@ -577,7 +577,7 @@ orgsRouter.patch(
     };
     // Lowering retention is a destructive decision: require recent step-up.
     if (next.telemetry < current.telemetry || next.location < current.location) {
-      requireRecentStepUp(actor);
+      await requireRecentStepUp(actor);
     }
     const updated = await prisma.organization.update({ where: { id: orgId }, data });
     await audit({

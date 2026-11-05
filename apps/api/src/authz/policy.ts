@@ -361,15 +361,23 @@ export function sessionActor(req: Request): Extract<Actor, { kind: 'session' }> 
   return a;
 }
 
-export function requireRecentStepUp(
+export async function requireRecentStepUp(
   actor: Actor,
   opts: { maxAgeSec?: number; possession?: boolean } = {},
-): void {
-  const methods = ['password', 'totp', 'recovery_code', 'passkey'];
+): Promise<void> {
+  const allMethods = ['password', 'totp', 'recovery_code', 'passkey'];
   if (actor.kind !== 'session')
     throw new AccessDenied('STEP_UP_REQUIRED', 'Requires an interactive session.', 403, {
-      methods,
+      methods: allMethods,
     });
+  // R2-60: offer only the methods this account actually has.
+  const user = await prisma.user.findUnique({
+    where: { id: actor.userId },
+    select: { totpEnabled: true, passkeys: { select: { id: true }, take: 1 } },
+  });
+  const methods = ['password'];
+  if (user?.totpEnabled) methods.push('totp', 'recovery_code');
+  if (user && user.passkeys.length > 0) methods.push('passkey');
   const fresh =
     !!actor.stepUpAt &&
     Date.now() - actor.stepUpAt.getTime() <= (opts.maxAgeSec ?? env.STEPUP_WINDOW_SEC) * 1000;
@@ -403,7 +411,7 @@ export function enforce(policy: RoutePolicy): RequestHandler {
           throw new AccessDenied('EMAIL_UNVERIFIED', 'Verify your email address first.', 403);
         }
         req.access = await resolveTarget(req, actor, policy.target);
-        if (policy.stepUp) requireRecentStepUp(req.actor!, policy.stepUp);
+        if (policy.stepUp) await requireRecentStepUp(req.actor!, policy.stepUp);
       } else if (policy.target.kind !== 'none') {
         // Public routes never carry a target; callers use none only.
         throw new Error('public policy with a target is not supported');

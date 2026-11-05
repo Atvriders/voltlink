@@ -98,7 +98,9 @@ describe('N-SUBS double opt-in', () => {
     expect(JSON.stringify(res.body)).not.toContain('unsubscribeUrl');
     expect(JSON.stringify(res.body)).not.toContain('token');
     // The mail goes out with the confirmation link.
-    const sent = sendMailSpy.mock.calls.find((c) => String(c[0]?.subject).includes('Confirm'));
+    const sent = sendMailSpy.mock.calls.find((c: unknown[]) =>
+      String((c[0] as { subject?: string } | undefined)?.subject).includes('Confirm'),
+    );
     expect(sent).toBeTruthy();
     expect(String(sent?.[0]?.text)).toContain('/status/subscriptions/confirm/');
   });
