@@ -233,58 +233,75 @@ export async function issueCommand(
     if (original) return { command: serializeCommand(original), replayed: true };
   }
 
-  const command = await prisma.vehicleCommand.create({
-    data: {
-      vehicleId,
-      vehicleName: String(vehicle.displayName),
-      providerAccountId: vehicle.providerAccountId,
-      organizationId: vehicle.organizationId,
-      userId: actor.kind === 'system' ? '' : actor.userId,
-      actorKind: actor.kind,
-      apiKeyId: actor.kind === 'apiKey' ? actor.apiKeyId : null,
-      automationId: actor.kind === 'automation' ? actor.automationId : null,
-      sourceIp: meta.ip?.slice(0, 64),
-      authzDecision: JSON.parse(
-        JSON.stringify({
-          perm: highRisk ? 'vehicles.command_high_risk' : 'vehicles.command',
-          permissions: [...permissions],
-        }),
-      ),
-      type,
-      params: JSON.parse(JSON.stringify(sanitizeParams(type, cleanParams))),
-      status: 'queued',
-      risk: def.risk,
-      idempotencyKey,
-    },
-  });
-  try {
-    await prisma.commandIdempotency.create({
-      data: {
-        scope,
-        key: idempotencyKey,
-        requestHash,
-        commandId: command.id,
-        expiresAt: new Date(Date.now() + 86_400_000),
-      },
-    });
-  } catch (e) {
-    if ((e as { code?: string }).code === 'P2002') {
-      const existing = await prisma.commandIdempotency.findUniqueOrThrow({
-        where: { scope_key: { scope, key: idempotencyKey } },
+  // R2-57: the idempotency row and the command row are written in one
+  // transaction, so a losing concurrent request rolls back its orphan
+  // 'queued' row instead of leaving it to be swept as timed_out.
+  class IdempotencyConflict extends Error {}
+  const command = await prisma
+    .$transaction(async (tx) => {
+      const c = await tx.vehicleCommand.create({
+        data: {
+          vehicleId,
+          vehicleName: String(vehicle.displayName),
+          providerAccountId: vehicle.providerAccountId,
+          organizationId: vehicle.organizationId,
+          userId: actor.kind === 'system' ? '' : actor.userId,
+          actorKind: actor.kind,
+          apiKeyId: actor.kind === 'apiKey' ? actor.apiKeyId : null,
+          automationId: actor.kind === 'automation' ? actor.automationId : null,
+          sourceIp: meta.ip?.slice(0, 64),
+          authzDecision: JSON.parse(
+            JSON.stringify({
+              perm: highRisk ? 'vehicles.command_high_risk' : 'vehicles.command',
+              permissions: [...permissions],
+            }),
+          ),
+          type,
+          params: JSON.parse(JSON.stringify(sanitizeParams(type, cleanParams))),
+          status: 'queued',
+          risk: def.risk,
+          idempotencyKey,
+        },
       });
-      if (existing.requestHash !== requestHash) {
-        throw new CommandError(
-          'IDEMPOTENCY_KEY_REUSED',
-          'This idempotency key was already used with a different request.',
-          409,
-        );
+      try {
+        await tx.commandIdempotency.create({
+          data: {
+            scope,
+            key: idempotencyKey,
+            requestHash,
+            commandId: c.id,
+            expiresAt: new Date(Date.now() + 86_400_000),
+          },
+        });
+      } catch (e) {
+        if ((e as { code?: string }).code === 'P2002') {
+          // Abort the transaction so the just-created command row rolls back.
+          throw new IdempotencyConflict();
+        }
+        throw e;
       }
-      const original = await prisma.vehicleCommand.findUnique({
-        where: { id: existing.commandId },
-      });
-      if (original) return { command: serializeCommand(original), replayed: true };
+      return c;
+    })
+    .catch((e: unknown): true => {
+      if (e instanceof IdempotencyConflict) return true;
+      throw e;
+    });
+  if (command === true) {
+    const existing = await prisma.commandIdempotency.findUniqueOrThrow({
+      where: { scope_key: { scope, key: idempotencyKey } },
+    });
+    if (existing.requestHash !== requestHash) {
+      throw new CommandError(
+        'IDEMPOTENCY_KEY_REUSED',
+        'This idempotency key was already used with a different request.',
+        409,
+      );
     }
-    throw e;
+    const original = await prisma.vehicleCommand.findUnique({
+      where: { id: existing.commandId },
+    });
+    if (original) return { command: serializeCommand(original), replayed: true };
+    throw new Error('Idempotency row exists but its command is gone.');
   }
   const actorUserId =
     actor.kind === 'session' || actor.kind === 'automation' || actor.kind === 'apiKey'
@@ -633,7 +650,9 @@ export async function processCommandJob(payload: {
     // G-03 / P-CONFIRM: evaluate the predicate against the INGESTED snapshot —
     // no second provider call and no separate polling budget.
     if (command.status !== 'accepted') return;
-    const ageMs = command.completedAt ? Date.now() - command.completedAt.getTime() : 0;
+    // R2-56: accepted commands have completedAt = null; the confirm window
+    // starts when the command was submitted.
+    const ageMs = command.submittedAt ? Date.now() - command.submittedAt.getTime() : 0;
     if (ageMs > CONFIRM_TIMEOUT_MS) {
       await transitionStatus(command.id, ['accepted'], 'timed_out', {
         confirmation: 'timeout',
