@@ -143,8 +143,30 @@ authRouter.post(
       res.json({ data: { ok: true, alreadyVerified: true } });
       return;
     }
+    // A-EMAILVERIFY: one verification mail per minute per account, so the
+    // endpoint cannot be used to flood a mailbox.
+    const mailKey = `resend-verification:${actor.userId}`;
+    const last = await prisma.authThrottle.findUnique({ where: { key: mailKey } });
+    if (last?.lockedUntil && last.lockedUntil > new Date()) {
+      res.status(429).json({
+        error: { code: 'TOO_MANY_ATTEMPTS', message: 'A verification email was sent recently.' },
+      });
+      return;
+    }
     const { requestVerificationFor } = await import('../auth/service');
     await requestVerificationFor(user);
+    await prisma.authThrottle.upsert({
+      where: { key: mailKey },
+      create: {
+        key: mailKey,
+        failures: 1,
+        lockedUntil: new Date(Date.now() + 60_000),
+      },
+      update: {
+        failures: { increment: 1 },
+        lockedUntil: new Date(Date.now() + 60_000),
+      },
+    });
     res.json({ data: { ok: true } });
   },
 );

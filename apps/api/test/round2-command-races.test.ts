@@ -106,15 +106,12 @@ describe('R2-57 idempotency race', () => {
     const results = await Promise.all(
       Array.from({ length: 6 }, () =>
         withCsrf(agent, (csrf) =>
-          agent
-            .post('/api/v1/commands')
-            .set('x-vl-csrf', csrf)
-            .send({
-              vehicleId: w.vehicle.id,
-              type: 'honk_horn',
-              params: {},
-              idempotencyKey: key,
-            }),
+          agent.post('/api/v1/commands').set('x-vl-csrf', csrf).send({
+            vehicleId: w.vehicle.id,
+            type: 'honk_horn',
+            params: {},
+            idempotencyKey: key,
+          }),
         ),
       ),
     );

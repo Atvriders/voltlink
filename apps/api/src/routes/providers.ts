@@ -99,7 +99,7 @@ providersRouter.get(
 
 providersRouter.post(
   '/demo/connect',
-  { auth: 'session', target: { kind: 'none' } },
+  { auth: 'session', verifiedEmail: true, target: { kind: 'none' } },
   async (req, res) => {
     const actor = sessionActor(req);
     const membership = await prisma.membership.findFirst({
@@ -145,7 +145,7 @@ providersRouter.post(
 
 providersRouter.get(
   '/tesla/authorize',
-  { auth: 'session', target: { kind: 'none' } },
+  { auth: 'session', verifiedEmail: true, target: { kind: 'none' } },
   async (req, res) => {
     if (!env.TESLA_CLIENT_ID || !env.TESLA_CLIENT_SECRET) {
       res.status(503).json({
@@ -288,7 +288,7 @@ providersRouter.get(
 
 providersRouter.post(
   '/tessie/connect',
-  { auth: 'session', target: { kind: 'none' } },
+  { auth: 'session', verifiedEmail: true, target: { kind: 'none' } },
   async (req, res) => {
     const { token, label } = (req.body ?? {}) as { token?: string; label?: string };
     if (!token || token.length < 8) {

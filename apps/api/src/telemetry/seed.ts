@@ -889,7 +889,8 @@ export async function seedStatusContent(): Promise<void> {
           }),
         ),
         components: JSON.parse(JSON.stringify(['demo'])),
-        public: true,
+        // Z-DEMOSCOPE: demo content must not reach the public status page.
+        public: false,
         createdAt: new Date(now.getTime() - 25 * 60000),
       },
     });
@@ -916,7 +917,8 @@ export async function seedStatusContent(): Promise<void> {
           }),
         ),
         components: JSON.parse(JSON.stringify(['notifications'])),
-        public: true,
+        // Z-DEMOSCOPE: demo content must not reach the public status page.
+        public: false,
         createdAt: new Date(now.getTime() - 8 * DAY),
       },
     });
