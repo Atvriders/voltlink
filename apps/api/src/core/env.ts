@@ -64,6 +64,7 @@ export const env = {
 
   DATABASE_URL: process.env.DATABASE_URL,
   REDIS_URL: process.env.REDIS_URL || '',
+  QUEUE_PREFIX: optional('VL_QUEUE_PREFIX', 'voltlink'),
 
   JWT_SECRET: () => requireSecret('JWT_SECRET', 32),
   JWT_EXPIRES_SEC: numberOpt('JWT_EXPIRES_SEC', 60 * 60 * 24 * 14),

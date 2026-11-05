@@ -1,19 +1,29 @@
 #!/bin/bash
 # tesla-e2e.sh — runs the Tesla Playwright spec against the fake Fleet API.
+# R2-24 safety: no pkill -f, no sourcing apps/api/.env, no raw SQL seeding,
+# no `|| true`; the stack runs in production mode.
 set -euo pipefail
-cd "$(dirname "$0")/../.."
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+RUN_DIR="${RUN_DIR:-$SCRIPT_DIR/run}"
+mkdir -p "$RUN_DIR"
 export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
-set -a
-. apps/api/.env 2>/dev/null || true
-set +a
 
-pkill -f fake-tesla-server || true
 rm -f /tmp/fake-tesla.url
-npx tsx scripts/e2e/fake-tesla-server.ts >/tmp/fake-tesla.log 2>&1 &
+npx tsx "$SCRIPT_DIR/fake-tesla-server.ts" >"$RUN_DIR/fake-tesla.log" 2>&1 &
 FAKE_PID=$!
+echo "fake $FAKE_PID" >> "$RUN_DIR/tesla-pids"
+cleanup() {
+  set +e
+  bash "$SCRIPT_DIR/start-stack.sh" stop
+  if kill -0 "$FAKE_PID" 2>/dev/null; then kill "$FAKE_PID" 2>/dev/null; fi
+}
+trap cleanup EXIT
+
 for i in $(seq 1 40); do [ -f /tmp/fake-tesla.url ] && break; sleep 0.25; done
+[ -f /tmp/fake-tesla.url ] || { echo 'fake tesla server did not write its URL' >&2; tail -20 "$RUN_DIR/fake-tesla.log"; exit 1; }
 FAKE="$(cat /tmp/fake-tesla.url)"
-curl -sf "$FAKE/health" >/dev/null || { echo "fake not healthy" >&2; exit 1; }
+curl -sf "$FAKE/health" >/dev/null || { echo 'fake tesla not healthy' >&2; tail -20 "$RUN_DIR/fake-tesla.log"; exit 1; }
 
 export TESLA_ALLOW_TEST_ENDPOINTS=true
 export TESLA_TOKEN_URL="$FAKE/oauth2/v3/token"
@@ -29,7 +39,6 @@ export TESLA_PARTNER_DOMAIN=127.0.0.1
 export TESLA_PUBLIC_KEY_FILE=/nonexistent
 export E2E_TESLA_FAKE_URL="$FAKE"
 
-npx tsx apps/api/scripts/e2e-seed-tesla-user.ts
-bash scripts/e2e/start-stack.sh
-trap 'pkill -f fake-tesla-server || true' EXIT
+bash "$SCRIPT_DIR/start-stack.sh"
+node "$SCRIPT_DIR/seed-tesla-user.mjs"
 npx playwright test tests/e2e/tesla.spec.ts --project=tesla "$@"

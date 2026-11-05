@@ -1,10 +1,19 @@
-// Minimal SMTP sink for e2e: accepts any message and drops it. Enough for
-// nodemailer to complete sendMail against 127.0.0.1:1025.
+// SMTP sink for e2e that also exposes received messages over HTTP, so the
+// Playwright helpers can read the real verification email in production mode
+// (R2-24: DEV_ECHO_TOKENS is refused outside development).
 import net from 'node:net';
+import http from 'node:http';
 
-const server = net.createServer((socket) => {
-  // Survive abrupt client disconnects (curl probes, aborted handshakes):
-  // a write error must never kill the sink.
+const messages = []; // { to, text, textDecoded }
+
+// Minimal quoted-printable decoder (the node stdlib has none): un-fold soft
+// line breaks and resolve =XX escapes.
+const qpDecode = (s) =>
+  s
+    .replace(/=\r?\n/g, '')
+    .replace(/=([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+
+const smtp = net.createServer((socket) => {
   socket.on('error', () => {});
   const safe = (text) => {
     try {
@@ -16,6 +25,8 @@ const server = net.createServer((socket) => {
   safe('220 voltlink-e2e ESMTP\r\n');
   let inData = false;
   let buf = '';
+  let rcptTo = '';
+  let dataBuf = '';
   socket.on('data', (chunk) => {
     buf += chunk.toString();
     const lines = buf.split('\r\n');
@@ -25,15 +36,23 @@ const server = net.createServer((socket) => {
       if (inData) {
         if (line === '.') {
           inData = false;
+          messages.push({ to: rcptTo, text: dataBuf, textDecoded: qpDecode(dataBuf) });
+          dataBuf = '';
           safe('250 OK: queued\r\n');
+        } else {
+          dataBuf += line + '\n';
         }
         continue;
       }
       const verb = line.split(' ')[0]?.toUpperCase();
       if (verb === 'EHLO' || verb === 'HELO') safe('250-voltlink-e2e\r\n250 OK\r\n');
-      else if (verb === 'MAIL' || verb === 'RCPT') safe('250 OK\r\n');
-      else if (verb === 'DATA') {
+      else if (verb === 'MAIL') safe('250 OK\r\n');
+      else if (verb === 'RCPT') {
+        rcptTo = line.replace(/^RCPT TO:</i, '').replace(/>.*$/, '');
+        safe('250 OK\r\n');
+      } else if (verb === 'DATA') {
         inData = true;
+        dataBuf = '';
         safe('354 End data with <CR><LF>.<CR><LF>\r\n');
       } else if (verb === 'QUIT') {
         safe('221 Bye\r\n');
@@ -43,7 +62,28 @@ const server = net.createServer((socket) => {
     }
   });
 });
+smtp.listen(1025, '127.0.0.1', () => console.log('fake smtp listening on 127.0.0.1:1025'));
 
-server.listen(1025, '127.0.0.1', () => {
-  console.log('fake smtp listening on 127.0.0.1:1025');
-});
+http
+  .createServer((req, res) => {
+    if (req.url === '/health') {
+      res.writeHead(200).end('ok');
+      return;
+    }
+    if (req.url === '/messages') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ messages }));
+      return;
+    }
+    // /last?to=<address> returns the most recent message for that recipient.
+    if (req.url.startsWith('/last')) {
+      const u = new URL(req.url, 'http://127.0.0.1');
+      const to = u.searchParams.get('to') ?? '';
+      const found = [...messages].reverse().find((m) => !to || m.to === to);
+      res.writeHead(found ? 200 : 404, { 'content-type': 'application/json' });
+      res.end(found ? JSON.stringify(found) : '{"error":"no message"}');
+      return;
+    }
+    res.writeHead(404).end();
+  })
+  .listen(1026, '127.0.0.1', () => console.log('fake smtp http on 127.0.0.1:1026'));

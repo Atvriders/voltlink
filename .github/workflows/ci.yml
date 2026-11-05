@@ -187,6 +187,19 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: bash scripts/e2e/start-stack.sh
+        env:
+          # start-stack.sh never reads apps/api/.env (R2-24); everything comes
+          # from the environment. Public URL is the API itself, which serves
+          # the built SPA. Plain HTTP is fine on the ephemeral CI network.
+          DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink
+          REDIS_URL: redis://127.0.0.1:6379
+          JWT_SECRET: ci-e2e-jwt-secret-not-a-production-secret-0000
+          VL_MASTER_KEY: Y2ktZTJlLW1hc3Rlci1rZXktbm90LXByb2R1Y3Rpb24tMDAwMA==
+          PUBLIC_URL: http://127.0.0.1:3111
+          VL_ALLOW_INSECURE_HTTP: 'true'
+          VL_SETUP_TOKEN: ci-e2e-setup-token-0123456789abcdef
+          VL_QUEUE_PREFIX: voltlink-ci
+      - name: Playwright matrix (desktop/tablet/mobile/webgl/a11y/visual/legacy)
       # smoke.mjs assumes first-run setup; start-stack.sh already bootstraps the
       # instance admin (registration is open), so the smoke belongs to the image
       # job's fresh compose stack. The Playwright matrix covers register/demo/
@@ -199,8 +212,22 @@ jobs:
           npx playwright test --workers=3
         env:
           E2E_BASE_URL: http://127.0.0.1:3111
+          VL_E2E_SMTP_HTTP: http://127.0.0.1:1026
       - name: Tesla e2e against the fake Fleet API
         run: bash scripts/e2e/tesla-e2e.sh
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3111
+          VL_E2E_SMTP_HTTP: http://127.0.0.1:1026
+          E2E_USER_EMAIL: tesla-e2e-user@voltlink.test
+          E2E_USER_PASSWORD: e2e-password-123
+          DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink
+          REDIS_URL: redis://127.0.0.1:6379
+          JWT_SECRET: ci-e2e-jwt-secret-not-a-production-secret-0000
+          VL_MASTER_KEY: Y2ktZTJlLW1hc3Rlci1rZXktbm90LXByb2R1Y3Rpb24tMDAwMA==
+          PUBLIC_URL: http://127.0.0.1:3111
+          VL_ALLOW_INSECURE_HTTP: 'true'
+          VL_SETUP_TOKEN: ci-e2e-setup-token-0123456789abcdef
+          VL_QUEUE_PREFIX: voltlink-ci
       - name: API log
         if: always()
         run: tail -60 /tmp/voltlink-api.log

@@ -5,7 +5,29 @@ import { expect, type Page } from '@playwright/test';
 
 /** Open registration answers 202 "check_email"; in the e2e environment the
  * dev token echo lands in the API log, so verify + sign in programmatically. */
-async function devVerificationToken(): Promise<string> {
+async function devVerificationToken(email: string): Promise<string> {
+  // R2-24: in production mode DEV_ECHO_TOKENS is refused, so read the real
+  // verification email from the e2e SMTP sink's HTTP API. Dev fallback keeps
+  // the old log-echo path.
+  const smtpHttp = process.env.VL_E2E_SMTP_HTTP;
+  if (smtpHttp) {
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      try {
+        const res = await fetch(`${smtpHttp}/last?to=${encodeURIComponent(email)}`);
+        if (res.ok) {
+          const body = (await res.json()) as { textDecoded: string; text: string };
+          const text = body.textDecoded ?? body.text;
+          const m = text.match(/token=([A-Za-z0-9_-]+)/);
+          if (m) return m[1]!;
+        }
+      } catch {
+        /* sink not up yet */
+      }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    throw new Error(`no verification email for ${email} at ${smtpHttp}`);
+  }
   const log = fs.readFileSync('/tmp/voltlink-api.log', 'utf8');
   const matches = [...log.matchAll(/\[mail:dev\] token echoed \(dev only\): (\S+)/g)];
   const last = matches[matches.length - 1];
@@ -31,7 +53,7 @@ export async function register(page: Page, email: string): Promise<void> {
     // check_email: verify with the dev token, then sign in to get a session.
     const csrfRes = await page.request.get('/api/v1/auth/csrf');
     const csrf = ((await csrfRes.json()) as { data: { token: string } }).data.token;
-    const token = await devVerificationToken();
+    const token = await devVerificationToken(email);
     await page.request.post('/api/v1/auth/verify-email', {
       data: { token },
       headers: { 'x-vl-csrf': csrf },

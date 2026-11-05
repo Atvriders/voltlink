@@ -3,6 +3,8 @@
 import { policyRouter, sessionActor } from '../authz/policy';
 import { prisma } from '../core/db';
 import { audit } from '../core/settings';
+import { setRegistrationMode } from '../auth/service';
+import { AuthError } from '../authz/errors';
 import { getSettingsBundle, setSetting, getSetting } from '../core/settings';
 import { runRetention } from '../telemetry/retention';
 import { getQueue } from '../core/queue';
@@ -77,6 +79,29 @@ adminRouter.patch(
           return;
         }
         await setSetting(key, v.slice(0, 100));
+      }
+    }
+    // R2-24/R2-29: instance admins control registration mode through the API
+    // (invite | open | closed). Open requires SMTP, enforced in the service.
+    if (body.registrationMode !== undefined) {
+      const mode = String(body.registrationMode);
+      if (!['invite', 'open', 'closed'].includes(mode)) {
+        res.status(400).json({
+          error: {
+            code: 'VALIDATION',
+            message: 'registrationMode must be one of: invite, open, closed.',
+          },
+        });
+        return;
+      }
+      try {
+        await setRegistrationMode(mode as 'invite' | 'open' | 'closed');
+      } catch (err) {
+        const code = err instanceof AuthError ? err.code : 'VALIDATION';
+        res.status(err instanceof AuthError ? err.status : 400).json({
+          error: { code, message: err instanceof Error ? err.message : 'invalid registration mode' },
+        });
+        return;
       }
     }
     res.json({ data: { ok: true } });

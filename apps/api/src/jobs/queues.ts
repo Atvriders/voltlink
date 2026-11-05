@@ -4,8 +4,11 @@
 
 import { Queue, type JobsOptions } from 'bullmq';
 import { producerConnection } from '../core/redis';
+import { env } from '../core/env';
 
-export const PREFIX = 'voltlink';
+// R2-49: two stacks on one Redis DB index must not take each other's jobs.
+// The prefix comes from VL_QUEUE_PREFIX (default 'voltlink').
+export const PREFIX = env.QUEUE_PREFIX;
 
 export const QUEUE_DEFAULTS = {
   'vehicle-commands': { attempts: 1 }, // provider commands are not idempotent: the DB state machine decides

@@ -44,3 +44,6 @@ context/
 test-results/
 playwright-report/
 *.tsbuildinfo
+
+# round-2 e2e runtime state
+scripts/e2e/run/
