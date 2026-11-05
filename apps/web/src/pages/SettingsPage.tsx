@@ -208,8 +208,10 @@ function SecurityTab() {
   });
 
   const deletePasskey = useMutation({
-    mutationFn: (id: string) => api(`/api/v1/auth/passkeys/${id}`, { method: 'POST' }),
+    mutationFn: (id: string) => api(`/api/v1/auth/passkeys/${id}`, { method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['passkeys'] }),
+    onError: (e) =>
+      setError(e instanceof ApiError ? e.message : 'Could not remove the passkey.'),
   });
 
   const registerPasskey = async () => {
@@ -379,7 +381,9 @@ function TotpModal({ open, onClose }: { open: boolean; onClose: () => void }) {
 
   const setup = useMutation({
     mutationFn: () =>
-      api<{ secret: string; otpauthUrl: string }>('/api/v1/auth/totp/setup', { method: 'POST' }),
+      api<{ secret: string; otpauthUrl: string }>('/api/v1/auth/mfa/totp/setup', {
+        method: 'POST',
+      }),
     onSuccess: (d) => {
       setSecret(d.secret);
       setStep('confirm');
@@ -387,11 +391,14 @@ function TotpModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   });
   const confirm = useMutation({
     mutationFn: () =>
-      api<{ recoveryCodes: string[] }>('/api/v1/auth/totp/confirm', {
+      api<{ recoveryCodes: string[] }>('/api/v1/auth/mfa/totp/confirm', {
         method: 'POST',
         body: { code },
       }),
     onSuccess: (d) => {
+      // NEW-03: never leave the just-used code prefilled, and prefer the
+      // recovery-code view over the disable form right after enabling.
+      setCode('');
       setRecovery(d.recoveryCodes ?? []);
       refresh();
       qc.invalidateQueries();
@@ -399,7 +406,7 @@ function TotpModal({ open, onClose }: { open: boolean; onClose: () => void }) {
     onError: (e) => setError(e instanceof ApiError ? e.message : 'Invalid code'),
   });
   const disable = useMutation({
-    mutationFn: () => api('/api/v1/auth/totp/disable', { method: 'POST', body: { code } }),
+    mutationFn: () => api('/api/v1/auth/mfa/totp/disable', { method: 'POST' }),
     onSuccess: () => {
       refresh();
       onClose();
@@ -415,7 +422,24 @@ function TotpModal({ open, onClose }: { open: boolean; onClose: () => void }) {
             {error}
           </div>
         )}
-        {user?.totpEnabled ? (
+        {recovery.length > 0 ? (
+          <>
+            <div className="rounded-lg border border-ok/40 bg-ok/10 px-3 py-2 text-sm text-ok">
+              TOTP enabled!
+            </div>
+            <p className="text-sm text-subtle">Recovery codes (store them safely):</p>
+            <ul className="grid grid-cols-2 gap-1 text-xs">
+              {recovery.map((r) => (
+                <li key={r}>
+                  <code>{r}</code>
+                </li>
+              ))}
+            </ul>
+            <div className="flex justify-end">
+              <Button onClick={onClose}>Done</Button>
+            </div>
+          </>
+        ) : user?.totpEnabled ? (
           <>
             <p className="text-sm text-subtle">
               Enter a current code from your authenticator app to disable TOTP.
@@ -431,23 +455,6 @@ function TotpModal({ open, onClose }: { open: boolean; onClose: () => void }) {
               >
                 Disable TOTP
               </Button>
-            </div>
-          </>
-        ) : recovery.length > 0 ? (
-          <>
-            <div className="rounded-lg border border-ok/40 bg-ok/10 px-3 py-2 text-sm text-ok">
-              TOTP enabled!
-            </div>
-            <p className="text-sm text-subtle">Recovery codes (store them safely):</p>
-            <ul className="grid grid-cols-2 gap-1 text-xs">
-              {recovery.map((r) => (
-                <li key={r}>
-                  <code>{r}</code>
-                </li>
-              ))}
-            </ul>
-            <div className="flex justify-end">
-              <Button onClick={onClose}>Done</Button>
             </div>
           </>
         ) : step === 'setup' ? (
