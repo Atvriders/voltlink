@@ -72,9 +72,10 @@ fleetRouter.get('/overview', fleetRead, async (req, res) => {
           model: v.model,
           labels: v.labels,
           vehicleClass: v.vehicleClass,
-          batteryPct: st?.b ?? null,
-          charging: st?.cp === true || st?.charging === true,
-          offline: st?.offline === true,
+          // R2-11: the snapshot state uses VehicleState keys.
+          batteryPct: typeof st?.batteryPercent === 'number' ? st.batteryPercent : null,
+          charging: st?.chargingState === 'charging',
+          offline: st?.status === 'offline',
           demo: v.demo,
           fetchedAt: v.snapshot?.fetchedAt?.toISOString(),
         };

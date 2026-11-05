@@ -60,11 +60,13 @@ export async function enqueue(
   payload: object,
   o: { delayMs?: number; dedupeKey?: string; jobId?: string; attempts?: number } = {},
 ): Promise<string> {
-  const job = await queue(name).add(name, payload, {
-    delay: o.delayMs,
-    attempts: o.attempts,
+  // R2-12: an undefined attempts must not override the queue's QUEUE_DEFAULTS.
+  const opts: JobsOptions = {
     jobId: o.jobId, // no ':' and not integer-like
-    deduplication: o.dedupeKey ? { id: `${name}:${o.dedupeKey}` } : undefined,
-  });
+    ...(o.delayMs !== undefined ? { delay: o.delayMs } : {}),
+    ...(o.attempts !== undefined ? { attempts: o.attempts } : {}),
+    ...(o.dedupeKey ? { deduplication: { id: `${name}:${o.dedupeKey}` } } : {}),
+  };
+  const job = await queue(name).add(name, payload, opts);
   return job.id!;
 }

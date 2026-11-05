@@ -3,6 +3,7 @@
 
 import { prisma } from '../core/db';
 import { audit } from '../core/settings';
+import { getOperatorOrgId } from '../authz/access';
 import { notify } from '../notifications/service';
 import { getQueue } from '../core/queue';
 import { haversineKm } from '../core/geo';
@@ -14,6 +15,7 @@ export interface TriggerEvent {
   type: TriggerType;
   userId?: string;
   vehicleId?: string;
+  organizationId?: string;
   data: Record<string, unknown>;
 }
 
@@ -25,8 +27,15 @@ const SECONDS = 1000;
 
 /** Find automations matching an event and evaluate conditions. */
 export async function findMatchingAutomations(event: TriggerEvent): Promise<Automation[]> {
+  // Z-AUTOXTENANT: a system event (e.g. drive_started from telemetry ingestion)
+  // is scoped to the vehicle's organization; a user event to the user. An
+  // automation can never fire on another tenant's vehicle.
   const rows = await prisma.automation.findMany({
-    where: event.userId ? { userId: event.userId, enabled: true } : { enabled: true },
+    where: {
+      enabled: true,
+      ...(event.userId ? { userId: event.userId } : {}),
+      ...(event.organizationId ? { organizationId: event.organizationId } : {}),
+    },
   });
   const out: Automation[] = [];
   for (const row of rows) {
@@ -240,6 +249,21 @@ async function executeAction(
       return `Webhook delivered${dry}`;
     }
     case 'create_incident': {
+      // Z-INCIDENTPUB: public incidents are operator-only. A self-registered
+      // user's automation can still create a private incident, but must never
+      // reach the anonymous public status bundle.
+      const wantedPublic = action.params.public === true;
+      let canPublish = false;
+      if (wantedPublic) {
+        const operatorId = await getOperatorOrgId();
+        if (operatorId) {
+          const membership = await prisma.membership.findUnique({
+            where: { organizationId_userId: { organizationId: operatorId, userId } },
+          });
+          canPublish = !!membership && membership.status === 'ACTIVE';
+        }
+      }
+      const isPublic = wantedPublic && canPublish;
       await prisma.incident.create({
         data: {
           title: String(action.params.title ?? 'Automation-created incident'),
@@ -254,10 +278,12 @@ async function executeAction(
             }),
           ),
           components: JSON.parse(JSON.stringify(['telemetry'])),
-          public: action.params.public === true,
+          public: isPublic,
+          createdById: userId,
+          source: 'automation',
         },
       });
-      return `Incident created${dry}`;
+      return isPublic ? `Incident created${dry}` : `Incident created (private: public posting is operator-only)${dry}`;
     }
     case 'generate_report': {
       await getQueue().enqueue(
@@ -431,7 +457,17 @@ export function localClock(date: Date, timezone: string): { day: number; minutes
 }
 
 export async function dispatchTrigger(event: TriggerEvent): Promise<number> {
-  const matches = await findMatchingAutomations(event);
+  // Events without a user carry the vehicle's organization instead, so
+  // 'all vehicles' automations only see the tenant that owns the vehicle.
+  const scoped = { ...event };
+  if (!scoped.userId && scoped.vehicleId) {
+    const vehicle = await prisma.vehicle.findUnique({
+      where: { id: scoped.vehicleId },
+      select: { organizationId: true },
+    });
+    scoped.organizationId = vehicle?.organizationId ?? undefined;
+  }
+  const matches = await findMatchingAutomations(scoped);
   for (const a of matches) {
     void runAutomation(a.id, event).catch((err) => {
       console.error(`automation ${a.id} failed:`, (err as Error).message);

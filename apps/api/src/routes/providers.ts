@@ -519,13 +519,30 @@ providersRouter.post(
         type?: string;
         payload?: Record<string, unknown>;
       };
-      const vehicle = await prisma.vehicle.findFirst({ where: { id: body.vehicleId, demo: true } });
+      const vehicle = await prisma.vehicle.findFirst({
+        where: { id: body.vehicleId, demo: true },
+      });
+      // Z-AUTOXTENANT: the demo webhook only accepts vehicles owned by the
+      // caller's own organization.
       if (vehicle) {
+        const actor = sessionActor(req);
+        const membership = await prisma.membership.findUnique({
+          where: {
+            organizationId_userId: {
+              organizationId: vehicle.organizationId,
+              userId: actor.userId,
+            },
+          },
+        });
+        if (!membership || membership.status !== 'ACTIVE') {
+          res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Vehicle not found.' } });
+          return;
+        }
         if (body.type === 'trigger') {
           const { dispatchTrigger } = await import('../automations/engine');
           await dispatchTrigger({
             type: (body.payload?.type ?? 'webhook') as never,
-            userId: sessionActor(req).userId,
+            userId: actor.userId,
             vehicleId: vehicle.id,
             data: body.payload ?? {},
           });

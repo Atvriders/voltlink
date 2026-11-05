@@ -197,7 +197,10 @@ statusRouter.patch(
 // ---- Incidents ----
 
 statusRouter.get('/incidents', { auth: 'public', target: { kind: 'none' } }, async (_req, res) => {
+  // R2-13: the public endpoint serves public incidents only, and the DTO
+  // scrubs internal update authors.
   const incidents = await prisma.incident.findMany({
+    where: { public: true },
     include: { updates: { orderBy: { createdAt: 'asc' } } },
     orderBy: { createdAt: 'desc' },
   });
@@ -262,10 +265,12 @@ statusRouter.post(
       type: 'status.incident',
       data: { incidentId: incident.id, title: incident.title, severity: incident.severity },
     });
-    void notifyStatusSubscribers(
-      `New incident: ${incident.title}`,
-      `${incident.title} — ${message ?? 'Investigating'}`,
-    );
+    if (incident.public) {
+      void notifyStatusSubscribers(
+        `New incident: ${incident.title}`,
+        `${incident.title} — ${message ?? 'Investigating'}`,
+      );
+    }
     // reflect incident on components
     for (const key of (components ?? []).slice(0, 20)) {
       const c = await prisma.statusComponent.findUnique({ where: { key } });

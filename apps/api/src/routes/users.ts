@@ -175,27 +175,41 @@ usersRouter.post(
 // ---- Data export ----
 
 usersRouter.get('/export', { auth: 'session', target: { kind: 'self' } }, async (req, res) => {
-  const userId = sessionActor(req).userId;
+  const actor = sessionActor(req);
+  const userId = actor.userId;
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: { memberships: true },
   });
   if (!user) throw new AccessDenied('NOT_FOUND', 'User not found.', 404);
+  // R2-06: exports honor role, vehicleScope and grants. Vehicle data comes
+  // only from the caller's accessible vehicles; organization-level data (e.g.
+  // places) only from organizations where the caller is the sole member.
+  const vehicleIds = await accessibleVehicleIds(actor, 'vehicles.read');
   const orgIds = user.memberships.map((m) => m.organizationId);
+  const soleOrgIds: string[] = [];
+  for (const orgId of orgIds) {
+    const activeMembers = await prisma.membership.count({
+      where: { organizationId: orgId, status: 'ACTIVE' },
+    });
+    if (activeMembers === 1) soleOrgIds.push(orgId);
+  }
   const [vehicles, drives, charges, commands, notifications, automations, places] =
     await Promise.all([
-      prisma.vehicle.findMany({ where: { organizationId: { in: orgIds } } }),
-      prisma.drive.findMany({ where: { vehicle: { organizationId: { in: orgIds } } } }),
-      prisma.chargingSession.findMany({ where: { vehicle: { organizationId: { in: orgIds } } } }),
+      prisma.vehicle.findMany({ where: { id: { in: vehicleIds } } }),
+      prisma.drive.findMany({ where: { vehicleId: { in: vehicleIds } } }),
+      prisma.chargingSession.findMany({ where: { vehicleId: { in: vehicleIds } } }),
       prisma.vehicleCommand.findMany({ where: { userId } }),
       prisma.appNotification.findMany({ where: { userId }, take: 1000 }),
       prisma.automation.findMany({ where: { userId } }),
-      prisma.place.findMany({ where: { organizationId: { in: orgIds } } }),
+      prisma.place.findMany({ where: { organizationId: { in: soleOrgIds } } }),
     ]);
-  const telemetryCount = await query<{ n: string }>(
-    `SELECT count(*)::text AS n FROM telemetry.telemetry_reading WHERE vehicle_id IN (SELECT id FROM "Vehicle" WHERE "organizationId" = ANY($1::text[]))`,
-    [orgIds],
-  );
+  const telemetryCount = vehicleIds.length
+    ? await query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM telemetry.telemetry_reading WHERE vehicle_id = ANY($1::text[])`,
+        [vehicleIds],
+      )
+    : { rows: [{ n: '0' }], rowCount: 0 };
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Content-Disposition', 'attachment; filename="voltlink-export.json"');
   res.send(

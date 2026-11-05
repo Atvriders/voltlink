@@ -394,7 +394,8 @@ export function toIncidentDto(i: {
       phase: u.phase,
       message: u.message,
       createdAt: u.createdAt.toISOString(),
-      author: u.author,
+      // R2-13: internal author user ids never leave the API.
+      author: i.public ? 'VoltLink' : u.author,
     })),
   };
 }
