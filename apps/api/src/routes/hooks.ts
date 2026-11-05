@@ -66,16 +66,13 @@ hooksRouter.post(
     })();
     // R2-28: the hook fires exactly its own automation, never every
     // webhook automation of the creator.
-    const run = await runAutomation(
-      hook.automationId,
-      {
-        type: 'webhook',
-        userId: hook.userId,
-        organizationId: hook.automation.organizationId,
-        vehicleId: hook.automation.vehicleId ?? undefined,
-        data: body as Record<string, unknown>,
-      },
-    ).catch(() => null);
+    const run = await runAutomation(hook.automationId, {
+      type: 'webhook',
+      userId: hook.userId,
+      organizationId: hook.automation.organizationId,
+      vehicleId: hook.automation.vehicleId ?? undefined,
+      data: body as Record<string, unknown>,
+    }).catch(() => null);
     const count = run && run.result !== 'skipped' ? 1 : 0;
     await audit({
       actorId: null,

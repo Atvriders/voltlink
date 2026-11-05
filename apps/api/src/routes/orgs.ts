@@ -196,7 +196,11 @@ orgsRouter.get(
 orgsRouter.patch(
   '/:orgId/members/:userId',
   // R2-30: role and scope changes need a recent re-authentication.
-  { auth: 'session', stepUp: {}, target: { kind: 'org', from: 'param:orgId', perm: 'members.manage' } },
+  {
+    auth: 'session',
+    stepUp: {},
+    target: { kind: 'org', from: 'param:orgId', perm: 'members.manage' },
+  },
   async (req, res) => {
     const orgId = req.access!.organizationId!;
     const actor = sessionActor(req);
