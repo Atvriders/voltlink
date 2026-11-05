@@ -229,6 +229,11 @@ authRouter.post('/logout', { auth: 'session', target: { kind: 'none' } }, async 
       where: { id: actor.sessionId },
       data: { revokedAt: new Date() },
     });
+    // A-SSEREVOKE: logout ends this session's SSE stream immediately.
+    void (await import('../realtime/bus')).publishSessionRevocation({
+      userId: actor.userId,
+      sessionIds: [actor.sessionId],
+    });
   }
   res.clearCookie(env.SESSION_COOKIE, { path: '/' });
   res.json({ data: { ok: true } });

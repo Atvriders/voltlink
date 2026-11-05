@@ -487,6 +487,11 @@ export async function revokeSession(userId: string, sessionId: string): Promise<
   const row = await prisma.userSession.findUnique({ where: { id: sessionId } });
   if (!row || row.userId !== userId) throw new AuthError('NOT_FOUND', 'Session not found.', 404);
   await prisma.userSession.update({ where: { id: sessionId }, data: { revokedAt: new Date() } });
+  // A-SSEREVOKE: end this session's SSE stream immediately.
+  void (await import('../realtime/bus')).publishSessionRevocation({
+    userId,
+    sessionIds: [sessionId],
+  });
   await audit({
     actorId: userId,
     action: 'auth.revoke_session',
@@ -502,6 +507,11 @@ export async function revokeAllOtherSessions(
   await prisma.userSession.updateMany({
     where: { userId, revokedAt: null, id: { not: currentSessionId } },
     data: { revokedAt: new Date() },
+  });
+  // A-SSEREVOKE: end every other session's SSE stream immediately.
+  void (await import('../realtime/bus')).publishSessionRevocation({
+    userId,
+    allExcept: currentSessionId,
   });
   await audit({ actorId: userId, action: 'auth.revoke_all_other_sessions' });
 }
