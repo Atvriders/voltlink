@@ -18,7 +18,7 @@ import { AccessDenied } from '../authz/errors';
 import type { Actor } from '../authz/types';
 import { buildContext, getProvider } from '../providers/registry';
 import { randomId, sha256hex } from '../core/crypto';
-import { DelayedError } from 'bullmq';
+
 import {
   COMMAND_DEFINITIONS,
   COMMAND_PARAM_SCHEMAS,
@@ -439,7 +439,15 @@ export async function processCommandJob(payload: {
     const lockKey = `voltlink:lock:vehicle-cmd:${command.vehicleId}`;
     const lock = await producerConnection().set(lockKey, command.id, 'PX', 60_000, 'NX');
     if (!lock) {
-      throw new DelayedError();
+      // R2-09: another dispatch for this vehicle is in flight. Re-schedule this
+      // job instead of throwing a bare DelayedError, which BullMQ turns into a
+      // permanent failure without any delay.
+      await enqueue(
+        'vehicle-commands',
+        { commandId: payload.commandId, stage: payload.stage, n: payload.n },
+        { jobId: `vehicle-cmd-${payload.commandId}-${payload.stage}-${Date.now()}`, delayMs: 2000 },
+      );
+      return;
     }
     try {
       const claimed = await transitionStatus(command.id, ['queued'], 'submitted');
@@ -595,7 +603,7 @@ export async function processCommandJob(payload: {
             // P-CONFIRM: not_observable commands end at accepted, never confirmed.
             await prisma.vehicleCommand.update({
               where: { id: command.id },
-              data: { confirmation: 'not_observable' },
+              data: { confirmation: 'not_observable', completedAt: new Date() },
             });
             await notifyCommandFinished(command, 'success');
             return;
@@ -686,7 +694,7 @@ export async function sweepStuckCommands(): Promise<number> {
   >`
     UPDATE "VehicleCommand" SET status = 'timed_out', "completedAt" = now(), "errorMessage" = 'No provider result in time',
       "confirmation" = 'sweep'
-     WHERE (status IN ('submitted','accepted') AND COALESCE("submittedAt","createdAt") < now() - interval '3 minutes')
+     WHERE (status IN ('submitted','accepted') AND confirmation IS DISTINCT FROM 'not_observable' AND COALESCE("submittedAt","createdAt") < now() - interval '3 minutes')
         OR (status = 'queued' AND "createdAt" < now() - interval '15 minutes')
     RETURNING id, "userId", "vehicleId", "vehicleName", status, type`;
   for (const row of rows) {

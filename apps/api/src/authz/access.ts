@@ -82,6 +82,29 @@ export async function assertProviderAccountAccess(
   if (actor.kind === 'apiKey' && !actor.scopes.includes('commands:write')) {
     throw new AccessDenied('API_KEY_SCOPE', 'This API key cannot issue commands.', 403);
   }
+  if (actor.kind === 'automation') {
+    // R2-10: automations act as their creator inside their own organization.
+    if (actor.organizationId !== providerAccount.organizationId) {
+      throw new AccessDenied('FORBIDDEN', 'This endpoint requires an interactive session.', 403);
+    }
+    const m = await prisma.membership.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId: providerAccount.organizationId,
+          userId: actor.userId,
+        },
+      },
+    });
+    if (m?.status === 'ACTIVE' && m.providerScope === 'ALL') {
+      if (need === 'manage') {
+        const orgPerms = await orgPermissions(actor, providerAccount.organizationId);
+        if (orgPerms.has('providers.manage')) return;
+      } else {
+        return;
+      }
+    }
+    throw new AccessDenied('FORBIDDEN', 'Missing command access on this provider account.');
+  }
   if (actor.kind !== 'session' && actor.kind !== 'apiKey')
     throw new AccessDenied('FORBIDDEN', 'This endpoint requires an interactive session.', 403);
   const m = await prisma.membership.findUnique({
