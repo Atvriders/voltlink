@@ -38,7 +38,7 @@ x-voltlink-common: &voltlink
     VL_SETUP_TOKEN: '${VL_SETUP_TOKEN:-}'
     SMTP_URL: '${SMTP_URL:-}'
     MAIL_FROM: '${MAIL_FROM:-VoltLink <no-reply@voltlink.local>}'
-    MAIL_TO_CONSOLE: '${MAIL_TO_CONSOLE:-true}'
+    MAIL_TO_CONSOLE: '${MAIL_TO_CONSOLE:-false}'
     VL_TOTP_ISSUER: '${VL_TOTP_ISSUER:-VoltLink}'
     VL_WEBAUTHN_RP_NAME: '${VL_WEBAUTHN_RP_NAME:-VoltLink}'
     TESLA_CLIENT_ID: '${TESLA_CLIENT_ID:-}'

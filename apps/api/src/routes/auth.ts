@@ -478,9 +478,17 @@ authRouter.post(
   '/passkey/login/verify',
   { auth: 'public', target: { kind: 'none' } },
   async (req, res) => {
+    // NEW-04: a missing/malformed body is a client error, never a 500.
+    const body = (req.body ?? {}) as { response?: unknown };
+    if (!body || typeof body.response !== 'object') {
+      res.status(400).json({
+        error: { code: 'PASSKEY_FAILED', message: 'A passkey response is required.' },
+      });
+      return;
+    }
     const { token, user } = await passkeyLogin(
       req,
-      { response: (req.body as { response: never }).response },
+      { response: body.response as never },
       req.ip,
       req.headers['user-agent'] as string | undefined,
     );

@@ -313,7 +313,9 @@ export async function registerUser(input: {
         data: {
           organizationId: invitation.organizationId,
           userId: user.id,
-          role: invitation.role ?? 'VIEWER',
+          // Z-ROLERANK: even a pre-existing OWNER invitation cannot mint an
+          // owner; ownership moves only through transfer-ownership.
+          role: invitation.role === 'OWNER' ? 'ADMIN' : (invitation.role ?? 'VIEWER'),
           invitedById: invitation.invitedById,
         },
       }),
@@ -601,7 +603,8 @@ export async function requestPasswordReset(email: string): Promise<{ ok: true }>
     },
   });
   const link = `${env.PUBLIC_URL}/reset-password?token=${encodeURIComponent(token)}`;
-  await sendMail({
+  // A-ENUM: the uniform response never waits on the SMTP round trip.
+  void sendMail({
     to: user.email,
     subject: 'Reset your VoltLink password',
     text: `A password reset was requested for your VoltLink account.\nOpen this link to choose a new password:\n${link}\n\nIf you did not request this, you can ignore this email.`,

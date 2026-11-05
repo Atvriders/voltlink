@@ -213,25 +213,23 @@ drivesRouter.get('/export/csv', readAll, async (req, res) => {
     'tags',
     'driverName',
   ];
-  const lines = rows.map((d) =>
-    [
-      d.id,
-      d.vehicle.displayName,
-      d.startAt.toISOString(),
-      d.endAt.toISOString(),
-      d.startAddress ?? '',
-      d.endAddress ?? '',
-      d.distanceKm,
-      d.durationSec,
-      d.avgSpeedKmh,
-      d.maxSpeedKmh,
-      d.energyKwh,
-      d.efficiencyWhPerKm,
-      d.classification,
-      (d.tags as string[]).join('|'),
-      d.driverName ?? '',
-    ].map((v) => String(v).replace(/"/g, '""')),
-  );
+  const lines = rows.map((d): string[] => [
+    d.id,
+    d.vehicle.displayName,
+    d.startAt.toISOString(),
+    d.endAt.toISOString(),
+    d.startAddress ?? '',
+    d.endAddress ?? '',
+    String(d.distanceKm),
+    String(d.durationSec),
+    String(d.avgSpeedKmh),
+    String(d.maxSpeedKmh),
+    String(d.energyKwh),
+    String(d.efficiencyWhPerKm),
+    d.classification,
+    (d.tags as string[]).join('|'),
+    d.driverName ?? '',
+  ]);
   const body = csv([header, ...lines]);
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="voltlink-drives.csv"');

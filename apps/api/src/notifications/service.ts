@@ -236,7 +236,12 @@ async function deliverChannel(row: OutboxRow, email: string): Promise<void> {
       try {
         const { safeFetch } = await import('../net/safeFetch');
         const { getOutboundPolicy } = await import('../net/policy');
-        const res = await safeFetch(getOutboundPolicy(), ep.url, { method: 'POST', headers, body });
+        const { openWebhookUrl } = await import('./simpleWebhooks');
+        const res = await safeFetch(getOutboundPolicy(), openWebhookUrl(ep.url), {
+          method: 'POST',
+          headers,
+          body,
+        });
         await prisma.webhookEndpoint.update({
           where: { id: ep.id },
           data: { lastStatus: res.status, lastDeliveryAt: new Date() },

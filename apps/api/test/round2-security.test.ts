@@ -64,7 +64,13 @@ describe('Z-AUTOXTENANT', () => {
       },
     });
     const provA = await prisma.providerAccount.create({
-      data: { organizationId: orgA.id, provider: 'demo', label: 'demo', status: 'connected', demo: true },
+      data: {
+        organizationId: orgA.id,
+        provider: 'demo',
+        label: 'demo',
+        status: 'connected',
+        demo: true,
+      },
     });
     const vehicleA = await prisma.vehicle.create({
       data: {
@@ -100,10 +106,13 @@ describe('Z-AUTOXTENANT', () => {
     // The demo webhook refuses another tenant's vehicle.
     const { token: bobToken } = await createSession(bob.id);
     const agent = request.agent(base).set('Cookie', `vl_session=${bobToken}`);
-    let res = await agent.post('/api/v1/providers/demo/webhook').send({ vehicleId: vehicleA.id, type: 'trigger', payload: {} });
+    let res = await agent
+      .post('/api/v1/providers/demo/webhook')
+      .send({ vehicleId: vehicleA.id, type: 'trigger', payload: {} });
     if (res.status === 403 && res.body?.error?.code === 'CSRF') {
       const cookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
-      const csrfCookie = cookies.map((c) => (c ?? '').split(';')[0]).find((c) => c?.startsWith('vl_csrf=')) ?? '';
+      const csrfCookie =
+        cookies.map((c) => (c ?? '').split(';')[0]).find((c) => c?.startsWith('vl_csrf=')) ?? '';
       res = await agent
         .post('/api/v1/providers/demo/webhook')
         .set('x-vl-csrf', csrfCookie.split('=')[1] ?? '')
@@ -113,6 +122,90 @@ describe('Z-AUTOXTENANT', () => {
 
     await prisma.organization.deleteMany({ where: { id: { in: [orgA.id, orgB.id] } } });
     await prisma.user.deleteMany({ where: { id: { in: [alice.id, bob.id] } } });
+  }, 30_000);
+});
+
+describe('NEW-02 / Z-ROLERANK invitations', () => {
+  it('invitations need step-up and can never mint an OWNER', async () => {
+    const u = await mkUser(`mx-inv-${Date.now()}@example.test`);
+    const org = await prisma.organization.create({
+      data: {
+        kind: 'TEAM',
+        name: 'Inv org',
+        memberships: { create: { userId: u.id, role: 'OWNER' } },
+      },
+    });
+    const { token, sessionId } = await createSession(u.id);
+    const agent = request.agent(base).set('Cookie', `vl_session=${token}`);
+    // No recent step-up -> refused.
+    let res = await agent
+      .post(`/api/v1/orgs/${org.id}/invitations`)
+      .send({ email: 'x@example.test', role: 'VIEWER' });
+    if (res.status === 403 && res.body?.error?.code === 'CSRF') {
+      const cookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
+      const csrfCookie =
+        cookies.map((c) => (c ?? '').split(';')[0]).find((c) => c?.startsWith('vl_csrf=')) ?? '';
+      res = await agent
+        .post(`/api/v1/orgs/${org.id}/invitations`)
+        .set('x-vl-csrf', csrfCookie.split('=')[1] ?? '')
+        .send({ email: 'x@example.test', role: 'VIEWER' });
+    }
+    expect(res.status).toBe(403);
+    expect(res.body?.error?.code).toBe('STEP_UP_REQUIRED');
+    // Even with step-up, an OWNER invitation is rejected.
+    await prisma.userSession.update({
+      where: { id: sessionId },
+      data: { stepUpAt: new Date(), stepUpMethod: 'password' },
+    });
+    // CSRF handling: fetch a valid csrf for the step-upped session.
+    const csrfRes = await agent.get('/api/v1/auth/csrf');
+    const csrf = ((await csrfRes.body) as { data: { token: string } }).data.token;
+    const res2 = await agent
+      .post(`/api/v1/orgs/${org.id}/invitations`)
+      .set('x-vl-csrf', csrf)
+      .send({ email: 'x@example.test', role: 'OWNER' });
+    expect(res2.status).toBe(400);
+    expect(res2.body?.error?.code).toBe('ROLE_NOT_ASSIGNABLE');
+    await prisma.organization.delete({ where: { id: org.id } });
+    await prisma.user.delete({ where: { id: u.id } });
+  }, 30_000);
+});
+
+describe('NEW-04 passkey verify body', () => {
+  it('answers 400 instead of 500 for a bodyless passkey login verify', async () => {
+    const agent = request.agent(base);
+    const csrfRes = await agent.get('/api/v1/auth/csrf');
+    const csrf = ((await csrfRes.body) as { data: { token: string } }).data.token;
+    const res = await agent.post('/api/v1/auth/passkey/login/verify').set('x-vl-csrf', csrf).send();
+    expect(res.status).toBe(400);
+  }, 30_000);
+});
+
+describe('A-TOKENLOG mail console default', () => {
+  it('MAIL_TO_CONSOLE defaults to false unless explicitly enabled', async () => {
+    const { env } = await import('../src/core/env');
+    expect(env.MAIL_TO_CONSOLE).toBe(false);
+  });
+});
+
+describe('N-CHANSECRETS webhook url', () => {
+  it('stores webhook endpoint URLs sealed at rest', async () => {
+    const u = await mkUser(`mx-wh-${Date.now()}@example.test`);
+    const { token } = await createSession(u.id);
+    const agent = request.agent(base).set('Cookie', `vl_session=${token}`);
+    const csrfRes = await agent.get('/api/v1/auth/csrf');
+    const csrf = ((await csrfRes.body) as { data: { token: string } }).data.token;
+    const secretUrl = 'https://example.com/hook?token=supersecret';
+    const res = await agent
+      .post('/api/v1/notifications/webhooks')
+      .set('x-vl-csrf', csrf)
+      .send({ name: 'Sealed', url: secretUrl });
+    expect(res.status).toBe(201);
+    const row = await prisma.webhookEndpoint.findFirstOrThrow({ where: { userId: u.id } });
+    expect(row.url).not.toContain('supersecret');
+    expect(row.url).not.toBe(secretUrl);
+    await prisma.webhookEndpoint.delete({ where: { id: row.id } });
+    await prisma.user.delete({ where: { id: u.id } });
   }, 30_000);
 });
 
@@ -147,7 +240,9 @@ describe('R2-13 public incidents', () => {
     const text = JSON.stringify(res.body);
     expect(text).not.toContain('PRIVATE-');
     expect(text).toContain(`PUBLIC-${pub.id}`.slice(0, 6)); // title visible
-    const publicDto = (res.body as { data: { id: string; updates: { author: string }[] }[] }).data.find((i) => i.id === pub.id);
+    const publicDto = (
+      res.body as { data: { id: string; updates: { author: string }[] }[] }
+    ).data.find((i) => i.id === pub.id);
     expect(publicDto?.updates[0]?.author).toBe('VoltLink');
     expect(text).not.toContain(u.id);
   }, 30_000);
@@ -157,10 +252,20 @@ describe('R2-11 fleet overview snapshot keys', () => {
   it('reads batteryPercent, chargingState and status from the snapshot state', async () => {
     const u = await mkUser(`mx-fl-${Date.now()}@example.test`);
     const org = await prisma.organization.create({
-      data: { kind: 'TEAM', name: 'Fleet org', memberships: { create: { userId: u.id, role: 'OWNER' } } },
+      data: {
+        kind: 'TEAM',
+        name: 'Fleet org',
+        memberships: { create: { userId: u.id, role: 'OWNER' } },
+      },
     });
     const prov = await prisma.providerAccount.create({
-      data: { organizationId: org.id, provider: 'demo', label: 'demo', status: 'connected', demo: true },
+      data: {
+        organizationId: org.id,
+        provider: 'demo',
+        label: 'demo',
+        status: 'connected',
+        demo: true,
+      },
     });
     const vehicle = await prisma.vehicle.create({
       data: {
@@ -175,7 +280,9 @@ describe('R2-11 fleet overview snapshot keys', () => {
     await prisma.vehicleSnapshot.create({
       data: {
         vehicleId: vehicle.id,
-        state: JSON.parse(JSON.stringify({ batteryPercent: 42, chargingState: 'charging', status: 'offline' })),
+        state: JSON.parse(
+          JSON.stringify({ batteryPercent: 42, chargingState: 'charging', status: 'offline' }),
+        ),
         fetchedAt: new Date(),
       },
     });
@@ -183,7 +290,18 @@ describe('R2-11 fleet overview snapshot keys', () => {
     const agent = request.agent(base).set('Cookie', `vl_session=${token}`);
     const res = await agent.get('/api/v1/fleet/overview');
     expect(res.status).toBe(200);
-    const row = (res.body as { data: { vehicles: { displayName: string; batteryPct: number | null; charging: boolean; offline: boolean }[] } }).data.vehicles.find((v) => v.displayName === 'Charging Car');
+    const row = (
+      res.body as {
+        data: {
+          vehicles: {
+            displayName: string;
+            batteryPct: number | null;
+            charging: boolean;
+            offline: boolean;
+          }[];
+        };
+      }
+    ).data.vehicles.find((v) => v.displayName === 'Charging Car');
     expect(row?.batteryPct).toBe(42);
     expect(row?.charging).toBe(true);
     expect(row?.offline).toBe(true);
@@ -209,13 +327,33 @@ describe('R2-06 export honors grants', () => {
       },
     });
     const prov = await prisma.providerAccount.create({
-      data: { organizationId: org.id, provider: 'demo', label: 'demo', status: 'connected', demo: true },
+      data: {
+        organizationId: org.id,
+        provider: 'demo',
+        label: 'demo',
+        status: 'connected',
+        demo: true,
+      },
     });
     const v1 = await prisma.vehicle.create({
-      data: { organizationId: org.id, providerAccountId: prov.id, provider: 'demo', providerVehicleId: randomId(), displayName: 'Granted', demo: true },
+      data: {
+        organizationId: org.id,
+        providerAccountId: prov.id,
+        provider: 'demo',
+        providerVehicleId: randomId(),
+        displayName: 'Granted',
+        demo: true,
+      },
     });
     await prisma.vehicle.create({
-      data: { organizationId: org.id, providerAccountId: prov.id, provider: 'demo', providerVehicleId: randomId(), displayName: 'Hidden', demo: true },
+      data: {
+        organizationId: org.id,
+        providerAccountId: prov.id,
+        provider: 'demo',
+        providerVehicleId: randomId(),
+        displayName: 'Hidden',
+        demo: true,
+      },
     });
     await prisma.vehicleGrant.create({
       data: { vehicleId: v1.id, userId: grantee.id, level: 'VIEWER', grantedById: owner.id },
@@ -244,7 +382,13 @@ describe('Z-RETENTION', () => {
       },
     });
     const prov = await prisma.providerAccount.create({
-      data: { organizationId: org.id, provider: 'demo', label: 'demo', status: 'connected', demo: true },
+      data: {
+        organizationId: org.id,
+        provider: 'demo',
+        label: 'demo',
+        status: 'connected',
+        demo: true,
+      },
     });
     const vehicle = await prisma.vehicle.create({
       data: {

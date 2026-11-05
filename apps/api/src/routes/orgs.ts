@@ -338,6 +338,9 @@ orgsRouter.post(
   {
     auth: 'session',
     verifiedEmail: true,
+    // NEW-02: minting an org member (or a persistent vehicle reader) is an
+    // account-taking action; it needs a recent re-authentication.
+    stepUp: {},
     target: { kind: 'org', from: 'param:orgId', perm: 'members.manage' },
   },
   async (req, res) => {
@@ -360,6 +363,17 @@ orgsRouter.post(
     const role = (ORG_ROLES as readonly string[]).includes(body.role ?? '')
       ? (body.role as OrgRole)
       : null;
+    // Z-ROLERANK: invitations can never mint an OWNER; ownership moves only
+    // through the step-upped transfer-ownership flow.
+    if (role === 'OWNER') {
+      res.status(400).json({
+        error: {
+          code: 'ROLE_NOT_ASSIGNABLE',
+          message: 'OWNER cannot be granted by invitation; use ownership transfer.',
+        },
+      });
+      return;
+    }
     const vehicleId = typeof body.vehicleId === 'string' ? body.vehicleId : undefined;
     const kind = vehicleId ? 'vehicle_share' : 'membership';
     if (vehicleId) {
@@ -393,7 +407,8 @@ orgsRouter.post(
         expiresAt: new Date(Date.now() + 7 * 86_400_000),
       },
     });
-    await sendMail({
+    // A-ENUM: the response never waits on the mail relay.
+    void sendMail({
       to: email,
       subject:
         kind === 'membership'

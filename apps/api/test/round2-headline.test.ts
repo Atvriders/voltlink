@@ -221,7 +221,8 @@ describe('round2 headline defects', () => {
     await new Promise<void>((resolve, reject) => {
       const t = setTimeout(() => reject(new Error('job never failed')), 45_000);
       worker.on('failed', (job) => {
-        if (job?.id === jobId) {
+        // The job finally fails after every retry is exhausted.
+        if (job?.id === jobId && job.attemptsMade >= (job.opts.attempts ?? 1)) {
           clearTimeout(t);
           resolve();
         }

@@ -8,6 +8,8 @@ import {
   validateWebhookUrl,
   setUserChannelUrl,
   userChannelUrl,
+  sealWebhookUrl,
+  openWebhookUrl,
 } from '../notifications/simpleWebhooks';
 import { sealJson, openJson, randomToken } from '../core/crypto';
 import {
@@ -201,8 +203,9 @@ notificationsRouter.get(
       data: rows.map((w) => ({
         id: w.id,
         name: w.name,
-        // G-08: never return the raw URL (it may embed a token).
-        displayHint: w.displayHint ?? maskUrl(w.url),
+        // G-08: never return the raw URL (it may embed a token); the
+        // stored value is sealed at rest.
+        displayHint: w.displayHint ?? maskUrl(openWebhookUrl(w.url)),
         enabled: w.enabled,
         lastStatus: w.lastStatus ?? undefined,
         lastDeliveryAt: w.lastDeliveryAt?.toISOString(),
@@ -238,7 +241,8 @@ notificationsRouter.post(
       data: {
         userId: sessionActor(req).userId,
         name: name.slice(0, 60),
-        url,
+        // N-CHANSECRETS: the URL may embed a token; store it sealed.
+        url: sealWebhookUrl(url),
         events: JSON.parse(JSON.stringify(events)),
         displayHint: maskUrl(url),
         secretSealed: sealJson({ current: secret }).ciphertext,

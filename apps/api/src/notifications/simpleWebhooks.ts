@@ -177,6 +177,22 @@ function keyToKind(key: string): string {
   );
 }
 
+/** N-CHANSECRETS: webhook endpoint URLs often embed tokens; seal at rest
+ * and only open for delivery. Legacy plaintext rows still read correctly. */
+export function sealWebhookUrl(url: string): string {
+  return sealJson({ u: url }).ciphertext;
+}
+
+export function openWebhookUrl(stored: string): string {
+  try {
+    const j = openJson<{ u: string }>(stored);
+    if (typeof j.u === 'string' && j.u) return j.u;
+  } catch {
+    /* legacy plaintext */
+  }
+  return stored;
+}
+
 export async function setUserChannelUrl(
   userId: string,
   key: string,

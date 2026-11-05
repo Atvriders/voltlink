@@ -78,7 +78,9 @@ export const env = {
 
   SMTP_URL: process.env.SMTP_URL || '', // smtp://user:pass@host:587
   MAIL_FROM: optional('MAIL_FROM', `VoltLink <no-reply@${publicHost}>`),
-  MAIL_TO_CONSOLE: process.env.MAIL_TO_CONSOLE !== 'false',
+  // A-TOKENLOG: bearer links are never printed to the console unless the
+  // operator explicitly opts in (and production refuses the opt-in below).
+  MAIL_TO_CONSOLE: process.env.MAIL_TO_CONSOLE === 'true',
 
   TOTP_ISSUER: optional('VL_TOTP_ISSUER', 'VoltLink'),
   WEBAUTHN_RP_NAME: optional('VL_WEBAUTHN_RP_NAME', 'VoltLink'),
@@ -208,6 +210,12 @@ export function validateEnv() {
   ) {
     throw new Error(
       'VL_DEV_ECHO_TOKENS=1 is only allowed in development with a localhost PUBLIC_URL.',
+    );
+  }
+  // A-TOKENLOG: bearer links must never reach production logs.
+  if (env.NODE_ENV === 'production' && env.MAIL_TO_CONSOLE) {
+    throw new Error(
+      'MAIL_TO_CONSOLE=true is not allowed in production: it prints bearer links. Use SMTP_URL.',
     );
   }
 }
