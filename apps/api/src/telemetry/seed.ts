@@ -138,7 +138,7 @@ export async function seedDemoWorld(
       alertOn: 'both',
     },
   });
-  await prisma.privacyZone.create({
+  const demoZone = await prisma.privacyZone.create({
     data: {
       organizationId,
       createdById: null,
@@ -148,6 +148,13 @@ export async function seedDemoWorld(
       radiusM: 400,
     },
   });
+  // Z-PRIVZONE: a zone created by seedDemoWorld must trigger the same
+  // retroactive redaction as an API-created zone.
+  try {
+    await getQueue().enqueue('privacy-redaction', { zoneId: demoZone.id }, { delayMs: 60_000 });
+  } catch {
+    // queue unavailable — the boot data task will pick it up
+  }
 
   // ---- Fleet structures ----
   const group = await prisma.fleetGroup.create({

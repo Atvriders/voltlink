@@ -5,6 +5,38 @@ import type { Prisma } from '@prisma/client';
 import { policyRouter, type RoutePolicy } from '../authz/policy';
 import { prisma } from '../core/db';
 import { csv } from '../core/util';
+import { zonesForOrg, zoneAt, type ZoneLite } from '../privacy/zones';
+
+type ZoneMap = Map<string, ZoneLite[]>;
+
+// Z-PRIVZONE: reads redact exact coordinates that fall inside an enabled
+// privacy zone of the drive's organization, even before the retroactive job
+// has cleared the stored rows.
+async function zonesMapFor(rows: { vehicle: { organizationId: string } }[]): Promise<ZoneMap> {
+  const orgIds = [...new Set(rows.map((r) => r.vehicle.organizationId))];
+  const map: ZoneMap = new Map();
+  for (const orgId of orgIds) map.set(orgId, await zonesForOrg(orgId));
+  return map;
+}
+
+function redactDrive<T extends {
+  vehicle: { organizationId: string };
+  startLat: number | null; startLon: number | null; startAddress: string | null;
+  endLat: number | null; endLon: number | null; endAddress: string | null;
+}>(d: T, map: ZoneMap): T {
+  const zones = map.get(d.vehicle.organizationId) ?? [];
+  const s = zoneAt(zones, d.startLat, d.startLon);
+  const e = zoneAt(zones, d.endLat, d.endLon);
+  return {
+    ...d,
+    startLat: s ? null : d.startLat,
+    startLon: s ? null : d.startLon,
+    startAddress: s ? null : d.startAddress,
+    endLat: e ? null : d.endLat,
+    endLon: e ? null : d.endLon,
+    endAddress: e ? null : d.endAddress,
+  };
+}
 
 export const drivesRouter = policyRouter('/api/v1/drives');
 
@@ -48,7 +80,7 @@ drivesRouter.get('/', readAll, async (req, res) => {
       { driverName: { contains: search, mode: 'insensitive' } },
     ];
   }
-  const [rows, total] = await Promise.all([
+  const [rowsRaw, total] = await Promise.all([
     prisma.drive.findMany({
       where: where as never,
       orderBy: {
@@ -67,10 +99,12 @@ drivesRouter.get('/', readAll, async (req, res) => {
       },
       skip: (page - 1) * pageSize,
       take: pageSize,
-      include: { vehicle: { select: { displayName: true } } },
+      include: { vehicle: { select: { displayName: true, organizationId: true } } },
     }),
     prisma.drive.count({ where: where as never }),
   ]);
+  const zoneMap = await zonesMapFor(rowsRaw);
+  const rows = rowsRaw.map((r) => redactDrive(r, zoneMap));
   res.json({ data: { items: rows.map(toDriveDto), page, pageSize, total } });
 });
 
@@ -123,7 +157,7 @@ drivesRouter.get(
   async (req, res) => {
     const drive = await prisma.drive.findUnique({
       where: { id: String(req.params.id) },
-      include: { vehicle: { select: { displayName: true } } },
+      include: { vehicle: { select: { displayName: true, organizationId: true } } },
     });
     if (!drive) {
       res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Drive not found.' } });
@@ -136,16 +170,21 @@ drivesRouter.get(
         where: { driveId: drive.id },
         orderBy: { seq: 'asc' },
       });
-      route = points.map((p) => ({
-        ts: p.ts.toISOString(),
-        lat: p.lat,
-        lon: p.lon,
-        speedKmh: p.speedKmh,
-        headingDeg: p.headingDeg ?? undefined,
-        batteryPct: p.batteryPct ?? undefined,
-      }));
+      const zones = (await zonesMapFor([drive])).get(drive.vehicle.organizationId) ?? [];
+      route = points.map((p) => {
+        const z = zoneAt(zones, p.lat, p.lon);
+        return {
+          ts: p.ts.toISOString(),
+          lat: z ? null : p.lat,
+          lon: z ? null : p.lon,
+          speedKmh: p.speedKmh,
+          headingDeg: p.headingDeg ?? undefined,
+          batteryPct: p.batteryPct ?? undefined,
+        };
+      });
     }
-    res.json({ data: { ...toDriveDto(drive), route } });
+    const zoneMap = await zonesMapFor([drive]);
+    res.json({ data: { ...toDriveDto(redactDrive(drive, zoneMap)), route } });
   },
 );
 
@@ -164,7 +203,7 @@ drivesRouter.patch(
   async (req, res) => {
     const drive = await prisma.drive.findUnique({
       where: { id: String(req.params.id) },
-      include: { vehicle: { select: { displayName: true } } },
+      include: { vehicle: { select: { displayName: true, organizationId: true } } },
     });
     if (!drive) {
       res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Drive not found.' } });
@@ -191,11 +230,13 @@ drivesRouter.get('/export/csv', readAll, async (req, res) => {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No vehicles accessible.' } });
     return;
   }
-  const rows = await prisma.drive.findMany({
+  const rowsRaw = await prisma.drive.findMany({
     where: { vehicleId: { in: ids } },
     orderBy: { startAt: 'desc' },
-    include: { vehicle: { select: { displayName: true } } },
+    include: { vehicle: { select: { displayName: true, organizationId: true } } },
   });
+  const zoneMap = await zonesMapFor(rowsRaw);
+  const rows = rowsRaw.map((r) => redactDrive(r, zoneMap));
   const header = [
     'id',
     'vehicle',
@@ -246,11 +287,13 @@ drivesRouter.get('/export/json', readAll, async (req, res) => {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No vehicles accessible.' } });
     return;
   }
-  const rows = await prisma.drive.findMany({
+  const rowsRaw = await prisma.drive.findMany({
     where: { vehicleId: { in: ids } },
     orderBy: { startAt: 'desc' },
-    include: { vehicle: { select: { displayName: true } } },
+    include: { vehicle: { select: { displayName: true, organizationId: true } } },
   });
+  const zoneMap = await zonesMapFor(rowsRaw);
+  const rows = rowsRaw.map((r) => redactDrive(r, zoneMap));
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Content-Disposition', 'attachment; filename="voltlink-drives.json"');
   res.send(JSON.stringify(rows.map(toDriveDto), null, 2));
