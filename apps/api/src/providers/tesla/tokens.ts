@@ -3,7 +3,7 @@
 // row lock so concurrent workers issue exactly one refresh call.
 
 import { prisma } from '../../core/db';
-import { openJson, sealJson } from '../../core/crypto';
+import { open, seal } from '../../core/keyring';
 import { teslaConfig } from './config';
 import { classify, TeslaApiError } from './classify';
 
@@ -24,7 +24,9 @@ async function readCreds(
 ): Promise<Cred> {
   const row = await db.providerCredential.findUnique({ where: { providerAccountId: accountId } });
   if (!row) throw new Error(`No credentials stored for Tesla account ${accountId}`);
-  const creds = openJson<TeslaTokens>(row.ciphertext);
+  const creds = JSON.parse(
+    open(row.ciphertext, `provider-credential:${accountId}`),
+  ) as TeslaTokens;
   return { version: row.keyVersion, creds };
 }
 
@@ -46,17 +48,21 @@ export async function getValidAccessToken(
           return cur.creds.accessToken; // another worker rotated first
         }
         const next = await refreshTokens(cur.creds.refreshToken);
-        const sealed = sealJson({
-          accessToken: next.accessToken,
-          refreshToken: next.refreshToken || cur.creds.refreshToken,
-          expiresAt: next.expiresAt,
-          scopes: next.scopes,
-        });
+        const sealed = seal(
+          JSON.stringify({
+            accessToken: next.accessToken,
+            refreshToken: next.refreshToken || cur.creds.refreshToken,
+            expiresAt: next.expiresAt,
+            scopes: next.scopes,
+          }),
+          `provider-credential:${accountId}`,
+        );
         await tx.providerCredential.update({
           where: { providerAccountId: accountId },
           data: {
-            ...sealed,
-            keyVersion: { increment: 1 },
+            algorithm: sealed.algorithm,
+            ciphertext: sealed.ciphertext,
+            keyVersion: sealed.keyVersion,
           },
         });
         await tx.providerAccount.update({

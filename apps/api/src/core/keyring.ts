@@ -5,6 +5,7 @@
 
 import crypto from 'node:crypto';
 import { env } from './env';
+import { openEnvelope } from './crypto';
 
 const b64 = (b: Buffer) => b.toString('base64');
 
@@ -114,10 +115,8 @@ export function open(ciphertext: string, context: string): string {
     throw new Error('Invalid sealed value');
   }
   if (parsed.v === 2) return openV2(ciphertext, context);
-  // Legacy v1 envelope: no AAD, key v1. Import lazily to avoid a cycle.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const legacy = require('./crypto') as typeof import('./crypto');
-  return legacy.openEnvelope(ciphertext);
+  // Legacy v1 envelope: no AAD, key v1.
+  return openEnvelope(ciphertext);
 }
 
 /** Re-wrap a sealed value under the active kid (body untouched). v1 becomes v2. */

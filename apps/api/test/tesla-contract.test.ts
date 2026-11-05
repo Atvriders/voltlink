@@ -6,6 +6,7 @@ process.env.NODE_ENV = 'test';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '../src/core/db';
+import { randomId } from '../src/core/crypto';
 import { startFakeTesla, type FakeTesla } from './fakes/fakeTesla';
 import { classify } from '../src/providers/tesla/classify';
 import { pkceChallenge, teslaAuthorizeUrl } from '../src/providers/tesla/oauth';
@@ -248,7 +249,7 @@ describe('token refresh rotation (P-TESLAREFRESH)', () => {
         email: `tref-${Date.now()}@example.test`,
         name: 'Tesla Refresh',
         passwordHash: 'x',
-        webauthnUserId: 'abc123',
+        webauthnUserId: randomId(),
       },
     });
     const org = await prisma.organization.create({
@@ -287,8 +288,10 @@ describe('token refresh rotation (P-TESLAREFRESH)', () => {
     const creds = await prisma.providerCredential.findUniqueOrThrow({
       where: { providerAccountId: account.id },
     });
-    const { openJson } = await import('../src/core/crypto');
-    const stored = openJson<{ refreshToken: string; expiresAt: number }>(creds.ciphertext);
+    const { open } = await import('../src/core/keyring');
+    const stored = JSON.parse(
+      open(creds.ciphertext, `provider-credential:${account.id}`),
+    ) as { refreshToken: string; expiresAt: number };
     expect(stored.refreshToken).not.toBe('old-refresh');
     expect(stored.expiresAt).toBeGreaterThan(Date.now());
     await prisma.providerCredential.deleteMany({ where: { providerAccountId: account.id } });

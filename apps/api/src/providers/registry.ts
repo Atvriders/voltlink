@@ -1,7 +1,7 @@
 // Provider registry and encrypted credential store.
 
 import { prisma } from '../core/db';
-import { openJson, sealJson } from '../core/crypto';
+import { open, seal } from '../core/keyring';
 import { audit } from '../core/settings';
 import type { ProviderAccount } from '@prisma/client';
 import type { ProviderContext, VehicleProvider } from './types';
@@ -37,7 +37,9 @@ export async function saveCredentials(
   providerAccountId: string,
   payload: StoredCredential,
 ): Promise<void> {
-  const sealed = sealJson(payload);
+  // A-KEYROT: envelope v2 under the active ring key with the account id as
+  // bound AAD, so credentials survive rotation and stay readable.
+  const sealed = seal(JSON.stringify(payload), `provider-credential:${providerAccountId}`);
   await prisma.providerCredential.upsert({
     where: { providerAccountId },
     update: {
@@ -57,7 +59,10 @@ export async function saveCredentials(
 export async function loadCredentials(providerAccountId: string): Promise<StoredCredential> {
   const row = await prisma.providerCredential.findUnique({ where: { providerAccountId } });
   if (!row) throw new CredentialError('No credentials stored for this provider account.', 404);
-  return openJson<StoredCredential>(row.ciphertext);
+  // v2 envelopes open with the ring; legacy v1 envelopes fall back to the
+  // single-master-key format. A decrypt failure is an error, never an empty
+  // credential (A-KEYROT).
+  return JSON.parse(open(row.ciphertext, `provider-credential:${row.providerAccountId}`)) as StoredCredential;
 }
 
 export async function removeCredentials(providerAccountId: string): Promise<void> {
@@ -70,8 +75,11 @@ export async function buildContext(account: ProviderAccount): Promise<ProviderCo
   if (account.provider !== 'demo' && account.provider !== 'mock') {
     try {
       credentials = await loadCredentials(account.id);
-    } catch {
-      credentials = {};
+    } catch (e) {
+      // Missing rows stay empty; anything else (bad key version, corrupt
+      // envelope) must surface instead of being silently swallowed (A-KEYROT).
+      if (e instanceof CredentialError && e.status === 404) credentials = {};
+      else throw e;
     }
   }
   return {
