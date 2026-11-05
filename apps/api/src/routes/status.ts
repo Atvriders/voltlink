@@ -73,16 +73,30 @@ statusRouter.post('/subscribe', { auth: 'public', target: { kind: 'none' } }, as
     return;
   }
   const token = randomToken(16);
-  await prisma.statusSubscription.upsert({
-    where: { email: email.toLowerCase() },
-    update: {},
-    create: { email: email.toLowerCase(), token },
+  const lower = email.toLowerCase();
+  // Existing rows keep their token so a re-subscribe does not rotate links.
+  const existing = await prisma.statusSubscription.findUnique({
+    where: { email: lower },
   });
+  const finalToken = existing?.token ?? token;
+  await prisma.statusSubscription.upsert({
+    where: { email: lower },
+    update: {},
+    create: { email: lower, token: finalToken },
+  });
+  // N-SUBS: real double opt-in — the confirmation token is never returned to
+  // the requester; it is only emailed to the address itself.
+  void sendMail({
+    to: lower,
+    subject: 'Confirm your VoltLink status subscription',
+    text: `Confirm your VoltLink status subscription:
+${statusPublicUrl}/status/subscriptions/confirm/${finalToken}`,
+    html: `<p><a href="${statusPublicUrl}/status/subscriptions/confirm/${finalToken}">Confirm your subscription</a></p>`,
+  }).catch(() => undefined);
   res.json({
     data: {
       ok: true,
-      note: 'Subscription recorded. (Confirmation email requires SMTP configuration.)',
-      unsubscribeUrl: `${statusPublicUrl}/subscriptions/unsubscribe/${token}`,
+      note: 'A confirmation link was sent to this address. Subscriptions activate only after confirmation.',
     },
   });
 });
@@ -325,10 +339,13 @@ statusRouter.post(
       where: { id: incident.id },
       data: { phases: current as never, status: ph },
     });
-    void notifyStatusSubscribers(
-      `Incident update: ${incident.title} (${ph})`,
-      `${incident.title}: ${message.slice(0, 500)}`,
-    );
+    // N-SUBS: updates to private incidents never reach subscribers.
+    if (incident.public) {
+      void notifyStatusSubscribers(
+        `Incident update: ${incident.title} (${ph})`,
+        `${incident.title}: ${message.slice(0, 500)}`,
+      );
+    }
     if (ph === 'resolved') {
       // restore components that were degraded by this incident
       for (const key of (incident.components ?? []) as string[]) {
