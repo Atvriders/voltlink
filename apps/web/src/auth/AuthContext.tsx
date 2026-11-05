@@ -22,7 +22,11 @@ export { THEMES, normalizeThemeId } from './themes';
 interface AuthState {
   user: UserPublic | null;
   loading: boolean;
-  login: (email: string, password: string, totp?: string) => Promise<{ totpRequired?: boolean }>;
+  login: (email: string, password: string) => Promise<{
+    mfaRequired?: boolean;
+    methods?: string[];
+  }>;
+  loginMfa: (input: { code?: string; recoveryCode?: string }) => Promise<UserPublic>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -67,18 +71,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refresh, resetClientState]);
 
   const login = useCallback(
-    async (email: string, password: string, totp?: string) => {
-      const res = await api<{ user?: UserPublic; totpRequired?: boolean }>('/api/v1/auth/login', {
+    async (email: string, password: string) => {
+      // R2-07: the password step never carries a TOTP code; MFA completes at
+      // /auth/login/mfa with the methods the server lists.
+      const res = await api<{
+        user?: UserPublic;
+        mfaRequired?: boolean;
+        methods?: string[];
+      }>('/api/v1/auth/login', {
         method: 'POST',
-        body: { email, password, totp },
+        body: { email, password },
       });
-      if (res.totpRequired) return { totpRequired: true };
+      if (res.mfaRequired) return { mfaRequired: true, methods: res.methods ?? [] };
       if (res.user) {
         resetClientState();
         setUser(res.user);
         applyTheme(res.user);
       }
       return {};
+    },
+    [resetClientState],
+  );
+
+  const loginMfa = useCallback(
+    async (input: { code?: string; recoveryCode?: string }) => {
+      const res = await api<{ user: UserPublic }>('/api/v1/auth/login/mfa', {
+        method: 'POST',
+        body: { code: input.code, recoveryCode: input.recoveryCode },
+      });
+      resetClientState();
+      setUser(res.user);
+      applyTheme(res.user);
+      return res.user;
     },
     [resetClientState],
   );
@@ -101,8 +125,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [resetClientState, navigate]);
 
   const value = useMemo(
-    () => ({ user, loading, login, logout, refresh }),
-    [user, loading, login, logout, refresh],
+    () => ({ user, loading, login, loginMfa, logout, refresh }),
+    [user, loading, login, loginMfa, logout, refresh],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

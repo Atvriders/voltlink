@@ -1,6 +1,7 @@
 // Sign-in page with TOTP step and passkey support.
 
 import { useState, type FormEvent } from 'react';
+import { startAuthentication } from '@simplewebauthn/browser';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { KeyRound, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
@@ -9,7 +10,7 @@ import { ApiError } from '../api/client';
 import { Button, Field, Input } from '../components/ui';
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, loginMfa } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: string } | null)?.from ?? '/';
@@ -17,6 +18,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [totp, setTotp] = useState('');
   const [totpEmail, setTotpEmail] = useState('');
+  const [mfaMethods, setMfaMethods] = useState<string[]>([]);
+  const [recoveryMode, setRecoveryMode] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [passkeyBusy, setPasskeyBusy] = useState(false);
@@ -26,14 +29,32 @@ export default function LoginPage() {
     setError('');
     setBusy(true);
     try {
-      const res = await login(email, password, totp || undefined);
-      if (res.totpRequired) {
+      const res = await login(email, password);
+      if (res.mfaRequired) {
         setTotpEmail(email);
+        setMfaMethods(res.methods ?? []);
         return;
       }
       navigate(from, { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Sign-in failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitMfa = async () => {
+    setError('');
+    setBusy(true);
+    try {
+      if (recoveryMode) {
+        await loginMfa({ recoveryCode: totp });
+      } else {
+        await loginMfa({ code: totp });
+      }
+      navigate(from, { replace: true });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'That code was not accepted.');
     } finally {
       setBusy(false);
     }
@@ -47,33 +68,19 @@ export default function LoginPage() {
     setPasskeyBusy(true);
     setError('');
     try {
-      const options = await api<{ challenge: string; allowCredentials?: { id: string }[] }>(
-        '/api/v1/auth/passkey/auth-options',
+      // A-PASSKEY: real /passkey/login/* routes with a simplewebauthn JSON
+      // response, never a hand-built body.
+      const optionsJSON = await api<Parameters<typeof startAuthentication>[0]['optionsJSON']>(
+        '/api/v1/auth/passkey/login/options',
+        {
+          method: 'POST',
+        },
       );
-      const cred = await navigator.credentials.get({
-        publicKey: {
-          challenge: b64decode(options.challenge),
-          rpId: window.location.hostname,
-          allowCredentials: (options.allowCredentials ?? []).map((c) => ({
-            id: b64decode(c.id),
-            type: 'public-key' as const,
-          })),
-          userVerification: 'preferred',
-        },
-      });
-      if (!cred) throw new Error('No credential selected');
-      const pk = cred as PublicKeyCredential;
-      const res = await api<{ user: { id: string } }>('/api/v1/auth/passkey/auth-verify', {
+      const response = await startAuthentication({ optionsJSON });
+      await api('/api/v1/auth/passkey/login/verify', {
         method: 'POST',
-        body: {
-          email,
-          id: pk.id,
-          rawId: b64url(pk.rawId),
-          type: 'public-key',
-          response: pk.response,
-        },
+        body: { response },
       });
-      void res;
       navigate(from, { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Passkey sign-in failed.');
@@ -118,20 +125,43 @@ export default function LoginPage() {
             />
           </Field>
           {totpEmail && (
-            <Field label="Authentication code (TOTP)">
-              <Input
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                required={!!totpEmail}
-                value={totp}
-                onChange={(e) => setTotp(e.target.value)}
-                placeholder="6-digit code"
-              />
-            </Field>
+            <>
+              <Field label={recoveryMode ? 'Recovery code' : 'Authentication code (TOTP)'}>
+                <Input
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  required
+                  value={totp}
+                  onChange={(e) => setTotp(e.target.value)}
+                  placeholder={recoveryMode ? 'Recovery code' : '6-digit code'}
+                />
+              </Field>
+              {mfaMethods.includes('recovery_code') && (
+                <label className="flex items-center gap-2 text-xs text-subtle">
+                  <input
+                    type="checkbox"
+                    checked={recoveryMode}
+                    onChange={(e) => setRecoveryMode(e.target.checked)}
+                  />
+                  Use a recovery code
+                </label>
+              )}
+              <Button
+                type="button"
+                loading={busy}
+                disabled={totp.length === 0}
+                onClick={submitMfa}
+                className="w-full"
+              >
+                <KeyRound size={15} /> Verify
+              </Button>
+            </>
           )}
-          <Button type="submit" loading={busy} className="w-full">
-            <KeyRound size={15} /> Sign in
-          </Button>
+          {!totpEmail && (
+            <Button type="submit" loading={busy} className="w-full">
+              <KeyRound size={15} /> Sign in
+            </Button>
+          )}
           <Button
             type="button"
             variant="secondary"
@@ -161,17 +191,3 @@ export default function LoginPage() {
   );
 }
 
-function b64url(buf: ArrayBuffer): string {
-  return btoa(String.fromCharCode(...new Uint8Array(buf)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-}
-
-function b64decode(s: string): Uint8Array<ArrayBuffer> {
-  const pad = s.replace(/-/g, '+').replace(/_/g, '/');
-  const bin = atob(pad);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
