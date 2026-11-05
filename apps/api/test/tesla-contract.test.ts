@@ -58,6 +58,39 @@ describe('Tesla OAuth PKCE (Z-TESLASTATE)', () => {
   });
 });
 
+describe('fake contract strictness (guide 01 documented surface)', () => {
+  it('rejects routes the real Tesla API does not have', async () => {
+    const res = await fetch(`${fake.base}/api/1/vehicles/5YJ3000000NEXUS01/definitely_not_a_route`);
+    expect(res.status).toBe(404);
+  });
+
+  it('rejects command names the real Tesla API does not document', async () => {
+    const res = await fetch(
+      `${fake.base}/api/1/vehicles/5YJ3000000NEXUS01/command/not_a_tesla_command`,
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('accepts every documented command name', async () => {
+    fake.pairKey('5YJ3000000NEXUS01');
+    for (const name of [
+      'door_lock',
+      'honk_horn',
+      'actuate_trunk',
+      'speed_limit_set_limit',
+      'navigation_request',
+    ]) {
+      const res = await fetch(`${fake.base}/api/1/vehicles/5YJ3000000NEXUS01/command/${name}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      expect(res.status, name).toBe(200);
+    }
+  });
+});
+
 describe('classify (guide 01 §6)', () => {
   const h = (init: Record<string, string> = {}) => new Headers(init);
   it('maps the documented statuses to categories', () => {

@@ -242,6 +242,41 @@ export function startFakeTesla(port = 0): Promise<FakeTesla> {
     });
 
     // command proxy
+    // Contract strictness (R1): the fake implements only the documented
+    // Tesla command endpoints (guide 01). Unknown commands and routes get
+    // exactly what the real API answers: 404.
+    const DOCUMENTED_COMMANDS = new Set([
+      'wake_up',
+      'door_lock',
+      'door_unlock',
+      'auto_conditioning_start',
+      'auto_conditioning_stop',
+      'set_temps',
+      'set_preconditioning_max',
+      'remote_seat_heater_request',
+      'remote_steering_wheel_heater_request',
+      'charge_start',
+      'charge_stop',
+      'set_charge_limit',
+      'set_charging_amps',
+      'charge_port_door_open',
+      'charge_port_door_close',
+      'actuate_trunk',
+      'window_control',
+      'set_sentry_mode',
+      'flash_lights',
+      'honk_horn',
+      'trigger_homelink',
+      'remote_start_drive',
+      'set_valet_mode',
+      'speed_limit_deactivate',
+      'speed_limit_set_limit',
+      'speed_limit_activate',
+      'navigation_request',
+      'schedule_software_update',
+      'cancel_software_update',
+    ]);
+
     app.post('/api/1/vehicles/:vin/command/:name', (req, res) => {
       requests.push({
         method: 'POST',
@@ -249,6 +284,10 @@ export function startFakeTesla(port = 0): Promise<FakeTesla> {
         body: req.body,
       });
       const vin = String(req.params.vin);
+      if (!DOCUMENTED_COMMANDS.has(String(req.params.name))) {
+        res.status(404).json({ error: 'unknown_command' });
+        return;
+      }
       if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) {
         res.status(404).json({ error: 'expected 17-character VIN' });
         return;
@@ -283,6 +322,10 @@ export function startFakeTesla(port = 0): Promise<FakeTesla> {
 
     app.get('/api/1/partner_accounts/public_key', (_req, res) => {
       res.json({ response: { public_key: '' } });
+    });
+
+    app.use((_req, res) => {
+      res.status(404).json({ error: 'unknown_route' });
     });
 
     const server = app.listen(port, () => {

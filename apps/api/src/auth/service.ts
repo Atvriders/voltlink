@@ -709,7 +709,15 @@ export async function totpConfirm(
   } catch {
     throw new AuthError('NO_TOTP', 'Start TOTP setup first.');
   }
-  const r = await verify({ secret, token: code, epochTolerance: 30 });
+  let r: { valid: boolean; timeStep?: number };
+  try {
+    r = (await verify({ secret, token: code, epochTolerance: 30 })) as {
+      valid: boolean;
+      timeStep?: number;
+    };
+  } catch {
+    r = { valid: false };
+  }
   if (!r.valid || !('timeStep' in r))
     throw new AuthError('BAD_TOTP', 'Invalid authentication code.');
   const recoveryCodes = generateRecoveryCodes();
@@ -720,7 +728,7 @@ export async function totpConfirm(
         totpSecretSealed: seal(secret, `totp:${userId}`).ciphertext,
         totpPendingSealed: null,
         totpPendingExpiresAt: null,
-        totpLastStep: BigInt(r.timeStep),
+        totpLastStep: BigInt(r.timeStep as number),
         totpEnabled: true,
         totpEnabledAt: new Date(),
       },

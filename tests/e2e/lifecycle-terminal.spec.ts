@@ -16,7 +16,7 @@ test('R2-17: honk reaches a terminal lifecycle state (API + UI)', async ({ page 
   await enableDemo(page);
 
   await page.goto('/');
-  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 90000 });
+  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
   await page.getByRole('button', { name: 'Live vehicle' }).first().click();
   await expect(page).toHaveURL(/\/vehicles\/[^/]+$/, { timeout: 20000 });
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
@@ -49,6 +49,5 @@ test('R2-17: honk reaches a terminal lifecycle state (API + UI)', async ({ page 
       .locator('[data-testid="lifecycle-modal"], [role="dialog"]')
       .getByText(new RegExp(TERMINAL.join('|')))
       .first(),
-    { timeout: 15000 },
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 15000 });
 });

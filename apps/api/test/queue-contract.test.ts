@@ -283,8 +283,8 @@ describe('kill switches (P-KILLSW)', () => {
       const cookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
       const csrf =
         cookies
-          .map((c) => c.split(';')[0])
-          .find((c) => c.startsWith('vl_csrf='))
+          .map((c) => (c ?? '').split(';')[0])
+          .find((c) => c?.startsWith('vl_csrf='))
           ?.split('=')[1] ?? '';
       res = await agent
         .post('/api/v1/commands')

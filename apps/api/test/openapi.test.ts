@@ -68,7 +68,7 @@ describe('OpenAPI route coverage', () => {
       const item = spec.paths[route.path];
       expect(item, `missing path ${route.path}`).toBeDefined();
       expect(
-        item[route.method.toLowerCase()],
+        item![route.method.toLowerCase()],
         `missing operation ${route.method} ${route.path}`,
       ).toBeDefined();
     }

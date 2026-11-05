@@ -71,6 +71,44 @@ beforeAll(async () => {
   app.get('/vins', (_req, res) => res.json({ results: ['5YJ3000000NEXUS02'] }));
   app.post('/:vin/wake', (_req, res) => res.json({ result: true }));
   app.post('/:vin/command/:name', (req, res) => {
+    const DOCUMENTED_TESSIE_COMMANDS = new Set([
+      'wake',
+      'lock',
+      'unlock',
+      'start_climate',
+      'stop_climate',
+      'set_temperature',
+      'start_defrost',
+      'set_seat_heat',
+      'set_steering_wheel_heat',
+      'start_charging',
+      'stop_charging',
+      'set_charge_limit',
+      'set_charging_amps',
+      'open_charge_port',
+      'close_charge_port',
+      'activate_rear_trunk',
+      'activate_front_trunk',
+      'vent_windows',
+      'close_windows',
+      'enable_sentry',
+      'disable_sentry',
+      'flash',
+      'honk',
+      'trigger_homelink',
+      'remote_start',
+      'enable_valet',
+      'disable_valet',
+      'set_speed_limit',
+      'enable_speed_limit',
+      'disable_speed_limit',
+      'share',
+      'schedule_software_update',
+      'cancel_software_update',
+    ]);
+    if (!DOCUMENTED_TESSIE_COMMANDS.has(String(req.params.name))) {
+      return res.status(404).json({ result: false, reason: 'unknown_command' });
+    }
     if (req.params.name === 'lock') return res.json({ result: true });
     if (req.params.name === 'set_charging_amps')
       return res.json({ result: false, reason: 'no cable' });
@@ -94,6 +132,32 @@ const ctx: ProviderContext = {
   credentials: { token: 'test-token' },
   meta: { provider: 'tessie', label: 'Tessie', demo: false, scopes: [] },
 };
+
+describe('Tessie fake contract strictness (guide 02 documented surface)', () => {
+  it('rejects unknown command names with 404', async () => {
+    const res = await fetch(`${base}/5YJ3000000NEXUS02/command/not_a_tessie_command`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('never sends undocumented commands to the upstream API', async () => {
+    const p = new TessieProvider();
+    const out = await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'warp_drive' as never, {});
+    expect(out.kind).toBe('unsupported');
+  });
+
+  it('accepts the documented lock command', async () => {
+    const res = await fetch(`${base}/5YJ3000000NEXUS02/command/lock`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    expect(res.status).toBe(200);
+  });
+});
 
 describe('Tessie mapping (P-TESSIE)', () => {
   it('maps the documented state schema', () => {

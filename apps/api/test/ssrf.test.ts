@@ -168,7 +168,9 @@ describe('save-time preflight on webhook URLs', () => {
       .send({ name: 'x', url: 'https://10.0.0.1:8443/hook' });
     if (res.status === 403 && res.body?.error?.code === 'CSRF') {
       const cookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
-      const csrfPair = cookies.map((c) => c.split(';')[0]).find((c) => c.startsWith('vl_csrf='));
+      const csrfPair = cookies
+        .map((c) => (c ?? '').split(';')[0])
+        .find((c) => c?.startsWith('vl_csrf='));
       const csrf = csrfPair ? csrfPair.split('=')[1]! : '';
       res = await agent
         .post('/api/v1/notifications/webhooks')

@@ -199,7 +199,9 @@ const RESOURCE_LOADERS: Record<
   assignment: async (id) => {
     const r = await prisma.vehicleAssignment.findUnique({
       where: { id },
-      select: { id: true, vehicleId: true, organizationId: true },
+      // Org-scoped: fleet.manage is an organization permission and must
+      // resolve through assertOrgPermission, never through vehicle grants.
+      select: { id: true, organizationId: true },
     });
     return r;
   },
@@ -314,6 +316,17 @@ async function resolveTarget(
         if (actor.kind === 'system' || resource.ownerUserId !== actor.userId)
           throw new AccessDenied('NOT_FOUND', 'Not found.', 404);
         return { resource: resource as AccessContext['resource'] };
+      }
+      // Org-scoped resources (e.g. vehicleAssignment) must resolve through
+      // the organization, not through vehicle grants: org permissions such as
+      // fleet.manage never exist in the vehicle permission set.
+      if (resource.organizationId && resource.vehicleId === undefined) {
+        const perms = await assertOrgPermission(
+          actor,
+          resource.organizationId,
+          target.perm as OrgPermission,
+        );
+        return { resource, organizationId: resource.organizationId, permissions: perms };
       }
       if (resource.vehicleId) {
         const { vehicle, permissions } = await assertVehicleAccess(

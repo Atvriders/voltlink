@@ -28,18 +28,32 @@ test('full demo acceptance flow', async ({ page }) => {
 
   // Vehicles visible in overview
   await page.goto('/');
-  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 90000 });
+  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
 
   // Open a live vehicle page via the overview card action
   await page.getByRole('button', { name: 'Live vehicle' }).first().click();
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
   await expect(page.getByText('Battery & charging')).toBeVisible();
 
-  // Issue a safe command and watch the lifecycle. Queued is transient: a
-  // fast worker can move the row straight to Sent/Executed before the next
-  // poll, so accept any lifecycle status instead of only Queued.
+  // Issue a safe command and watch the lifecycle reach a terminal state on
+  // the API, then in the UI. A static status label is not a lifecycle.
   await page.getByRole('button', { name: /^Honk horn/ }).click();
-  await expect(page.getByText(/(Queued|Sent|Executed|Completed|Failed)/).first()).toBeVisible({
+  const vehicleId = page.url().match(/\/vehicles\/([^/]+)/)?.[1];
+  expect(vehicleId, 'vehicle id from the URL').toBeTruthy();
+  const TERMINAL = ['accepted', 'not_observable', 'rejected', 'failed', 'timed_out'];
+  await expect
+    .poll(
+      async () => {
+        const res = await page.request.get(`/api/v1/commands?vehicleId=${vehicleId}`);
+        if (!res.ok()) return null;
+        const items = (await res.json())?.data?.items ?? [];
+        const statuses = items.map((c: { status?: string }) => c.status ?? '');
+        return statuses.find((s: string) => TERMINAL.includes(s)) ?? null;
+      },
+      { timeout: 30000, message: 'command must reach a terminal state' },
+    )
+    .toMatch(new RegExp(TERMINAL.join('|')));
+  await expect(page.getByText(new RegExp(TERMINAL.join('|'))).first()).toBeVisible({
     timeout: 15000,
   });
 
@@ -80,7 +94,7 @@ test('mobile layout renders', async ({ page }) => {
   await register(page, email);
   await enableDemo(page);
   await page.goto('/');
-  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 90000 });
+  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
   await page.getByRole('button', { name: 'Live vehicle' }).first().click();
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
   expect(consoleErrors, `console errors: ${consoleErrors.join(' | ')}`).toHaveLength(0);

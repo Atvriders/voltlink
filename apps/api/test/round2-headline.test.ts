@@ -286,11 +286,21 @@ describe('round2 headline defects', () => {
   }, 30_000);
 
   it('R2-01: a fresh install without VL_SETUP_TOKEN gets a generated setup token', async () => {
+    delete process.env.VL_SETUP_TOKEN;
+    // Isolate the precondition: a previous run's row must not leak into this
+    // fresh install.
+    await prisma.appSetting.deleteMany({ where: { key: 'instance.setupTokenHash' } });
     const mod = await import('../src/auth/setup-token');
     const token = await mod.ensureSetupToken();
     expect(token).toMatch(/^[A-Za-z0-9_-]{24,}$/);
+    // The plaintext is shown once and never re-revealed.
     const again = await mod.ensureSetupToken();
-    expect(again).toBe(token);
+    expect(again).toBeNull();
+    // Only the hash is persisted.
+    const row = await prisma.appSetting.findUniqueOrThrow({
+      where: { key: 'instance.setupTokenHash' },
+    });
+    expect(row.value).toMatch(/^[a-f0-9]{64}$/);
   }, 30_000);
 
   it('R2-49: VL_QUEUE_PREFIX changes the BullMQ key prefix', async () => {

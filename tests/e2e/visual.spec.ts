@@ -17,7 +17,7 @@ test('overview desktop with demo fleet', async ({ page }) => {
   await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await enableDemo(page);
   await page.goto('/');
-  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 90000 });
+  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
   await page.waitForTimeout(1500);
   await expect(page).toHaveScreenshot('overview.png', T);
 });
@@ -26,7 +26,7 @@ test('live vehicle controls panel', async ({ page }) => {
   await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await enableDemo(page);
   await page.goto('/');
-  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 90000 });
+  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
   await page.getByRole('button', { name: 'Live vehicle' }).first().click();
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
   await page.waitForTimeout(1500);
@@ -109,7 +109,7 @@ test('light theme overview', async ({ page }) => {
   await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await enableDemo(page);
   await page.goto('/');
-  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 90000 });
+  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
   // switch to light theme via the theme menu
   await page.locator('[aria-label="Theme"]').click();
   await page.getByRole('menuitem', { name: /Light/i }).click();
@@ -121,7 +121,112 @@ test('mobile overview', async ({ page }) => {
   await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await enableDemo(page);
   await page.goto('/');
-  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 90000 });
+  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
   await page.waitForTimeout(1200);
   await expect(page).toHaveScreenshot('overview-mobile.png', T);
+});
+
+test('battery page', async ({ page }) => {
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
+  await enableDemo(page);
+  await page.goto('/battery');
+  await expect(page.getByText('Battery health estimate')).toBeVisible({ timeout: 30000 });
+  await page.waitForTimeout(1500);
+  await expect(page).toHaveScreenshot('battery.png', T);
+});
+
+test('notifications page', async ({ page }) => {
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
+  await enableDemo(page);
+  await page.goto('/notifications');
+  await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible({
+    timeout: 30000,
+  });
+  await page.waitForTimeout(1000);
+  await expect(page).toHaveScreenshot('notifications.png', T);
+});
+
+test('providers page', async ({ page }) => {
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
+  await enableDemo(page);
+  await page.goto('/providers');
+  await expect(page.getByText(/demo vehicles/)).toBeVisible({ timeout: 30000 });
+  await page.waitForTimeout(1000);
+  await expect(page).toHaveScreenshot('providers.png', T);
+});
+
+test('vehicles list page', async ({ page }) => {
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
+  await enableDemo(page);
+  await page.goto('/vehicles');
+  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
+  await page.waitForTimeout(1000);
+  await expect(page).toHaveScreenshot('vehicles.png', T);
+});
+
+test('drive detail page', async ({ page }) => {
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
+  await enableDemo(page);
+  await page.goto('/drives');
+  await expect(page.getByRole('heading', { name: 'Drives' })).toBeVisible({ timeout: 30000 });
+  await page.getByRole('link').first().click();
+  await page.waitForTimeout(1000);
+  await expect(page).toHaveScreenshot('drive-detail.png', T);
+});
+
+test('showroom page', async ({ page }) => {
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
+  await enableDemo(page);
+  await page.goto('/showroom');
+  await expect(page.locator('[data-testid="vehicle-viewer"]')).toBeVisible({ timeout: 30000 });
+  await page.waitForTimeout(1500);
+  await expect(page).toHaveScreenshot('showroom.png', T);
+});
+
+test('admin users tab', async ({ page }) => {
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
+  await enableDemo(page);
+  await page.goto('/admin');
+  await expect(page.getByText(/accounts|users/i).first()).toBeVisible({ timeout: 30000 });
+  await page.waitForTimeout(1000);
+  await expect(page).toHaveScreenshot('admin-users.png', T);
+});
+
+test('status admin page', async ({ page }) => {
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
+  await enableDemo(page);
+  await page.goto('/status-admin');
+  await expect(page.getByText(/component|operational/i).first()).toBeVisible({ timeout: 30000 });
+  await page.waitForTimeout(1000);
+  await expect(page).toHaveScreenshot('status-admin.png', T);
+});
+
+test('onboarding welcome', async ({ page }) => {
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
+  await page.goto('/onboarding');
+  await expect(page.getByText('Welcome to VoltLink')).toBeVisible({ timeout: 30000 });
+  await page.waitForTimeout(1000);
+  await expect(page).toHaveScreenshot('onboarding.png', T);
+});
+
+test('tablet overview', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
+  await enableDemo(page);
+  await page.goto('/');
+  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
+  await page.waitForTimeout(1500);
+  await expect(page).toHaveScreenshot('overview-tablet.png', T);
+});
+
+test('mobile live vehicle', async ({ page }) => {
+  await page.setViewportSize({ width: 412, height: 915 });
+  await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
+  await enableDemo(page);
+  await page.goto('/');
+  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
+  await page.getByRole('button', { name: 'Live vehicle' }).first().click();
+  await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 30000 });
+  await page.waitForTimeout(1500);
+  await expect(page).toHaveScreenshot('live-vehicle-mobile.png', T);
 });

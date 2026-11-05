@@ -65,7 +65,7 @@ test.describe('Tesla connect + virtual key (fake Fleet API)', () => {
     // Pair the key in the fake, then the check flips to ok.
     const readiness = await page.request.get('/api/v1/providers/readiness');
     const rd = (await readiness.json()) as {
-      data: { accountId?: string; checks: { name: string }[] }[];
+      data: { accountId?: string; provider?: string; checks: { name: string }[] }[];
     };
     const vinCheck = rd.data
       .find((r) => r.provider === 'tesla')

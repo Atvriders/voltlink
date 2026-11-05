@@ -265,31 +265,48 @@ vehiclesRouter.post(
     });
     if (!vehicle) throw new AccessDenied('NOT_FOUND', 'Vehicle not found.', 404);
     if (vehicle.demo) {
-      const ctx = await buildContext(vehicle.providerAccount);
-      const result = await getProvider('demo').fetchState(ctx, vehicle.providerVehicleId);
-      await ingestVehicleState(
-        vehicle as never,
-        {
-          ...(result.state as Record<string, unknown>),
-          vehicleId: vehicle.id,
-          provider: 'demo',
-          providerVehicleId: vehicle.providerVehicleId,
-          fetchedAt: new Date().toISOString(),
-        } as never,
-        { live: true },
-      );
+      try {
+        const ctx = await buildContext(vehicle.providerAccount);
+        const result = await getProvider('demo').fetchState(ctx, vehicle.providerVehicleId);
+        await ingestVehicleState(
+          vehicle as never,
+          {
+            ...(result.state as Record<string, unknown>),
+            vehicleId: vehicle.id,
+            provider: 'demo',
+            providerVehicleId: vehicle.providerVehicleId,
+            fetchedAt: new Date().toISOString(),
+          } as never,
+          { live: true },
+        );
+      } catch (err) {
+        res.status(503).json({
+          error: {
+            code: 'PROVIDER_UNAVAILABLE',
+            message: `Refresh failed: ${(err as Error).message.slice(0, 200)}`,
+          },
+        });
+        return;
+      }
       res.json({ data: { queued: false } });
       return;
     }
-    await getQueue().enqueue(
-      'telemetry',
-      {
-        accountId: vehicle.providerAccountId,
-        vehicleId: vehicle.id,
-        providerVehicleId: vehicle.providerVehicleId,
-      },
-      { dedupeKey: `refresh:${vehicle.id}:${Math.floor(Date.now() / 30_000)}` },
-    );
+    try {
+      await getQueue().enqueue(
+        'telemetry',
+        {
+          accountId: vehicle.providerAccountId,
+          vehicleId: vehicle.id,
+          providerVehicleId: vehicle.providerVehicleId,
+        },
+        { dedupeKey: `refresh:${vehicle.id}:${Math.floor(Date.now() / 30_000)}` },
+      );
+    } catch {
+      res.status(503).json({
+        error: { code: 'QUEUE_UNAVAILABLE', message: 'The job queue is not available.' },
+      });
+      return;
+    }
     res.json({ data: { queued: true } });
   },
 );

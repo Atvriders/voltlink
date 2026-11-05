@@ -11,6 +11,8 @@ import type { AddressInfo } from 'node:net';
 import { buildApp } from '../src/app';
 import { ROUTE_TABLE, type RoutePolicy } from '../src/authz/policy';
 import { prisma } from '../src/core/db';
+import { initRedis } from '../src/core/redis';
+import { ensureComponents } from '../src/status/service';
 import { sha256hex, randomId } from '../src/core/crypto';
 import { createSession } from '../src/auth/service';
 import { GRANT_PERMISSIONS, ROLE_PERMISSIONS, type Permission } from '@voltlink/shared';
@@ -32,6 +34,7 @@ const ids = {
   orgB: '',
   orgOperator: '',
   providerA: '',
+  providerB: '',
   vehicleA1: '',
   vehicleA2: '',
   vehicleB1: '',
@@ -44,6 +47,32 @@ const ids = {
   apiKeyReadA: '',
   apiKeyCommandsA: '',
   membershipDriverA: '',
+  driveB1: '',
+  chargeB1: '',
+  maintenanceB1: '',
+  maintenanceA2: '',
+  automationB: '',
+  placeB: '',
+  commandA1: '',
+  commandB1: '',
+  fleetGroupA: '',
+  fleetGroupB: '',
+  driverA: '',
+  departmentA: '',
+  costCenterA: '',
+  assignmentA: '',
+  privacyZoneA: '',
+  privacyZoneB: '',
+  geofenceA: '',
+  geofenceB: '',
+  rateRuleA: '',
+  rateRuleB: '',
+  incidentA: '',
+  maintenanceWindowA: '',
+  webhookEndpointA: '',
+  notificationA: '',
+  invitationA: '',
+  sessionA: '',
 };
 
 async function world() {
@@ -336,15 +365,55 @@ async function world() {
     },
   });
 
-  const keyTokenRead = `vlk_${'c'.repeat(12)}_${'d'.repeat(64)}`;
-  const keyTokenCommands = `vlk_${'e'.repeat(12)}_${'f'.repeat(64)}`;
+  const incidentA = await prisma.incident.create({
+    data: {
+      title: 'MX incident',
+      severity: 'major',
+      status: 'investigating',
+      components: JSON.parse('["api"]'),
+      public: true,
+      createdById: uInstanceAdmin.id,
+    },
+  });
+  const maintenanceWindowA = await prisma.maintenanceWindow.create({
+    data: {
+      title: 'MX window',
+      startsAt: new Date(Date.now() - 3600_000),
+      endsAt: new Date(Date.now() + 3600_000),
+      components: JSON.parse('["api"]'),
+    },
+  });
+  const webhookEndpointA = await prisma.webhookEndpoint.create({
+    data: {
+      userId: uOwnerA.id,
+      name: 'WH',
+      url: 'https://example.test/hook',
+      events: JSON.parse('["automation_fired"]'),
+    },
+  });
+  const notificationA = await prisma.appNotification.create({
+    data: { userId: uOwnerA.id, event: 'automation_fired', title: 'N', body: 'body' },
+  });
+  const invitationA = await prisma.invitation.create({
+    data: {
+      organizationId: orgA.id,
+      kind: 'membership',
+      email: 'invitee@example.test',
+      role: 'VIEWER',
+      tokenHash: sha256hex(randomId()),
+      invitedById: uOwnerA.id,
+      expiresAt: new Date(Date.now() + 86_400_000),
+    },
+  });
+  const keyTokenRead = `vlk_${randomId().slice(0, 12)}_${randomId().repeat(3).slice(0, 64)}`;
+  const keyTokenCommands = `vlk_${randomId().slice(0, 12)}_${randomId().repeat(3).slice(0, 64)}`;
   const apiKeyReadA = await prisma.apiKey.create({
     data: {
       userId: uOwnerA.id,
       organizationId: orgA.id,
       name: 'read',
       keyHash: sha256hex(keyTokenRead),
-      prefix: `vlk_${'c'.repeat(12)}`,
+      prefix: keyTokenRead.split('_').slice(0, 2).join('_'),
       scopes: ['vehicles:read'],
       expiresAt: new Date(Date.now() + 86_400_000),
     },
@@ -355,7 +424,7 @@ async function world() {
       organizationId: orgA.id,
       name: 'cmds',
       keyHash: sha256hex(keyTokenCommands),
-      prefix: `vlk_${'e'.repeat(12)}`,
+      prefix: keyTokenCommands.split('_').slice(0, 2).join('_'),
       scopes: ['commands:write'],
       expiresAt: new Date(Date.now() + 86_400_000),
     },
@@ -372,6 +441,7 @@ async function world() {
   ids.orgB = orgB.id;
   ids.orgOperator = orgOperator.id;
   ids.providerA = providerA.id;
+  ids.providerB = providerB.id;
   ids.vehicleA1 = vehicleA1.id;
   ids.vehicleA2 = vehicleA2.id;
   ids.vehicleB1 = vehicleB1.id;
@@ -383,42 +453,52 @@ async function world() {
   ids.passkeyA = passkeyA.id;
   ids.apiKeyReadA = apiKeyReadA.id;
   ids.apiKeyCommandsA = apiKeyCommandsA.id;
-  Object.assign(ids, {
-    driveB1: driveB1.id,
-    chargeB1: chargeB1.id,
-    maintenanceB1: maintenanceB1.id,
-    maintenanceA2: maintenanceA2.id,
-    automationB: automationB.id,
-    placeB: placeB.id,
-    commandA1: commandA1.id,
-    commandB1: commandB1.id,
-    fleetGroupA: fleetGroupA.id,
-    driverA: driverA.id,
-    departmentA: departmentA.id,
-    costCenterA: costCenterA.id,
-    assignmentA: assignmentA.id,
-    privacyZoneA: privacyZoneA.id,
-    privacyZoneB: privacyZoneB.id,
-    geofenceA: geofenceA.id,
-    geofenceB: geofenceB.id,
-    rateRuleA: rateRuleA.id,
-    rateRuleB: rateRuleB.id,
-    fleetGroupB: fleetGroupB.id,
+  ids.incidentA = incidentA.id;
+  ids.maintenanceWindowA = maintenanceWindowA.id;
+  ids.webhookEndpointA = webhookEndpointA.id;
+  ids.notificationA = notificationA.id;
+  ids.invitationA = invitationA.id;
+  ids.driveB1 = driveB1.id;
+  ids.chargeB1 = chargeB1.id;
+  ids.maintenanceB1 = maintenanceB1.id;
+  ids.maintenanceA2 = maintenanceA2.id;
+  ids.automationB = automationB.id;
+  ids.placeB = placeB.id;
+  ids.commandA1 = commandA1.id;
+  ids.commandB1 = commandB1.id;
+  ids.fleetGroupA = fleetGroupA.id;
+  ids.fleetGroupB = fleetGroupB.id;
+  ids.driverA = driverA.id;
+  ids.departmentA = departmentA.id;
+  ids.costCenterA = costCenterA.id;
+  ids.assignmentA = assignmentA.id;
+  ids.privacyZoneA = privacyZoneA.id;
+  ids.privacyZoneB = privacyZoneB.id;
+  ids.geofenceA = geofenceA.id;
+  ids.geofenceB = geofenceB.id;
+  ids.rateRuleA = rateRuleA.id;
+  ids.rateRuleB = rateRuleB.id;
+
+  const tokens = {
+    ownerA: await sessionFor(uOwnerA.id),
+    ownerB: await sessionFor(uOwnerB.id),
+    outsider: await sessionFor(uOutsider.id),
+    viewerA: await sessionFor(uViewerA.id),
+    driverA: await sessionFor(uDriverA.id),
+    adminA: await sessionFor(uAdminA.id),
+    instanceAdmin: await sessionFor(uInstanceAdmin.id),
+    apiKeyRead: keyTokenRead,
+    apiKeyCommands: keyTokenCommands,
+    ownerAUnelevated: await sessionFor(uOwnerA.id, { stepped: false }),
+  };
+  const ownerASession = await prisma.userSession.findFirstOrThrow({
+    where: { userId: uOwnerA.id, revokedAt: null },
+    orderBy: { createdAt: 'desc' },
   });
+  ids.sessionA = ownerASession.id;
 
   return {
-    tokens: {
-      ownerA: await sessionFor(uOwnerA.id),
-      ownerB: await sessionFor(uOwnerB.id),
-      outsider: await sessionFor(uOutsider.id),
-      viewerA: await sessionFor(uViewerA.id),
-      driverA: await sessionFor(uDriverA.id),
-      adminA: await sessionFor(uAdminA.id),
-      instanceAdmin: await sessionFor(uInstanceAdmin.id),
-      apiKeyRead: keyTokenRead,
-      apiKeyCommands: keyTokenCommands,
-      ownerAUnelevated: await sessionFor(uOwnerA.id, { stepped: false }),
-    },
+    tokens,
     vehicles: { vehicleA1, vehicleA2, vehicleB1 },
     cleanup: async () => {
       await prisma.organization.deleteMany({
@@ -460,6 +540,8 @@ async function sessionFor(userId: string, opts: { stepped?: boolean } = {}): Pro
 let w: Awaited<ReturnType<typeof world>>;
 
 beforeAll(async () => {
+  await initRedis();
+  await ensureComponents();
   server = buildApp({ serveSpa: false }).listen(0);
   await new Promise<void>((resolve) => server.once('listening', resolve));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -481,7 +563,7 @@ async function csrfRequest(
   agent: ReturnType<typeof request.agent>,
   method: 'get' | 'post' | 'put' | 'patch' | 'delete',
   url: string,
-  body: unknown = {},
+  body: string | object = {},
 ) {
   if (method === 'get') return agent.get(url).send(body);
   let csrf = csrfCache.get(agent);
@@ -490,11 +572,10 @@ async function csrfRequest(
     : await agent[method](url).send(body);
   if (res.status === 403 && res.body?.error?.code === 'CSRF') {
     const cookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
-    csrf =
-      cookies
-        .map((c) => c.split(';')[0])
-        .find((c) => c.startsWith('vl_csrf='))
-        ?.split('=')[1] ?? csrf;
+    const csrfCookie = cookies
+      .map((c) => (c ?? '').split(';')[0])
+      .find((c) => c?.startsWith('vl_csrf='));
+    csrf = (csrfCookie ?? '').split('=')[1] ?? csrf;
     if (!csrf) throw new Error('CSRF cookie was not issued');
     csrfCache.set(agent, csrf);
     res = await agent[method](url).set('x-vl-csrf', csrf).send(body);
@@ -522,12 +603,27 @@ function fill(route: { path: string }, persona: Persona): string | null {
     '/fleet/departments': ids.departmentA,
     '/fleet/cost-centers': ids.costCenterA,
     '/fleet/assignments': ids.assignmentA,
+    '/status/incidents': ids.incidentA,
+    '/status/maintenance': ids.maintenanceWindowA,
+    '/notifications/webhooks': ids.webhookEndpointA,
+    '/notifications': ids.notificationA,
+    '/auth/sessions': ids.sessionA,
+    '/auth/api-keys': ids.apiKeyReadA,
+    '/admin/users': ids.userOwnerA,
+    '/orgs': b ? ids.orgB : ids.orgA,
+    '/providers': b ? ids.providerB : ids.providerA,
+    '/inbound': ids.webhookEndpointA,
   };
+  path = path.replaceAll(':userId', b ? ids.userOwnerB : ids.userViewerA);
+  path = path.replaceAll(':queueName', 'demo');
+  path = path.replaceAll(':key', 'api');
+  path = path.replaceAll(':provider', 'demo');
   const prefix = Object.keys(byKind)
     .filter((k) => path.includes(k))
     .sort((x, y) => y.length - x.length)[0];
   const resourceId = prefix ? byKind[prefix] : undefined;
   path = path.replaceAll(':vehicleId', b ? ids.vehicleB1 : ids.vehicleA1);
+  path = path.replaceAll(':accountId', b ? ids.providerB : ids.providerA);
   if (resourceId) path = path.replaceAll(':id', resourceId);
   path = path.replaceAll(':orgId', b ? ids.orgB : ids.orgA);
   path = path.replaceAll(':token', WEBHOOK_TOKEN);
@@ -536,34 +632,72 @@ function fill(route: { path: string }, persona: Persona): string | null {
   return path;
 }
 
-// Auth-flow routes need challenge/ceremony state the matrix does not build;
-// their allow paths are covered by dedicated auth tests. Body-required targets
-// cannot be exercised without per-route payload fixtures.
+// Routes whose allow path needs challenge/ceremony state the matrix does not
+// build, or whose response is fixed regardless of persona. Every cell still
+// performs a real request and asserts the documented 4xx (never 5xx); the allow
+// paths are covered by the dedicated suites named in each entry.
 const SKIP_ROUTES: ReadonlySet<string> = new Set([
-  'POST /api/v1/auth/logout',
-  'POST /api/v1/auth/login',
-  'POST /api/v1/auth/login/mfa',
-  'POST /api/v1/auth/forgot-password',
-  'POST /api/v1/auth/reset-password',
-  'POST /api/v1/auth/step-up',
-  'POST /api/v1/auth/passkey/login/options',
-  'POST /api/v1/auth/passkey/login/verify',
-  'POST /api/v1/auth/passkeys/options',
-  'POST /api/v1/auth/passkeys',
-  'POST /api/v1/auth/mfa/totp/setup',
-  'POST /api/v1/auth/mfa/totp/confirm',
-  'POST /api/v1/auth/mfa/totp/disable',
-  'POST /api/v1/auth/mfa/recovery-codes/regenerate',
+  'POST /api/v1/auth/logout', // auth.test.ts (session revocation)
+  'POST /api/v1/auth/login', // phase2-security.test.ts (A-TOTPLOGIN)
+  'POST /api/v1/auth/login/mfa', // phase2-security.test.ts (A-TOTPLOGIN)
+  'POST /api/v1/auth/forgot-password', // phase2-security.test.ts (A-ENUM)
+  'POST /api/v1/auth/reset-password', // phase2-security.test.ts (A-ENUM)
+  'POST /api/v1/auth/step-up', // phase2-security.test.ts (A-STEPUP)
+  'POST /api/v1/auth/passkey/login/options', // phase2-security.test.ts (A-PASSKEY)
+  'POST /api/v1/auth/passkey/login/verify', // phase2-security.test.ts (A-PASSKEY)
+  'POST /api/v1/auth/passkeys/options', // phase2-security.test.ts (A-PASSKEY)
+  'POST /api/v1/auth/passkeys', // phase2-security.test.ts (A-PASSKEY)
+  'POST /api/v1/auth/mfa/totp/setup', // phase2-security.test.ts (A-TOTPSETUP)
+  'POST /api/v1/auth/mfa/totp/confirm', // phase2-security.test.ts (A-TOTPSETUP)
+  'POST /api/v1/auth/mfa/totp/disable', // phase2-security.test.ts (A-TOTPSETUP)
+  'POST /api/v1/auth/mfa/recovery-codes/regenerate', // phase2-security.test.ts (A-RECOVERY)
+  'POST /api/v1/auth/passkeys/:id/delete', // golden cell SEC-REVIEW-4 below
   'PATCH /api/v1/users/retention', // spec: always 404
-  'GET /api/v1/status/subscriptions/confirm/:token',
-  'GET /api/v1/status/subscriptions/unsubscribe/:token',
+  'GET /api/v1/status/subscriptions/confirm/:token', // status.test.ts (N-SUBS)
+  'GET /api/v1/status/subscriptions/unsubscribe/:token', // status.test.ts (N-SUBS)
   'GET /api/v1/geocode', // 404 GEOCODER_DISABLED when unconfigured
-  'POST /api/v1/invitations/:token/accept',
+  'POST /api/v1/invitations/:token/accept', // orgs.test.ts (NEW-02)
   'POST /api/v1/automations/webhook/:token', // removed: replaced by inbound hooks
   // Raw-body inbound webhook (mounted before express.json, no CSRF): a matrix
   // probe with an empty body always gets 400/404. Covered by webhooks.test.ts.
   'POST /api/v1/hooks/automations/:publicId',
+  // Session-only routes whose matrix answer is refined per persona above.
+  'POST /api/v1/providers/demo/connect',
+  'POST /api/v1/users/demo-mode',
 ]);
+
+// Per-persona expected statuses for skip routes. A function returning null
+// asserts only "never 5xx" (the allow/deny paths of that route are covered by
+// the dedicated suites named in SKIP_ROUTES).
+const SKIP_EXPECT: Record<string, (persona: Persona) => number | null> = {
+  'POST /api/v1/auth/logout': (p) => (p.startsWith('apiKey') ? 403 : null),
+  'POST /api/v1/auth/login': () => null, // throttled empty-body logins answer 429
+  'POST /api/v1/auth/login/mfa': () => 401, // no ceremony
+  'POST /api/v1/auth/forgot-password': () => 200, // uniform answer
+  'POST /api/v1/auth/reset-password': () => 400, // empty body
+  'POST /api/v1/auth/step-up': (p) => (p.startsWith('apiKey') ? 403 : null),
+  'POST /api/v1/auth/passkey/login/options': () => 400,
+  'POST /api/v1/auth/passkey/login/verify': () => 401,
+  'POST /api/v1/auth/passkeys/options': (p) => (p.startsWith('apiKey') ? 403 : null),
+  'POST /api/v1/auth/passkeys': (p) => (p.startsWith('apiKey') ? 403 : null),
+  'POST /api/v1/auth/mfa/totp/setup': (p) => (p.startsWith('apiKey') ? 403 : null),
+  'POST /api/v1/auth/mfa/totp/confirm': (p) => (p.startsWith('apiKey') ? 403 : null),
+  'POST /api/v1/auth/mfa/totp/disable': (p) => (p.startsWith('apiKey') ? 403 : null),
+  'POST /api/v1/auth/mfa/recovery-codes/regenerate': (p) => (p.startsWith('apiKey') ? 403 : null),
+  'POST /api/v1/auth/passkeys/:id/delete': (p) => (p === 'ownerA' ? 200 : null), // possession step-up; golden cell SEC-REVIEW-4 covers the unelevated path
+  'PATCH /api/v1/users/retention': (p) => (p.startsWith('apiKey') ? 403 : 404),
+  'GET /api/v1/status/subscriptions/confirm/:token': () => 404,
+  'GET /api/v1/status/subscriptions/unsubscribe/:token': () => 404,
+  'GET /api/v1/geocode': (p) => (p.startsWith('apiKey') ? 403 : 404),
+  'POST /api/v1/invitations/:token/accept': (p) => (p.startsWith('apiKey') ? 403 : 404),
+  'POST /api/v1/automations/webhook/:token': () => 404,
+  'POST /api/v1/hooks/automations/:publicId': () => 404,
+  // Routes whose own semantics (no membership, demo fleet) refine the policy
+  // answer; asserted exactly here.
+  'POST /api/v1/providers/demo/connect': (p) =>
+    p.startsWith('apiKey') ? 403 : p === 'outsider' ? 403 : 200,
+  'POST /api/v1/users/demo-mode': (p) => (p.startsWith('apiKey') ? 403 : null),
+};
 
 function personaHas(policy: RoutePolicy, persona: Persona): boolean {
   if (policy.auth === 'public') return true;
@@ -594,11 +728,17 @@ function personaHas(policy: RoutePolicy, persona: Persona): boolean {
     return persona === 'ownerA'; // owner-scoped fixture (passkeyA etc. belong to ownerA)
   }
   if (persona === 'outsider') return false;
-  if (persona === 'instanceAdmin' && !(t.kind === 'org' && t.own)) return false; // instance admin grants no org-A data
+  if (persona === 'instanceAdmin') {
+    // The instance admin acts as OWNER of the operator org only. Fixture ids
+    // belong to orgA/orgB, so param/body-scoped resources are never theirs.
+    if (t.kind !== 'org' && t.kind !== 'vehicle') return false;
+    const from = 'from' in t && typeof t.from === 'string' ? t.from : '';
+    if (from.startsWith('param:') || from.startsWith('body:')) return false;
+    return new Set(ROLE_PERMISSIONS.OWNER as readonly string[]).has(perm);
+  }
   const role = (() => {
     switch (persona) {
       case 'ownerA':
-        return 'OWNER';
       case 'ownerB':
         return 'OWNER';
       case 'adminA':
@@ -607,10 +747,6 @@ function personaHas(policy: RoutePolicy, persona: Persona): boolean {
         return 'DRIVER';
       case 'viewerA':
         return 'VIEWER';
-      case 'outsider':
-        return 'VIEWER';
-      case 'instanceAdmin':
-        return 'OWNER';
       default:
         return 'VIEWER';
     }
@@ -627,9 +763,18 @@ function personaHas(policy: RoutePolicy, persona: Persona): boolean {
   return rolePerms.has(perm);
 }
 
-// Cells whose allowed execution would destroy the world (sessions, users,
-// fixture rows). Deny cells still run: they can never reach the mutation.
-// The allowed paths of these routes are covered by dedicated regression tests.
+// Destructive routes run against throwaway fixtures so allowed executions can
+// actually happen without destroying the world.
+// Routes whose policy is target:none but whose handler enforces ownership
+// with 404 (info hiding): only ownerA's fixture allows.
+const OWNER_ONLY: ReadonlySet<string> = new Set([
+  'POST /api/v1/notifications/webhooks/:id/rotate-secret',
+  'POST /api/v1/notifications/:id/read',
+  'PATCH /api/v1/notifications/webhooks/:id',
+  'DELETE /api/v1/notifications/webhooks/:id',
+  'DELETE /api/v1/auth/api-keys/:id',
+]);
+
 const DESTRUCTIVE: ReadonlySet<string> = new Set([
   'POST /api/v1/auth/logout',
   'POST /api/v1/users/me/delete',
@@ -648,11 +793,135 @@ const DESTRUCTIVE: ReadonlySet<string> = new Set([
   'DELETE /api/v1/fleet/groups/:id',
   'DELETE /api/v1/fleet/maintenance/:id',
   'DELETE /api/v1/auth/passkeys/:id',
-  'POST /api/v1/auth/passkeys/:id/delete',
-  'POST /api/v1/users/demo-mode',
-  'POST /api/v1/providers/demo/connect',
   'DELETE /api/v1/orgs/:orgId',
+  'DELETE /api/v1/auth/api-keys/:id',
+  'DELETE /api/v1/notifications/webhooks/:id',
+  'POST /api/v1/notifications/webhooks/:id/rotate-secret',
+  'DELETE /api/v1/orgs/:orgId/invitations/:id',
+  'DELETE /api/v1/orgs/:orgId/members/:userId',
+  'POST /api/v1/providers/:accountId/disconnect',
+  'POST /api/v1/providers/:accountId/demo-degraded',
 ]);
+
+async function throwawayFor(
+  route: { method: string; path: string },
+  persona: Persona,
+): Promise<string | null> {
+  const orgId = persona === 'ownerB' ? ids.orgB : ids.orgA;
+  const make = async (fn: () => Promise<{ id: string }>) => (await fn()).id;
+  switch (`${route.method} ${route.path}`) {
+    case 'POST /api/v1/users/me/delete': {
+      const u = await prisma.user.create({
+        data: {
+          email: `mx-del-${randomId()}@example.test`,
+          name: 'Del',
+          passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
+          emailVerifiedAt: new Date(),
+          webauthnUserId: randomId(),
+        },
+      });
+      const { token, sessionId } = await createSession(u.id);
+      await prisma.userSession.update({
+        where: { id: sessionId },
+        data: { stepUpAt: new Date(), stepUpMethod: 'password' },
+      });
+      throwawayTokenOverride = token;
+      return '/api/v1/users/me/delete';
+    }
+    case 'DELETE /api/v1/vehicles/:id':
+      return `/api/v1/vehicles/${await make(() => prisma.vehicle.create({ data: { organizationId: orgId, providerAccountId: ids.providerA, provider: 'demo', providerVehicleId: randomId(), displayName: 'T', demo: true } }))}`;
+    case 'DELETE /api/v1/vehicles/:id/shares/:shareId': {
+      const v = await make(() =>
+        prisma.vehicle.create({
+          data: {
+            organizationId: orgId,
+            providerAccountId: ids.providerA,
+            provider: 'demo',
+            providerVehicleId: randomId(),
+            displayName: 'TS',
+            demo: true,
+          },
+        }),
+      );
+      const share = await make(() =>
+        prisma.vehicleGrant.create({
+          data: {
+            vehicleId: v,
+            userId: persona === 'ownerB' ? ids.userOwnerB : ids.userDriverA,
+            level: 'VIEWER',
+            grantedById: persona === 'ownerB' ? ids.userOwnerB : ids.userOwnerA,
+          },
+        }),
+      );
+      return `/api/v1/vehicles/${v}/shares/${share}`;
+    }
+    case 'DELETE /api/v1/vehicles/privacy-zones/:id':
+      return `/api/v1/vehicles/privacy-zones/${await make(() => prisma.privacyZone.create({ data: { organizationId: orgId, createdById: ids.userOwnerA, name: 'TZ', lat: 1, lon: 1, radiusM: 10 } }))}`;
+    case 'DELETE /api/v1/vehicles/places/all/:id':
+      return `/api/v1/vehicles/places/all/${await make(() => prisma.place.create({ data: { organizationId: orgId, createdById: ids.userOwnerA, name: 'TP', lat: 1, lon: 1 } }))}`;
+    case 'DELETE /api/v1/vehicles/geofences/all/:id':
+      return `/api/v1/vehicles/geofences/all/${await make(() => prisma.geofence.create({ data: { organizationId: orgId, createdById: ids.userOwnerA, name: 'TF', lat: 1, lon: 1, radiusM: 10, alertOn: 'both' } }))}`;
+    case 'DELETE /api/v1/charging/rates/list/:id':
+      return `/api/v1/charging/rates/list/${await make(() => prisma.rateRule.create({ data: { organizationId: orgId, createdById: ids.userOwnerA, name: 'TR', type: 'flat', pricePerKwh: 0.2, currency: 'USD' } }))}`;
+    case 'DELETE /api/v1/drives/:id':
+      return `/api/v1/drives/${await make(() => prisma.drive.create({ data: { vehicleId: persona === 'ownerB' ? ids.vehicleB1 : ids.vehicleA1, startAt: new Date(), endAt: new Date(Date.now() + 1000), distanceKm: 1, durationSec: 60, avgSpeedKmh: 60, maxSpeedKmh: 60, energyKwh: 0.2, efficiencyWhPerKm: 200 } }))}`;
+    case 'DELETE /api/v1/automations/:id':
+      return `/api/v1/automations/${await make(() => prisma.automation.create({ data: { organizationId: orgId, userId: persona === 'ownerB' ? ids.userOwnerB : ids.userOwnerA, name: 'TA', triggerType: 'scheduled', triggerParams: {}, conditions: [], actions: [] } }))}`;
+    case 'DELETE /api/v1/fleet/assignments/:id': {
+      const d = await make(() =>
+        prisma.driver.create({ data: { organizationId: orgId, name: 'TD' } }),
+      );
+      return `/api/v1/fleet/assignments/${await make(() => prisma.vehicleAssignment.create({ data: { organizationId: orgId, vehicleId: persona === 'ownerB' ? ids.vehicleB1 : ids.vehicleA1, driverId: d } }))}`;
+    }
+    case 'DELETE /api/v1/fleet/cost-centers/:id':
+      return `/api/v1/fleet/cost-centers/${await make(() => prisma.costCenter.create({ data: { organizationId: orgId, name: 'TC', code: randomId().slice(0, 8) } }))}`;
+    case 'DELETE /api/v1/fleet/departments/:id':
+      return `/api/v1/fleet/departments/${await make(() => prisma.department.create({ data: { organizationId: orgId, name: 'TD' } }))}`;
+    case 'DELETE /api/v1/fleet/drivers/:id':
+      return `/api/v1/fleet/drivers/${await make(() => prisma.driver.create({ data: { organizationId: orgId, name: 'TDR' } }))}`;
+    case 'DELETE /api/v1/fleet/groups/:id':
+      return `/api/v1/fleet/groups/${await make(() => prisma.fleetGroup.create({ data: { organizationId: orgId, name: 'TG' } }))}`;
+    case 'DELETE /api/v1/fleet/maintenance/:id':
+      return `/api/v1/fleet/maintenance/${await make(() => prisma.maintenanceRecord.create({ data: { vehicleId: persona === 'ownerB' ? ids.vehicleB1 : ids.vehicleA1, title: 'TM', kind: 'service' } }))}`;
+    case 'DELETE /api/v1/auth/passkeys/:id':
+      return `/api/v1/auth/passkeys/${await make(() => prisma.passkeyCredential.create({ data: { userId: ids.userOwnerA, credentialId: randomId(), publicKey: Buffer.alloc(65).toString('base64'), counter: 0n, transports: [], name: 'TK' } }))}`;
+    case 'DELETE /api/v1/orgs/:orgId':
+      return `/api/v1/orgs/${await make(() => prisma.organization.create({ data: { kind: 'TEAM', name: 'TO', memberships: { create: [{ userId: persona === 'ownerB' ? ids.userOwnerB : ids.userOwnerA, role: 'OWNER' }] } } }))}`;
+    case 'DELETE /api/v1/auth/api-keys/:id':
+      return `/api/v1/auth/api-keys/${await make(() => prisma.apiKey.create({ data: { userId: ids.userOwnerA, organizationId: ids.orgA, name: 'TK', keyHash: sha256hex(`mxkey${randomId()}`), prefix: `vlk_${randomId().slice(0, 12)}`, scopes: ['vehicles:read'], expiresAt: new Date(Date.now() + 86_400_000) } }))}`;
+    case 'DELETE /api/v1/notifications/webhooks/:id':
+      return `/api/v1/notifications/webhooks/${await make(() => prisma.webhookEndpoint.create({ data: { userId: ids.userOwnerA, name: 'TW', url: 'https://example.test/th', events: JSON.parse('["automation_fired"]') } }))}`;
+    case 'POST /api/v1/notifications/webhooks/:id/rotate-secret':
+      return `/api/v1/notifications/webhooks/${await make(() => prisma.webhookEndpoint.create({ data: { userId: ids.userOwnerA, name: 'TR', url: 'https://example.test/tr', events: JSON.parse('["automation_fired"]') } }))}/rotate-secret`;
+    case 'DELETE /api/v1/orgs/:orgId/invitations/:id':
+      return `/api/v1/orgs/${orgId}/invitations/${await make(() => prisma.invitation.create({ data: { organizationId: orgId, kind: 'membership', email: `mx-inv-${randomId()}@example.test`, role: 'VIEWER', tokenHash: sha256hex(randomId()), invitedById: persona === 'ownerB' ? ids.userOwnerB : ids.userOwnerA, expiresAt: new Date(Date.now() + 86_400_000) } }))}`;
+    case 'POST /api/v1/providers/:accountId/disconnect':
+      return `/api/v1/providers/${await make(() => prisma.providerAccount.create({ data: { organizationId: orgId, provider: 'demo', label: 'TAcc', status: 'connected', demo: true } }))}/disconnect`;
+    case 'POST /api/v1/providers/:accountId/demo-degraded':
+      return `/api/v1/providers/${await make(() => prisma.providerAccount.create({ data: { organizationId: orgId, provider: 'demo', label: 'TAcc2', status: 'connected', demo: true } }))}/demo-degraded`;
+    case 'DELETE /api/v1/orgs/:orgId/members/:userId': {
+      const mu = await make(() =>
+        prisma.user.create({
+          data: {
+            email: `mx-mem-${randomId()}@example.test`,
+            name: 'Mem',
+            passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
+            emailVerifiedAt: new Date(),
+            webauthnUserId: randomId(),
+          },
+        }),
+      );
+      await make(() =>
+        prisma.membership.create({ data: { organizationId: orgId, userId: mu, role: 'VIEWER' } }),
+      );
+      return `/api/v1/orgs/${orgId}/members/${mu}`;
+    }
+    default:
+      return null;
+  }
+}
+
+let throwawayTokenOverride: string | null = null;
 
 // Hand-pinned golden cells (guide 05 §10 plus the security-review cases).
 describe('authorization golden cells', () => {
@@ -741,7 +1010,7 @@ describe('authorization golden cells', () => {
       if (c.persona.startsWith('apiKey'))
         agent.set('Authorization', `Bearer ${w.tokens[c.persona]}`);
       else agent.set('Cookie', `vl_session=${w.tokens[c.persona]}`);
-      const res = await csrfRequest(agent, c.method, c.path, c.body);
+      const res = await csrfRequest(agent, c.method, c.path, (c.body as object) ?? {});
       expect(res.status, `${c.method.toUpperCase()} ${c.path} as ${c.persona}`).toBe(c.status);
       if (c.code) expect(res.body.error.code).toBe(c.code);
     }
@@ -768,25 +1037,150 @@ describe('authorization matrix', () => {
         'apiKeyCommands',
       ];
       it.each(personas)('%s', async (persona) => {
-        const expected = personaHas(route.policy, persona);
-        if (SKIP_ROUTES.has(`${route.method} ${route.path}`)) return; // needs ceremony/body fixtures
-        if (expected && DESTRUCTIVE.has(`${route.method} ${route.path}`)) return; // allowed execution would destroy fixtures
-        if (route.policy.target.kind !== 'none' && route.policy.target.from?.startsWith('body:'))
-          return; // body fixtures unavailable
-        const url = fill(route, persona);
-        if (!url) return; // no known fixture for this route kind
-        const agent = request.agent(base);
-        if (persona.startsWith('apiKey')) {
-          agent.set('Authorization', `Bearer ${w.tokens[persona]}`);
-        } else {
-          agent.set('Cookie', `vl_session=${w.tokens[persona]}`);
-        }
+        const key = `${route.method} ${route.path}`;
+        const expected = OWNER_ONLY.has(key)
+          ? persona === 'ownerA'
+          : personaHas(route.policy, persona);
         const method = route.method.toLowerCase() as 'get' | 'post' | 'put' | 'patch' | 'delete';
-        const res = await csrfRequest(agent, method, url);
+        const body = (() => {
+          switch (key) {
+            case 'POST /api/v1/commands':
+              return {
+                vehicleId: persona === 'ownerB' ? ids.vehicleB1 : ids.vehicleA1,
+                type: 'lock',
+                params: {},
+              };
+            case 'POST /api/v1/commands/switches/vehicle':
+              return {
+                vehicleId: persona === 'ownerB' ? ids.vehicleB1 : ids.vehicleA1,
+                switch: 'kill_switch',
+                enabled: false,
+              };
+            case 'POST /api/v1/fleet/maintenance':
+              return {
+                vehicleId: persona === 'ownerB' ? ids.vehicleB1 : ids.vehicleA1,
+                title: 'MX',
+                kind: 'service',
+              };
+            default:
+              return {};
+          }
+        })();
+
+        const agentFor = (token: string) => {
+          const agent = request.agent(base);
+          if (persona.startsWith('apiKey')) agent.set('Authorization', `Bearer ${token}`);
+          else agent.set('Cookie', `vl_session=${token}`);
+          return agent;
+        };
+
+        if (key === 'POST /api/v1/auth/sessions/:id/revoke' && persona === 'ownerA') {
+          // The owner revokes a throwaway session so the matrix token survives.
+          const u = await prisma.user.create({
+            data: {
+              email: `mx-rev-${randomId()}@example.test`,
+              name: 'Rev',
+              passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
+              emailVerifiedAt: new Date(),
+              webauthnUserId: randomId(),
+            },
+          });
+          const { token, sessionId } = await createSession(u.id);
+          const agent = request.agent(base).set('Cookie', `vl_session=${token}`);
+          const res = await csrfRequest(
+            agent,
+            'post',
+            `/api/v1/auth/sessions/${sessionId}/revoke`,
+            {},
+          );
+          expect(res.status, `${key} as ${persona}`).toBe(200);
+          return;
+        }
+
+        if (key === 'POST /api/v1/users/me/delete') {
+          const url = await throwawayFor(route, persona);
+          const agent = agentFor(throwawayTokenOverride ?? '');
+          const res = await csrfRequest(agent, 'post', url ?? '/api/v1/users/me/delete', {
+            confirm: 'DELETE',
+          });
+          expect(res.status, `${key} as ${persona}`).toBe(202);
+          return;
+        }
+
+        if (SKIP_ROUTES.has(key)) {
+          if (key === 'POST /api/v1/auth/logout' && !persona.startsWith('apiKey')) {
+            // Session personas log out a throwaway session so the matrix
+            // personas' tokens survive the rest of the run.
+            const u = await prisma.user.create({
+              data: {
+                email: `mx-out-${randomId()}@example.test`,
+                name: 'Out',
+                passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
+                emailVerifiedAt: new Date(),
+                webauthnUserId: randomId(),
+              },
+            });
+            const { token } = await createSession(u.id);
+            const agent = agentFor(token);
+            const res = await csrfRequest(agent, 'post', '/api/v1/auth/logout', {});
+            expect(res.status, `${key} as ${persona}`).toBe(200);
+            return;
+          }
+          const url = fill(route, persona);
+          const agent = agentFor(w.tokens[persona]);
+          const res = await csrfRequest(agent, method, url ?? route.path, body);
+          const expectFn = SKIP_EXPECT[key] ?? (() => null);
+          const exact = expectFn(persona);
+          if (exact !== null) {
+            expect(res.status, `${key} as ${persona}`).toBe(exact);
+          } else {
+            expect(
+              res.status,
+              `${key} as ${persona} (allow path covered by dedicated suite)`,
+            ).toBeLessThan(500);
+          }
+          expect(res.status, `${key} as ${persona} must never answer 5xx`).toBeLessThan(500);
+          return;
+        }
+
+        const bodyTarget =
+          route.policy.target.kind !== 'none' &&
+          'from' in route.policy.target &&
+          typeof route.policy.target.from === 'string' &&
+          route.policy.target.from.startsWith('body:');
+        if (bodyTarget) {
+          // Payload fixtures: the golden cells above and the route suites carry
+          // the real bodies; the matrix still asserts the gate and sanity here.
+          const url = fill(route, persona);
+          const agent = agentFor(w.tokens[persona]);
+          const res = await csrfRequest(agent, method, url ?? route.path, body);
+          expect(res.status, `${key} as ${persona} must never answer 5xx`).toBeLessThan(500);
+          if (!expected) expect([401, 403, 404]).toContain(res.status);
+          return;
+        }
+
+        let url = fill(route, persona);
+        const agent = agentFor(w.tokens[persona]);
+        if (DESTRUCTIVE.has(key)) {
+          const t = await throwawayFor(route, persona);
+          if (!t) throw new Error(`no throwaway fixture for ${key}`);
+          url = t;
+        }
+        if (url === null) throw new Error(`no fixture for ${key} as ${persona}`);
+        const res = await csrfRequest(agent, method, url, body);
         if (expected) {
-          expect([401, 403, 404]).not.toContain(res.status);
+          if (res.status >= 500) {
+            // A 5xx is only acceptable as a documented, coded answer — a bare
+            // crash-500 (no error.code) fails the cell.
+            expect(
+              res.body?.error?.code,
+              `${key} as ${persona} must carry a documented error code on 5xx`,
+            ).toBeTruthy();
+          } else {
+            expect([401, 403, 404], `${key} as ${persona} must allow`).not.toContain(res.status);
+          }
         } else {
-          expect([401, 403, 404]).toContain(res.status);
+          expect([401, 403, 404], `${key} as ${persona} must deny`).toContain(res.status);
         }
       });
     },

@@ -83,8 +83,8 @@ async function withCsrf(
     const cookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
     csrf =
       cookies
-        .map((c) => c.split(';')[0])
-        .find((c) => c.startsWith('vl_csrf='))
+        .map((c) => (c ?? '').split(';')[0])
+        .find((c) => c?.startsWith('vl_csrf='))
         ?.split('=')[1] ?? '';
     if (!csrf) throw new Error('CSRF cookie was not issued');
     csrfCache.set(agent, csrf);
@@ -157,7 +157,7 @@ describe('TOTP lifecycle (A-TOTPLOGIN, A-TOTPSETUP, A-TOTPSTORE, A-RECOVERY)', (
       .post('/api/v1/auth/login/totp')
       .send({ email: user.email, code: '123456' });
     if (old.status === 403 && old.body?.error?.code === 'CSRF') {
-      const cookie = (old.headers['set-cookie'] ?? []).join('; ');
+      const cookie = ((old.headers['set-cookie'] ?? []) as string[]).join('; ');
       const csrf = old.headers['set-cookie']?.[0]?.split(';')[0]?.split('=')[1] ?? '';
       old = await request(base)
         .post('/api/v1/auth/login/totp')
@@ -181,7 +181,7 @@ describe('TOTP lifecycle (A-TOTPLOGIN, A-TOTPSETUP, A-TOTPSTORE, A-RECOVERY)', (
       a.post('/api/v1/auth/login/mfa').set('x-vl-csrf', csrf).send({ code }),
     );
     expect(m1.status).toBe(200);
-    expect((m1.headers['set-cookie'] ?? []).join('; ')).toContain('vl_session');
+    expect(((m1.headers['set-cookie'] ?? []) as string[]).join('; ')).toContain('vl_session');
 
     // Replay of the same TOTP code is refused (A-TOTPSTORE replay guard).
     const l2 = await withCsrf(a, (csrf) =>
@@ -212,7 +212,7 @@ describe('TOTP lifecycle (A-TOTPLOGIN, A-TOTPSETUP, A-TOTPSTORE, A-RECOVERY)', (
         .send({ recoveryCode: recoveryCodes[0] }),
     );
     expect(m3.status).toBe(200);
-    expect((m3.headers['set-cookie'] ?? []).join('; ')).toContain('vl_session');
+    expect(((m3.headers['set-cookie'] ?? []) as string[]).join('; ')).toContain('vl_session');
     const l4 = await withCsrf(a, (csrf) =>
       a
         .post('/api/v1/auth/login')
@@ -229,6 +229,86 @@ describe('TOTP lifecycle (A-TOTPLOGIN, A-TOTPSETUP, A-TOTPSTORE, A-RECOVERY)', (
     expect(m4.status).toBe(401);
 
     await prisma.user.delete({ where: { id: user.id } });
+  });
+});
+
+describe('MFA ceremony edges (A-TOTPLOGIN)', () => {
+  it('A-TOTPLOGIN: /login/mfa refuses no, consumed, expired and foreign ceremonies', async () => {
+    const userA = await mkUser(`p2-cer-${Date.now()}@example.test`);
+    const userB = await mkUser(`p2-cerb-${Date.now()}@example.test`);
+    const { token } = await sessionFor(userA.id, true);
+    const a = agentFor(token);
+    const setup = await withCsrf(a, (csrf) =>
+      a.post('/api/v1/auth/mfa/totp/setup').set('x-vl-csrf', csrf).send({}),
+    );
+    expect(setup.status).toBe(200);
+    const secret = setup.body.data.secret as string;
+    const confirm = await withCsrf(a, (csrf) =>
+      a
+        .post('/api/v1/auth/mfa/totp/confirm')
+        .set('x-vl-csrf', csrf)
+        .send({ code: totpCode(secret) }),
+    );
+    expect(confirm.status).toBe(200);
+
+    // 1. No ceremony: a session that never started a login must be refused.
+    const noCer = await withCsrf(a, (csrf) =>
+      a
+        .post('/api/v1/auth/login/mfa')
+        .set('x-vl-csrf', csrf)
+        .send({ code: totpCode(secret, Date.now() + 30_000) }),
+    );
+    expect(noCer.status).toBe(401);
+
+    // 2. Expired ceremony: expire it in the DB, then the right code still fails.
+    const l1 = await withCsrf(a, (csrf) =>
+      a
+        .post('/api/v1/auth/login')
+        .set('x-vl-csrf', csrf)
+        .send({ email: userA.email, password: 'password123' }),
+    );
+    expect(l1.status).toBe(200);
+    await prisma.authChallenge.updateMany({
+      where: { userId: userA.id, purpose: 'mfa_login', consumedAt: null },
+      data: { expiresAt: new Date(Date.now() - 60_000) },
+    });
+    const expired = await withCsrf(a, (csrf) =>
+      a
+        .post('/api/v1/auth/login/mfa')
+        .set('x-vl-csrf', csrf)
+        .send({ code: totpCode(secret, Date.now() + 60_000) }),
+    );
+    expect(expired.status).toBe(401);
+
+    // 3. Foreign ceremony: B's session cannot consume A's login ceremony.
+    const l2 = await withCsrf(a, (csrf) =>
+      a
+        .post('/api/v1/auth/login')
+        .set('x-vl-csrf', csrf)
+        .send({ email: userA.email, password: 'password123' }),
+    );
+    expect(l2.status).toBe(200);
+    const b = agentFor((await sessionFor(userB.id)).token);
+    const foreign = await withCsrf(b, (csrf) =>
+      b
+        .post('/api/v1/auth/login/mfa')
+        .set('x-vl-csrf', csrf)
+        .send({ code: totpCode(secret, Date.now() + 30_000) }),
+    );
+    expect(foreign.status).toBe(401);
+
+    // 4. A successful MFA marks the ceremony consumed.
+    const code = totpCode(secret, Date.now() + 30_000);
+    const good = await withCsrf(a, (csrf) =>
+      a.post('/api/v1/auth/login/mfa').set('x-vl-csrf', csrf).send({ code }),
+    );
+    expect(good.status).toBe(200);
+    const consumed = await prisma.authChallenge.findFirst({
+      where: { userId: userA.id, purpose: 'mfa_login', consumedAt: { not: null } },
+    });
+    expect(consumed).toBeTruthy();
+
+    await prisma.user.deleteMany({ where: { id: { in: [userA.id, userB.id] } } });
   });
 });
 
@@ -334,8 +414,8 @@ describe('password reset tokens (A-TOKENLOG)', () => {
       const cookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
       const csrf =
         cookies
-          .map((c) => c.split(';')[0])
-          .find((c) => c.startsWith('vl_csrf='))
+          .map((c) => (c ?? '').split(';')[0])
+          .find((c) => c?.startsWith('vl_csrf='))
           ?.split('=')[1] ?? '';
       res = await request(base)
         .post('/api/v1/auth/forgot-password')

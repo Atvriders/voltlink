@@ -63,7 +63,7 @@ class Api {
   async patch(path: string, body?: unknown) {
     const res = await fetch(`${base()}${path}`, {
       method: 'PATCH',
-      headers: this.applyHeaders(body),
+      headers: this.applyHeaders(),
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     this.absorb(res);
@@ -187,14 +187,17 @@ describe('auth', () => {
     const { res: first } = await inviteRegister(api, email, 'integration-pass-123');
     expect(first.status).toBe(201);
     // A second registration attempt (invite consumed) is denied without
-    // revealing whether the email exists.
+    // revealing whether the email exists: the invalid invitation fails first
+    // and uniformly.
     const second = await api.post('/api/v1/auth/register', {
       name: 'IT Tester',
       email,
       password: 'integration-pass-123',
       inviteToken: 'wrong',
     });
-    expect([403, 409]).toContain(second.status);
+    expect(second.status).toBe(403);
+    const secondBody = (await second.json()) as { error?: { code?: string } };
+    expect(secondBody.error?.code).toBe('INVITE_REQUIRED');
   });
 
   it('rejects weak passwords', async () => {

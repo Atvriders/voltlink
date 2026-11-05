@@ -46,11 +46,10 @@ async function postJson(agent: ReturnType<typeof request.agent>, url: string, bo
     : await agent.post(url).send(body ?? {});
   if (res.status === 403 && res.body?.error?.code === 'CSRF') {
     const cookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
-    csrf =
-      cookies
-        .map((c) => c.split(';')[0])
-        .find((c) => c.startsWith('vl_csrf='))
-        ?.split('=')[1] ?? csrf;
+    const csrfCookie = cookies
+      .map((c) => (c ?? '').split(';')[0])
+      .find((c) => c?.startsWith('vl_csrf='));
+    csrf = (csrfCookie ?? '').split('=')[1] ?? csrf;
     if (!csrf) throw new Error('CSRF cookie was not issued');
     csrfCache.set(agent, csrf);
     res = await agent
@@ -71,11 +70,10 @@ async function patchJson(agent: ReturnType<typeof request.agent>, url: string, b
     : await agent.patch(url).send(body ?? {});
   if (res.status === 403 && res.body?.error?.code === 'CSRF') {
     const cookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
-    csrf =
-      cookies
-        .map((c) => c.split(';')[0])
-        .find((c) => c.startsWith('vl_csrf='))
-        ?.split('=')[1] ?? csrf;
+    const csrfCookie = cookies
+      .map((c) => (c ?? '').split(';')[0])
+      .find((c) => c?.startsWith('vl_csrf='));
+    csrf = (csrfCookie ?? '').split('=')[1] ?? csrf;
     if (!csrf) throw new Error('CSRF cookie was not issued');
     csrfCache.set(agent, csrf);
     res = await agent

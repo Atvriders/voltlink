@@ -95,6 +95,25 @@ function main(): void {
       'test-inventory: test-results/vitest.json missing — run `npm run test:coverage` first.',
     );
   }
+
+  if (pw) {
+    const stats = (pw.stats ?? {}) as {
+      expected?: number;
+      skipped?: number;
+      unexpected?: number;
+    };
+    // R1: skips and failures are inventory failures, not silent gaps.
+    if ((stats.unexpected ?? 0) > 0) {
+      console.error(`test-inventory: ${stats.unexpected} Playwright test(s) failed.`);
+      process.exit(1);
+    }
+    if ((stats.skipped ?? 0) > 0) {
+      console.error(
+        `test-inventory: ${stats.skipped} Playwright test(s) skipped — nothing may be skipped in CI.`,
+      );
+      process.exit(1);
+    }
+  }
   console.log('test-inventory written to docs/evidence/test-inventory.json');
 }
 

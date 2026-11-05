@@ -7,6 +7,7 @@ import { waitForMigrations } from './cli/migrate';
 import { prisma } from './core/db';
 import { ensureComponents, runStatusChecks } from './status/service';
 import { initRedis } from './core/redis';
+import { ensureSetupToken } from './auth/setup-token';
 
 async function main(): Promise<void> {
   validateEnv();
@@ -15,6 +16,15 @@ async function main(): Promise<void> {
   await waitForMigrations();
   await prisma.$connect();
   await ensureComponents();
+
+  // R2-01: a fresh install without VL_SETUP_TOKEN still gets a way in. The
+  // token is generated once, hashed at rest, and logged exactly once here.
+  const setupToken = await ensureSetupToken();
+  if (setupToken) {
+    console.log(
+      `[voltlink] first-run setup token (shown once; complete setup at /register): ${setupToken}`,
+    );
+  }
 
   const app = buildApp({ serveSpa: true });
   const server = app.listen(env.PORT, env.HOST, () => {

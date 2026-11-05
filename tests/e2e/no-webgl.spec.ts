@@ -9,6 +9,10 @@ test('showroom survives without WebGL and never blanks', async ({ page }) => {
   const email = `e2e-nogl-${Date.now()}@voltlink.test`;
   await register(page, email);
   await enableDemo(page);
+  // The demo fleet must actually exist before the showroom renders (a viewer
+  // over an empty fleet proves nothing).
+  await page.goto('/');
+  await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
 
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(String(err)));

@@ -127,8 +127,8 @@ jobs:
       - run: npm -w @voltlink/shared run build
       - run: npx prisma generate --schema apps/api/prisma/schema.prisma
       - run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
-      - name: Full vitest suite with JSON report
-        run: npx vitest run --maxWorkers=4 --reporter=default --reporter=json --outputFile.json=test-results/vitest.json
+      - name: Full vitest suite with JSON report (coverage thresholds enforced)
+        run: npx vitest run --maxWorkers=4 --coverage --reporter=default --reporter=json --outputFile.json=test-results/vitest.json
       - name: Test inventory (every required category non-zero)
         run: npx tsx scripts/test-inventory.ts
 
@@ -204,15 +204,17 @@ jobs:
       # instance admin (registration is open), so the smoke belongs to the image
       # job's fresh compose stack. The Playwright matrix covers register/demo/
       # command/SSE with stronger assertions here.
-      - name: Playwright matrix (desktop/tablet/mobile/webgl/a11y/visual/legacy)
+      - name: Playwright matrix (desktop/tablet/mobile/webgl/a11y/visual)
         run: |
           npx playwright install --with-deps chromium
-          # 3 workers cap parallel demo-fleet provisioning so the queue stays ahead
-          # of the 90s demo waits instead of tripping the 30s ones.
-          npx playwright test --workers=3
+          npx playwright test \
+            --project=desktop --project=tablet --project=mobile \
+            --project=webgl-swiftshader --project=no-webgl --project=a11y
         env:
           E2E_BASE_URL: http://127.0.0.1:3111
           VL_E2E_SMTP_HTTP: http://127.0.0.1:1026
+      - name: Test inventory (no e2e skips, no e2e failures)
+        run: npx tsx scripts/test-inventory.ts
       - name: Tesla e2e against the fake Fleet API
         run: bash scripts/e2e/tesla-e2e.sh
         env:

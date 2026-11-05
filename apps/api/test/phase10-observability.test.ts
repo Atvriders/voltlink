@@ -5,6 +5,7 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import request from 'supertest';
 import { buildApp } from '../src/app';
+import { initRedis } from '../src/core/redis';
 import { prisma } from '../src/core/db';
 import { metricsText } from '../src/core/metrics';
 
@@ -12,6 +13,7 @@ let server: Server;
 let base: string;
 
 beforeAll(async () => {
+  await initRedis();
   const app = buildApp();
   server = app.listen(0);
   await new Promise<void>((resolve) => server.once('listening', resolve));
@@ -50,9 +52,11 @@ describe('observability', () => {
     const liveness = await request(base).get('/healthz');
     expect(liveness.status).toBe(200);
     const ready = await request(base).get('/readyz');
-    // 200 with a migrated template DB, or 503 with an explicit reason.
-    expect([200, 503]).toContain(ready.status);
+    // The template DB is migrated and the test Redis is up: readiness must
+    // answer 200. A 503 here means the boot gate is broken.
+    expect(ready.status).toBe(200);
     const body = ready.body as { ready?: boolean; reason?: string };
-    if (ready.status === 503) expect(body.reason).toBeTruthy();
+    expect(body.ready).toBe(true);
+    expect(body.reason).toBeUndefined();
   });
 });

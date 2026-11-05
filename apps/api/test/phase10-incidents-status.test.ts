@@ -60,20 +60,20 @@ describe('status platform', () => {
       let res = await request(base)
         .post(url)
         .set('Cookie', `vl_session=${sessionToken}`)
-        .send(body);
+        .send(body as object);
       if (res.status === 403 && res.body?.error?.code === 'CSRF') {
         const setCookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
         const csrf =
           setCookies
-            .map((c) => c.split(';')[0])
-            .find((c) => c.startsWith('vl_csrf='))
+            .map((c) => (c ?? '').split(';')[0])
+            .find((c) => c?.startsWith('vl_csrf='))
             ?.split('=')[1] ?? '';
         expect(csrf).toBeTruthy();
         res = await request(base)
           .post(url)
           .set('Cookie', `vl_session=${sessionToken}; vl_csrf=${csrf}`)
           .set('x-vl-csrf', csrf)
-          .send(body);
+          .send(body as object);
       }
       return res;
     };

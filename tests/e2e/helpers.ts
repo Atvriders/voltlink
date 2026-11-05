@@ -78,11 +78,9 @@ export async function enableDemo(page: Page): Promise<void> {
   await page.goto('/providers');
   await page.waitForURL(/providers/);
   const demoBtn = page.getByRole('button', { name: /Enable demo mode|Refresh demo fleet/ }).first();
-  // The button only appears once the accounts query resolves; give it a beat
-  // instead of skipping demo mode when the page is still loading.
-  await demoBtn.waitFor({ state: 'visible', timeout: 15000 }).catch(() => undefined);
-  if (await demoBtn.count()) {
-    await demoBtn.click();
-    await expect(page.getByText(/demo vehicles/)).toBeVisible({ timeout: 90000 });
-  }
+  // The button appears once the accounts query resolves. Demo mode is a hard
+  // requirement of every downstream assertion: fail if it never shows up.
+  await demoBtn.waitFor({ state: 'visible', timeout: 15000 });
+  await demoBtn.click();
+  await expect(page.getByText(/demo vehicles/)).toBeVisible({ timeout: 30000 });
 }

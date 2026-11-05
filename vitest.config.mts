@@ -81,7 +81,17 @@ export default defineConfig({
       ],
       exclude: ['**/*.test.*', '**/*.d.ts', 'apps/web/src/main.tsx', 'apps/api/src/cli/**'],
       reporter: ['text-summary', 'json-summary', 'lcov', 'html'],
-      thresholds: { lines: 30, statements: 30, functions: 28, branches: 25 },
+      // Guide 08 §5 (restored from the weakened 30/30/28/25): global 75/75/75/
+      // 65, auth + commands at 90/85, and the access resolver at 95/90.
+      thresholds: {
+        lines: 75,
+        statements: 75,
+        functions: 75,
+        branches: 65,
+        '**/auth/**/*.ts': { lines: 90, statements: 90, functions: 85, branches: 85 },
+        '**/commands/**/*.ts': { lines: 90, statements: 90, functions: 85, branches: 85 },
+        '**/authz/access.ts': { lines: 95, statements: 95, functions: 90, branches: 90 },
+      },
     },
   },
 });

@@ -52,8 +52,8 @@ async function withCsrf(
     const cookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
     csrf =
       cookies
-        .map((c) => c.split(';')[0])
-        .find((c) => c.startsWith('vl_csrf='))
+        .map((c) => (c ?? '').split(';')[0])
+        .find((c) => c?.startsWith('vl_csrf='))
         ?.split('=')[1] ?? '';
     if (!csrf) throw new Error('CSRF cookie was not issued');
     csrfCache.set(agent, csrf);
