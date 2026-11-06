@@ -176,7 +176,7 @@ describe('realtime SSE client', () => {
     realtimeStart({ vehicle_state: onVehicleState });
 
     expect(FakeEventSource.instances).toHaveLength(1);
-    const source = FakeEventSource.instances[0];
+    const source = FakeEventSource.instances[0]!;
     expect(source.url).toBe('/api/v1/realtime');
 
     source.emit('vehicle_state');
@@ -191,7 +191,7 @@ describe('realtime SSE client', () => {
 
     expect(FakeEventSource.instances).toHaveLength(1);
 
-    FakeEventSource.instances[0].emit('notification');
+    FakeEventSource.instances[0]!.emit('notification');
     expect(onNotification).toHaveBeenCalledTimes(1);
   });
 
@@ -199,7 +199,7 @@ describe('realtime SSE client', () => {
     const onCommandFinished = vi.fn();
 
     realtimeStart({ command_finished: onCommandFinished });
-    const source = FakeEventSource.instances[0];
+    const source = FakeEventSource.instances[0]!;
 
     realtimeStop();
 
@@ -216,8 +216,8 @@ describe('realtime SSE client', () => {
 
     expect(FakeEventSource.instances).toHaveLength(1);
 
-    FakeEventSource.instances[0].onerror?.();
-    expect(FakeEventSource.instances[0].closed).toBe(true);
+    FakeEventSource.instances[0]!.onerror?.();
+    expect(FakeEventSource.instances[0]!.closed).toBe(true);
 
     await vi.advanceTimersByTimeAsync(5000);
 

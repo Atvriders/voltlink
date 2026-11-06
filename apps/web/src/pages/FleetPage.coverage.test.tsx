@@ -490,7 +490,7 @@ describe('FleetPage', () => {
 
     await screen.findByRole('option', { name: 'Aurora' });
     const combos = screen.getAllByRole('combobox');
-    fireEvent.change(combos[0], { target: { value: 'v1' } });
+    fireEvent.change(combos[0]!, { target: { value: 'v1' } });
 
     await user.type(screen.getByRole('textbox'), 'Oil change');
 

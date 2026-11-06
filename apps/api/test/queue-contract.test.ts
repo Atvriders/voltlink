@@ -328,7 +328,7 @@ describe('retries and dead-lettering', () => {
       while (Date.now() < deadline) {
         const raw = await q.getJob(job.id!);
         state = raw ? { attemptsMade: raw.attemptsMade, failedReason: raw.failedReason } : null;
-        if (state && state.attemptsMade >= 2 && state.failedReason) break;
+        if (state && (state.attemptsMade ?? 0) >= 2 && state.failedReason) break;
         await new Promise((r) => setTimeout(r, 100));
       }
       expect(state?.attemptsMade).toBe(2);

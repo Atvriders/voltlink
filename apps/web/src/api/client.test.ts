@@ -30,9 +30,9 @@ describe('api client', () => {
       .mockResolvedValueOnce(jsonRes({ data: { ok: true } }));
     const out = await api('/api/v1/x', { method: 'POST', body: { a: 1 } });
     expect(out).toEqual({ ok: true });
-    const csrfCall = fetchMock.mock.calls[0];
+    const csrfCall = fetchMock.mock.calls[0]!;
     expect(csrfCall[0]).toBe('/api/v1/auth/csrf');
-    const sendCall = fetchMock.mock.calls[1];
+    const sendCall = fetchMock.mock.calls[1]!;
     expect(sendCall[1]?.headers).toMatchObject({ 'X-VL-CSRF': 'tok-1' });
   });
 

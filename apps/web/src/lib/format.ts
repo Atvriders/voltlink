@@ -23,12 +23,12 @@ export function fmtTemp(c: number | undefined, units: Units): string {
   return `${Math.round(c)}°C`;
 }
 
-export function fmtPower(kw: number | undefined): string {
+export function fmtPower(kw: number | null | undefined): string {
   if (kw === undefined || kw === null) return '—';
   return `${kw.toFixed(1)} kW`;
 }
 
-export function fmtEnergy(kwh: number | undefined): string {
+export function fmtEnergy(kwh: number | null | undefined): string {
   if (kwh === undefined || kwh === null) return '—';
   return `${kwh.toFixed(1)} kWh`;
 }
@@ -77,14 +77,14 @@ export function fmtEfficiency(whPerKm: number | undefined, units: Units): string
 }
 
 /** kPa (metric) or psi (imperial). */
-export function fmtPressure(kpa: number | undefined, units: Units): string {
+export function fmtPressure(kpa: number | null | undefined, units: Units): string {
   if (kpa === undefined || kpa === null) return '—';
   if (units === 'imperial') return `${Math.round(kpa * 0.1450377)} psi`;
   return `${Math.round(kpa)} kPa`;
 }
 
 /** Metres (metric) or feet (imperial). */
-export function fmtElevation(m: number | undefined, units: Units): string {
+export function fmtElevation(m: number | null | undefined, units: Units): string {
   if (m === undefined || m === null) return '—';
   if (units === 'imperial') return `${Math.round(m * 3.28084).toLocaleString()} ft`;
   return `${Math.round(m).toLocaleString()} m`;

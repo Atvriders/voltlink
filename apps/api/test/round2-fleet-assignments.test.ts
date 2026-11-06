@@ -29,7 +29,7 @@ afterAll(async () => {
 const csrfCache = new WeakMap<object, string>();
 async function postJson(agent: ReturnType<typeof request.agent>, path: string, body: unknown) {
   let csrf = csrfCache.get(agent);
-  let res = await agent.post(path).set('x-vl-csrf', csrf ?? '').send(body);
+  let res = await agent.post(path).set('x-vl-csrf', csrf ?? '').send(body as object);
   if (res.status === 403 && res.body?.error?.code === 'CSRF') {
     const cookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
     csrf =
@@ -38,13 +38,13 @@ async function postJson(agent: ReturnType<typeof request.agent>, path: string, b
         .find((c) => c?.startsWith('vl_csrf='))
         ?.split('=')[1] ?? '';
     csrfCache.set(agent, csrf);
-    res = await agent.post(path).set('x-vl-csrf', csrf).send(body);
+    res = await agent.post(path).set('x-vl-csrf', csrf).send(body as object);
   }
   return res;
 }
 async function patchJson(agent: ReturnType<typeof request.agent>, path: string, body: unknown) {
   let csrf = csrfCache.get(agent);
-  let res = await agent.patch(path).set('x-vl-csrf', csrf ?? '').send(body);
+  let res = await agent.patch(path).set('x-vl-csrf', csrf ?? '').send(body as object);
   if (res.status === 403 && res.body?.error?.code === 'CSRF') {
     const cookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
     csrf =
@@ -53,7 +53,7 @@ async function patchJson(agent: ReturnType<typeof request.agent>, path: string, 
         .find((c) => c?.startsWith('vl_csrf='))
         ?.split('=')[1] ?? '';
     csrfCache.set(agent, csrf);
-    res = await agent.patch(path).set('x-vl-csrf', csrf).send(body);
+    res = await agent.patch(path).set('x-vl-csrf', csrf).send(body as object);
   }
   return res;
 }

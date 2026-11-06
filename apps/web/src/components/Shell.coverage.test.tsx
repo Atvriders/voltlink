@@ -182,7 +182,7 @@ describe('Shell page', () => {
         }
       >
         <MemoryRouter initialEntries={['/']}>
-          <SelectedVehicleProvider userId={shellUser.id}>
+          <SelectedVehicleProvider userId={shellUser!.id}>
             <Routes>
               <Route
                 path="*"
@@ -243,7 +243,7 @@ describe('Shell page', () => {
     expect(within(menu).getByPlaceholderText('Search vehicles')).toBeTruthy();
     expect(within(menu).getByText('Team')).toBeTruthy();
 
-    await user.click(within(menu).getAllByText('Aurora')[0]);
+    await user.click(within(menu).getAllByText('Aurora')[0]!);
 
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
     expect(screen.getByText('Page body')).toBeTruthy();
@@ -321,7 +321,7 @@ describe('Shell page', () => {
     renderShell();
 
     const accountButtons = screen.getAllByRole('button', { name: 'Account menu' });
-    await user.click(accountButtons[0]);
+    await user.click(accountButtons[0]!);
 
     expect(await screen.findByText(/Signed in as/)).toBeTruthy();
     await user.click(screen.getByRole('menuitem', { name: /Sign out/ }));

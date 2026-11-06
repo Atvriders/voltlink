@@ -123,9 +123,10 @@ function renderPage(path: string, ui: React.ReactNode) {
 
 afterEach(cleanup);
 
+import type { ReactElement } from 'react';
 import { ErrorBoundary, RouteErrorFallback, RootErrorFallback } from './boundaries';
 
-function Boom(): JSX.Element {
+function Boom(): ReactElement {
   throw new Error('boom');
 }
 

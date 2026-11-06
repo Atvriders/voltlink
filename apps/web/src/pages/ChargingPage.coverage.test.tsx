@@ -262,7 +262,7 @@ describe('ChargingPage', () => {
     const user = userEvent.setup();
     renderPage('/charging', <ChargingPage />);
     const adjustButtons = await screen.findAllByText('Adjust');
-    await user.click(adjustButtons[0]);
+    await user.click(adjustButtons[0]!);
     expect(screen.getByText('Correct charging cost')).toBeTruthy();
 
     const input = screen.getByRole('spinbutton');
@@ -363,7 +363,7 @@ describe('ChargingPage', () => {
     renderPage('/charging', <ChargingPage />);
     const adjustButtons = await screen.findAllByText('Adjust');
 
-    await user.click(adjustButtons[0]);
+    await user.click(adjustButtons[0]!);
     expect(screen.getByText('Correct charging cost')).toBeTruthy();
     await user.click(screen.getByText('Cancel'));
     await waitFor(() => expect(screen.queryByText('Correct charging cost')).toBeNull());

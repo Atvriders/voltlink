@@ -269,8 +269,8 @@ describe('AutomationsPage', () => {
     await user.type(nameInput, 'Nightly check');
 
     const selects = screen.getAllByRole('combobox');
-    fireEvent.change(selects[0], { target: { value: 'battery_threshold' } });
-    fireEvent.change(selects[2], { target: { value: 'webhook' } });
+    fireEvent.change(selects[0]!, { target: { value: 'battery_threshold' } });
+    fireEvent.change(selects[2]!, { target: { value: 'webhook' } });
 
     expect(
       await screen.findByText(/"Nightly check": when battery threshold, webhook\./),

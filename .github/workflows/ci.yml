@@ -89,6 +89,8 @@ jobs:
           SHADOW_DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/shadow
       - name: Build (bundle + selftest entry + SPA)
         run: npm run build
+      - name: Bundle guard (no three/map/charts preloads)
+        run: npm run check:bundle
       - name: Legacy scan
         run: npm run legacy:scan
       - name: Naming scan

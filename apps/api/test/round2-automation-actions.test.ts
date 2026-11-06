@@ -82,7 +82,7 @@ describe('automation actions are real (N-ACTIONSTUBS)', () => {
     const auto = await automation({
       actions: JSON.parse('[{"type":"tag_drive","params":{"tag":"automation-trip"}}]'),
     });
-    const res = await runAutomation(auto.id, { type: 'drive_started', vehicleId: vehicle.id });
+    const res = await runAutomation(auto.id, { type: 'drive_started', vehicleId: vehicle.id } as never);
     expect(res.result).toBe('success');
     const after = await prisma.drive.findUniqueOrThrow({ where: { id: drive.id } });
     expect(after.tags).toContain('automation-trip');
@@ -108,7 +108,7 @@ describe('automation actions are real (N-ACTIONSTUBS)', () => {
         now: new Date(),
       }),
     ).toBe(false);
-    const ran = await runAutomation(auto.id, { type: 'drive_started' });
+    const ran = await runAutomation(auto.id, { type: 'drive_started' } as never);
     expect(ran.result).toBe('success');
   });
 
@@ -120,7 +120,7 @@ describe('automation actions are real (N-ACTIONSTUBS)', () => {
         '[{"type":"notify_app","params":{"message":"attempt"}},{"type":"set_charge_limit","params":{"chargeLimitPct":5}}]',
       ),
     });
-    const res = await runAutomation(auto.id, { type: 'drive_started', vehicleId: vehicle.id });
+    const res = await runAutomation(auto.id, { type: 'drive_started', vehicleId: vehicle.id } as never);
     expect(res.result).toBe('failed');
     // notify_app runs once per attempt: 1 + maxRetries = 3 in-app rows.
     const inbox = await prisma.appNotification.count({
@@ -147,7 +147,7 @@ describe('automation actions are real (N-ACTIONSTUBS)', () => {
         },
       });
     }
-    const res = await runAutomation(auto.id, { type: 'scheduled' });
+    const res = await runAutomation(auto.id, { type: 'scheduled' } as never);
     expect(res.result).toBe('budget_exceeded');
     expect(res.actionResults).toEqual([]);
   });

@@ -74,7 +74,7 @@ async function postJson(
   body: unknown,
 ): Promise<request.Response> {
   let csrf = csrfCache.get(agent);
-  let res = await agent.post(path).set('x-vl-csrf', csrf ?? '').send(body);
+  let res = await agent.post(path).set('x-vl-csrf', csrf ?? '').send(body as object);
   if (res.status === 403) console.error('CSRF PROBE', path, JSON.stringify(res.body), res.headers['set-cookie']);
   if (res.status === 403 && res.body?.error?.code === 'CSRF') {
     const cookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
@@ -84,7 +84,7 @@ async function postJson(
         .find((c) => c?.startsWith('vl_csrf='))
         ?.split('=')[1] ?? '';
     csrfCache.set(agent, csrf);
-    res = await agent.post(path).set('x-vl-csrf', csrf).send(body);
+    res = await agent.post(path).set('x-vl-csrf', csrf).send(body as object);
   }
   return res;
 }

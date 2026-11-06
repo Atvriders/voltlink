@@ -275,7 +275,7 @@ describe('NotificationsPage', () => {
     renderPage('/notifications', <NotificationsPage />);
     await user.click(screen.getByRole('tab', { name: /preferences/i }));
     const inputs = await screen.findAllByPlaceholderText('https://…');
-    await user.type(inputs[0], 'https://ntfy.example.test/topic');
+    await user.type(inputs[0]!, 'https://ntfy.example.test/topic');
     await user.click(screen.getByRole('button', { name: /save channels/i }));
     await waitFor(() =>
       expect(apiMock).toHaveBeenCalledWith(
@@ -313,8 +313,8 @@ describe('NotificationsPage', () => {
     await user.click(screen.getByRole('tab', { name: /webhooks/i }));
     await user.click(await screen.findByRole('button', { name: /add webhook/i }));
     const textboxes = screen.getAllByRole('textbox');
-    await user.type(textboxes[0], 'New relay');
-    await user.type(textboxes[1], 'https://hooks.example.test/new');
+    await user.type(textboxes[0]!, 'New relay');
+    await user.type(textboxes[1]!, 'https://hooks.example.test/new');
     await user.click(screen.getByRole('button', { name: 'Create' }));
     await waitFor(() =>
       expect(apiMock).toHaveBeenCalledWith(
