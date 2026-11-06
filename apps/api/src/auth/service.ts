@@ -182,7 +182,9 @@ async function verifySetupToken(input: string): Promise<void> {
       'No setup token is available on this instance.',
       500,
     );
-  const a = Buffer.from(sha256hex(input));
+  // setup-token.ts stores sha256hex(token) (the hex string), so compare the
+  // decoded digest bytes with the stored digest bytes.
+  const a = Buffer.from(sha256hex(input), 'hex');
   const b = Buffer.from(row.value, 'hex');
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b))
     throw new AuthError('SETUP_TOKEN_INVALID', 'The setup token is incorrect.', 401);
