@@ -1,8 +1,10 @@
 # syntax=docker/dockerfile:1
 # VoltLink — self-hosted connected-vehicle platform.
 # Multi-role single image: VL_ROLE = web | worker | scheduler | status | migrate | selftest.
-# Pin by digest in CI (Dependabot bumps it): docker buildx imagetools inspect node:24-bookworm-slim.
-ARG NODE_IMAGE=node:24-bookworm-slim
+# Pin by digest in CI (Dependabot bumps it). amd64 digest of
+# node:24-bookworm-slim (multi-arch list): replace with a per-arch digest if
+# building for other platforms.
+ARG NODE_IMAGE=node:24-bookworm-slim@sha256:c0a93797ee78814ae6d32fcca2561fdbbe423149c3f5389aad32d86e9fd85bd4
 
 FROM ${NODE_IMAGE} AS os
 # openssl: Prisma 6 picks its engine from the detected OpenSSL.

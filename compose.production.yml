@@ -8,7 +8,9 @@
 name: voltlink
 
 x-voltlink-common: &voltlink
-  image: ghcr.io/atvriders/voltlink:${VOLTLINK_IMAGE_TAG:-latest}
+  # VOLTLINK_IMAGE_DIGEST pins the exact digest (I-V100): the reference
+  # becomes repo:tag@sha256:<digest> and verify-published boots by digest.
+  image: ghcr.io/atvriders/voltlink:${VOLTLINK_IMAGE_TAG:-latest}${VOLTLINK_IMAGE_DIGEST:-}
   restart: unless-stopped
   pull_policy: always
   init: true
