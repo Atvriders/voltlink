@@ -125,3 +125,17 @@ describe('buildTeslaSteps', () => {
     );
   });
 });
+
+  it('covers remaining parameter defaults and nullish branches', () => {
+    expect(buildTeslaSteps('set_charging_amps', {}, ctx)[0]!.body).toEqual({ charging_amps: 32 });
+    expect(buildTeslaSteps('set_charge_limit', {}, ctx)[0]!.body).toEqual({ percent: 80 });
+    expect(buildTeslaSteps('steering_heater', { steeringOn: false }, ctx)[0]!.body).toEqual({
+      on: false,
+    });
+    expect(buildTeslaSteps('seat_heater', {}, ctx)[0]!.body.level).toBe(1);
+    const noDest = buildTeslaSteps('send_navigation', { destination: undefined as never }, ctx)[0]!;
+    expect((noDest.body.value as Record<string, string>)['android.intent.extra.TEXT']).toBe('');
+    expect(buildTeslaSteps('schedule_update', { updateDelaySec: 0 }, ctx)[0]!.body).toEqual({
+      offset_sec: 0,
+    });
+  });
