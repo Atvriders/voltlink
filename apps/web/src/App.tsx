@@ -42,6 +42,8 @@ const StatusAdminPage = lazy(() => import('./pages/StatusAdminPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage'));
+const VehiclesPage = lazy(() => import('./pages/VehiclesPage'));
+const CommandHistoryPage = lazy(() => import('./pages/CommandHistoryPage'));
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({
@@ -105,6 +107,8 @@ function AuthenticatedLayout() {
         >
           <Routes>
             <Route path="/onboarding" element={<OnboardingPage />} />
+            <Route path="/vehicles" element={<VehiclesPage />} />
+            <Route path="/vehicles/:id/history" element={<CommandHistoryPage />} />
             <Route path="/vehicles/:id" element={<LiveVehiclePage />} />
             <Route path="/showroom" element={<ShowroomPage />} />
             <Route path="/map" element={<MapPage />} />
