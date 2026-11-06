@@ -123,20 +123,9 @@ function renderPage(path: string, ui: React.ReactNode) {
 
 afterEach(cleanup);
 
-function renderApp(path: string) {
-  window.history.pushState({}, '', path);
-  const qc = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={qc}>
-      <App />
-    </QueryClientProvider>,
-  );
-}
-
+import userEvent from '@testing-library/user-event';
+import { act } from '@testing-library/react';
 import App from './App';
-import { fireEvent } from '@testing-library/react';
 
 vi.mock('./api/client', () => ({
   api: (...args: unknown[]) => apiMock(...args),
@@ -155,105 +144,189 @@ vi.mock('./api/client', () => ({
 }));
 
 vi.mock('./auth/AuthContext', () => ({
-  useAuth: () => authState,
   AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useAuth: () => authState,
 }));
 
-vi.mock('./lib/vehicleSelection', () => ({
-  SelectedVehicleProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    BrowserRouter: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  };
+});
 
 vi.mock('./components/Shell', () => ({
-  Shell: ({ children }: { children: React.ReactNode }) => (
-    <div>
-      <nav>VoltLink shell</nav>
-      {children}
-    </div>
-  ),
+  Shell: ({ children }: { children: React.ReactNode }) => <div data-testid="shell">{children}</div>,
 }));
 
 vi.mock('./components/StepUpDialog', () => ({
   StepUpDialogHost: () => null,
 }));
 
-vi.mock('./lib/toast', () => ({
-  toast: { error: vi.fn() },
-  ToastRegion: () => null,
-  errorText: (e: unknown) => String(e),
-}));
-
-vi.mock('./components/boundaries', () => ({
-  ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  RouteErrorFallback: () => <div>Route error</div>,
-}));
-
 vi.mock('./components/ui', () => ({
-  Spinner: () => <div>Loading…</div>,
+  Spinner: () => <div>Loading</div>,
 }));
 
-vi.mock('./pages/OverviewPage', () => ({
-  default: () => <div>Overview page stub</div>,
+vi.mock('./lib/vehicleSelection', () => ({
+  SelectedVehicleProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-vi.mock('./pages/LoginPage', () => ({
-  default: () => <div>Login page stub</div>,
-}));
-
-vi.mock('./pages/RegisterPage', () => ({
-  default: () => <div>Register page stub</div>,
-}));
-
-vi.mock('./pages/SetupPage', () => ({
-  default: () => <div>Setup page stub</div>,
-}));
-
+vi.mock('./pages/OverviewPage', () => ({ default: () => <div>Overview page</div> }));
+vi.mock('./pages/LiveVehiclePage', () => ({ default: () => <div>Live vehicle page</div> }));
+vi.mock('./pages/ShowroomPage', () => ({ default: () => <div>Showroom page</div> }));
+vi.mock('./pages/MapPage', () => ({ default: () => <div>Map page</div> }));
+vi.mock('./pages/DrivesPage', () => ({ default: () => <div>Drives page</div> }));
+vi.mock('./pages/DriveDetailPage', () => ({ default: () => <div>Drive detail page</div> }));
+vi.mock('./pages/ChargingPage', () => ({ default: () => <div>Charging page</div> }));
+vi.mock('./pages/BatteryPage', () => ({ default: () => <div>Battery page</div> }));
+vi.mock('./pages/AutomationsPage', () => ({ default: () => <div>Automations page</div> }));
+vi.mock('./pages/NotificationsPage', () => ({ default: () => <div>Notifications page</div> }));
+vi.mock('./pages/FleetPage', () => ({ default: () => <div>Fleet page</div> }));
+vi.mock('./pages/ProvidersPage', () => ({ default: () => <div>Providers page</div> }));
+vi.mock('./pages/StatusAdminPage', () => ({ default: () => <div>Status admin page</div> }));
+vi.mock('./pages/AdminPage', () => ({ default: () => <div>Admin page</div> }));
+vi.mock('./pages/SettingsPage', () => ({ default: () => <div>Settings page</div> }));
+vi.mock('./pages/OnboardingPage', () => ({ default: () => <div>Onboarding page</div> }));
+vi.mock('./pages/LoginPage', () => ({ default: () => <div>Login page</div> }));
+vi.mock('./pages/RegisterPage', () => ({ default: () => <div>Register page</div> }));
+vi.mock('./pages/SetupPage', () => ({ default: () => <div>Setup page</div> }));
+vi.mock('./pages/PublicStatusPage', () => ({ default: () => <div>Public status page</div> }));
+vi.mock('./pages/PresentationPage', () => ({ default: () => <div>Presentation page</div> }));
 vi.mock('./pages/ResetPasswordPage', () => ({
-  ForgotPasswordPage: () => <div>Forgot password page stub</div>,
-  ResetPasswordPage: () => <div>Reset password page stub</div>,
-  VerifyEmailPage: () => <div>Verify email page stub</div>,
+  ForgotPasswordPage: () => <div>Forgot password page</div>,
+  ResetPasswordPage: () => <div>Reset password page</div>,
+  VerifyEmailPage: () => <div>Verify email page</div>,
 }));
 
-vi.mock('./pages/PublicStatusPage', () => ({
-  default: () => <div>Public status page stub</div>,
-}));
+describe('App shell and routing', () => {
+  const authedUser = {
+    id: 'u1',
+    email: 'alice@example.test',
+    name: 'Alice',
+    units: 'metric',
+    timezone: 'UTC',
+    theme: 'voltlink-dark',
+    totpEnabled: false,
+    demoEnabled: true,
+    isInstanceAdmin: true,
+  } as typeof authState.user;
 
-describe('App shell router', () => {
+  function renderApp(path: string) {
+    return renderPage(path, <App />);
+  }
+
   beforeEach(() => {
-    Object.defineProperty(window, 'scrollTo', { value: vi.fn(), writable: true });
-    window.matchMedia =
-      window.matchMedia ||
-      (((q: string) => ({
-        matches: false,
-        media: q,
-        onchange: null,
-        addListener: () => {},
-        removeListener: () => {},
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-      })) as unknown as typeof window.matchMedia);
+    authState.user = authedUser;
+    authState.loading = false;
+    authState.login.mockClear();
+    authState.loginMfa.mockClear();
+    authState.logout.mockClear();
+    authState.refresh.mockClear();
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
   });
 
-  it('renders the overview page inside the authenticated shell', async () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete (navigator as unknown as { serviceWorker?: unknown }).serviceWorker;
+  });
+
+  it('shows the loading fallback while auth is loading', () => {
+    authState.loading = true;
     renderApp('/');
-
-    expect(await screen.findByText('Overview page stub')).toBeTruthy();
-    expect(screen.getByText('VoltLink shell')).toBeTruthy();
+    expect(screen.getByText('Loading')).toBeInTheDocument();
+    expect(screen.queryByTestId('shell')).not.toBeInTheDocument();
   });
 
-  it('renders the not found page for an unknown authenticated route', async () => {
+  it('redirects unauthenticated users to the login page', async () => {
+    authState.user = null as unknown as typeof authState.user;
+    renderApp('/');
+    expect(await screen.findByText('Login page')).toBeInTheDocument();
+  });
+
+  it('renders the authenticated overview and scrolls to top', async () => {
+    renderApp('/');
+    expect(await screen.findByText('Overview page')).toBeInTheDocument();
+    expect(screen.getByTestId('shell')).toBeInTheDocument();
+    expect(window.scrollTo).toHaveBeenCalledWith(0, 0);
+  });
+
+  it('renders nested authenticated routes', async () => {
+    renderApp('/showroom');
+    expect(await screen.findByText('Showroom page')).toBeInTheDocument();
+
+    cleanup();
+    renderApp('/settings/profile');
+    expect(await screen.findByText('Settings page')).toBeInTheDocument();
+  });
+
+  it('renders NotFound and navigates back to overview', async () => {
+    const user = userEvent.setup();
     renderApp('/does-not-exist');
+    expect(await screen.findByText('Page not found')).toBeInTheDocument();
 
-    expect(await screen.findByText('Page not found')).toBeTruthy();
-    expect(screen.getByText(/That address does not exist/i)).toBeTruthy();
+    await user.click(screen.getByRole('link', { name: /back to overview/i }));
+
+    expect(await screen.findByText('Overview page')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('Page not found')).not.toBeInTheDocument());
   });
 
-  it('navigates back to the overview from the not found page', async () => {
-    renderApp('/missing');
+  it('renders public authentication routes', async () => {
+    renderApp('/login');
+    expect(await screen.findByText('Login page')).toBeInTheDocument();
 
-    const link = await screen.findByRole('link', { name: /back to overview/i });
-    fireEvent.click(link);
+    cleanup();
+    renderApp('/register');
+    expect(await screen.findByText('Register page')).toBeInTheDocument();
 
-    expect(await screen.findByText('Overview page stub')).toBeTruthy();
+    cleanup();
+    renderApp('/setup');
+    expect(await screen.findByText('Setup page')).toBeInTheDocument();
+
+    cleanup();
+    renderApp('/forgot-password');
+    expect(await screen.findByText('Forgot password page')).toBeInTheDocument();
+
+    cleanup();
+    renderApp('/reset-password');
+    expect(await screen.findByText('Reset password page')).toBeInTheDocument();
+
+    cleanup();
+    renderApp('/verify-email');
+    expect(await screen.findByText('Verify email page')).toBeInTheDocument();
+  });
+
+  it('renders the public status page', async () => {
+    renderApp('/status');
+    expect(await screen.findByText('Public status page')).toBeInTheDocument();
+  });
+
+  it('renders the protected presentation route for signed-in users', async () => {
+    renderApp('/presentation');
+    expect(await screen.findByText('Presentation page')).toBeInTheDocument();
+  });
+
+  it('navigates when the service worker sends a navigation message', async () => {
+    const listeners: Array<(event: MessageEvent) => void> = [];
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: {
+        addEventListener: (_type: string, listener: (event: MessageEvent) => void) => {
+          listeners.push(listener);
+        },
+        removeEventListener: vi.fn(),
+      },
+    });
+
+    renderApp('/');
+    expect(await screen.findByText('Overview page')).toBeInTheDocument();
+
+    act(() => {
+      listeners.forEach((listener) =>
+        listener({ data: { type: 'voltlink:navigate', path: '/showroom' } } as MessageEvent),
+      );
+    });
+
+    expect(await screen.findByText('Showroom page')).toBeInTheDocument();
   });
 });

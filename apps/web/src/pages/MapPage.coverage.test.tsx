@@ -44,13 +44,6 @@ const authState = {
   refresh: vi.fn().mockResolvedValue(undefined),
 };
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => authState }));
-vi.mock('../components/MapView', () => ({
-  default: (props: { layers?: unknown[]; height?: number | string }) => (
-    <div data-testid="mapview">{String((props.layers ?? []).length)} layers</div>
-  ),
-  circleGeoJson: () => ({ type: 'Feature' }),
-  routeGeoJson: () => ({ type: 'Feature' }),
-}));
 
 const vehicle = {
   id: 'v1',
@@ -132,120 +125,514 @@ function renderPage(path: string, ui: React.ReactNode) {
 
 afterEach(cleanup);
 
+import userEvent from '@testing-library/user-event';
+import { fireEvent, within } from '@testing-library/react';
 import MapPage from './MapPage';
 
-const placeFixtures = [
-  { id: 'p1', name: 'Home Base', type: 'home', lat: 47.6, lon: -122.3, radiusM: 150 },
-];
-const fenceFixtures = [
-  {
-    id: 'g1',
-    name: 'Work Ring',
-    lat: 47.61,
-    lon: -122.31,
-    radiusM: 1200,
-    enabled: true,
-    alertOn: 'both',
-  },
-];
-const zoneFixtures = [
-  { id: 'z1', name: 'Private Block', lat: 47.62, lon: -122.32, radiusM: 300, enabled: true },
-];
-const chargeFixtures = [
-  { id: 'c1', lat: 47.6, lon: -122.3, locationName: 'Downtown Charger', vehicleName: 'Aurora' },
-];
+const { setVehicleMock, announceMock } = vi.hoisted(() => ({
+  setVehicleMock: vi.fn(),
+  announceMock: vi.fn(),
+}));
+
+vi.mock('../lib/vehicleSelection', () => ({
+  useSelectedVehicle: () => ({ selectedId: null, setVehicle: setVehicleMock }),
+}));
+
+vi.mock('../lib/announcer', () => ({
+  useAnnounce: () => announceMock,
+}));
+
+vi.mock('../components/map/useMapStyle', () => ({
+  useMapStyle: () => ({ mode: 'demo' }),
+}));
+
+vi.mock('../components/map/GeocodeSearch', () => ({
+  default: ({
+    onChoose,
+  }: {
+    onChoose: (r: { label: string; lat: number; lon: number; kind: string }) => void;
+  }) => (
+    <button
+      type="button"
+      onClick={() =>
+        onChoose({ label: 'Geocoded Place', lat: 47.6, lon: -122.3, kind: 'charger' })
+      }
+    >
+      Choose geocode result
+    </button>
+  ),
+}));
+
+vi.mock('../components/MapView', () => {
+  const routeGeoJson = vi.fn(() => ({
+    type: 'Feature',
+    geometry: { type: 'LineString', coordinates: [] },
+    properties: {},
+  }));
+  const circleGeoJson = vi.fn(() => ({
+    type: 'Feature',
+    geometry: { type: 'Polygon', coordinates: [] },
+    properties: {},
+  }));
+
+  return {
+    default: ({
+      onReady,
+      onPointPick,
+    }: {
+      onReady?: (map: {
+        flyTo: () => void;
+        getCenter: () => { lat: number; lng: number };
+      }) => void;
+      onPointPick?: (lat: number, lon: number) => void;
+    }) => (
+      <div data-testid="map-view">
+        <button
+          type="button"
+          onClick={() => {
+            onReady?.({
+              flyTo: vi.fn(),
+              getCenter: () => ({ lat: 47.6, lng: -122.3 }),
+            });
+            onPointPick?.(47.6, -122.3);
+          }}
+        >
+          Pick map point
+        </button>
+      </div>
+    ),
+    routeGeoJson,
+    circleGeoJson,
+  };
+});
+
+type PlaceFixture = {
+  id: string;
+  name: string;
+  type: string;
+  lat: number;
+  lon: number;
+  radiusM: number;
+};
+
+type GeofenceFixture = {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  radiusM: number;
+  enabled: boolean;
+  alertOn?: string;
+};
+
+type ZoneFixture = {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  radiusM: number;
+  enabled?: boolean;
+};
+
+let places: PlaceFixture[] = [];
+let geofences: GeofenceFixture[] = [];
+let zones: ZoneFixture[] = [];
+let failPlaces = false;
+
+function getSection(title: string): HTMLElement {
+  const heading = screen.getByText(title);
+  const section = heading.closest('section');
+  if (!section) throw new Error(`Missing section: ${title}`);
+  return section as HTMLElement;
+}
 
 describe('MapPage', () => {
-  let emptyMode = false;
-
   beforeEach(() => {
-    emptyMode = false;
+    setVehicleMock.mockClear();
+    announceMock.mockClear();
+    failPlaces = false;
 
-    if (typeof window.matchMedia !== 'function') {
-      window.matchMedia = ((q: string) => ({
-        matches: false,
-        media: q,
-        onchange: null,
-        addListener: () => {},
-        removeListener: () => {},
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-      })) as unknown as typeof window.matchMedia;
-    }
+    places = [
+      { id: 'p1', name: 'Home', type: 'home', lat: 47.61, lon: -122.31, radiusM: 150 },
+      { id: 'p2', name: 'Work', type: 'work', lat: 47.62, lon: -122.32, radiusM: 150 },
+    ];
+    geofences = [
+      {
+        id: 'g1',
+        name: 'Campus',
+        lat: 47.63,
+        lon: -122.33,
+        radiusM: 500,
+        enabled: true,
+        alertOn: 'both',
+      },
+    ];
+    zones = [
+      { id: 'z1', name: 'Home Zone', lat: 47.64, lon: -122.34, radiusM: 300, enabled: true },
+    ];
 
-    if (typeof window.ResizeObserver === 'undefined') {
-      class ResizeObserverStub {
-        observe() {}
-        unobserve() {}
-        disconnect() {}
-      }
-      window.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
-    }
+    apiMock.mockImplementation(
+      async (path: string, init?: { method?: string; body?: unknown }) => {
+        const method = init?.method ?? 'GET';
 
-    if (typeof window.IntersectionObserver === 'undefined') {
-      class IntersectionObserverStub {
-        observe() {}
-        unobserve() {}
-        disconnect() {}
-        takeRecords() {
-          return [];
+        if (path === '/api/v1/vehicles') return [vehicle];
+        if (path === `/api/v1/vehicles/${vehicle.id}`) return vehicle;
+
+        if (path === '/api/v1/vehicles/places/all' && method === 'GET') {
+          if (failPlaces) throw new Error('places failed');
+          return places;
         }
-      }
-      window.IntersectionObserver =
-        IntersectionObserverStub as unknown as typeof IntersectionObserver;
-    }
+        if (path === '/api/v1/vehicles/places/all' && method === 'POST') {
+          const body = init?.body as {
+            name: string;
+            type: string;
+            lat: number;
+            lon: number;
+            radiusM: number;
+          };
+          const created: PlaceFixture = { id: `p${places.length + 1}`, ...body };
+          places.push(created);
+          return created;
+        }
+        if (path.startsWith('/api/v1/vehicles/places/all/')) {
+          const id = path.split('/').pop() ?? '';
+          if (method === 'PATCH') {
+            const body = init?.body as { name: string; type: string; radiusM: number };
+            places = places.map((p) => (p.id === id ? { ...p, ...body } : p));
+            return {};
+          }
+          if (method === 'DELETE') {
+            places = places.filter((p) => p.id !== id);
+            return {};
+          }
+        }
 
-    const base = apiMock.getMockImplementation();
-    apiMock.mockImplementation(async (path: string, ...rest: unknown[]) => {
-      if (path === '/api/v1/vehicles') return emptyMode ? [] : [vehicle];
-      if (path === '/api/v1/vehicles/places/all') return emptyMode ? [] : placeFixtures;
-      if (path === '/api/v1/vehicles/geofences/all') return emptyMode ? [] : fenceFixtures;
-      if (path === '/api/v1/vehicles/privacy-zones') return emptyMode ? [] : zoneFixtures;
-      if (path.startsWith('/api/v1/charging'))
-        return emptyMode ? { items: [] } : { items: chargeFixtures };
-      if (path.startsWith('/api/v1/drives?'))
-        return { items: [], total: 0, page: 1, pageSize: 1 };
-      if (base) return base(path, ...rest);
-      return {};
-    });
+        if (path === '/api/v1/vehicles/geofences/all' && method === 'GET') return geofences;
+        if (path === '/api/v1/vehicles/geofences/all' && method === 'POST') {
+          const body = init?.body as {
+            name: string;
+            lat: number;
+            lon: number;
+            radiusM: number;
+            enabled: boolean;
+            alertOn: string;
+          };
+          const created: GeofenceFixture = { id: `g${geofences.length + 1}`, ...body };
+          geofences.push(created);
+          return created;
+        }
+        if (path.startsWith('/api/v1/vehicles/geofences/all/')) {
+          const id = path.split('/').pop() ?? '';
+          if (method === 'PATCH') {
+            const body = init?.body as {
+              name: string;
+              radiusM: number;
+              enabled: boolean;
+            };
+            geofences = geofences.map((g) => (g.id === id ? { ...g, ...body } : g));
+            return {};
+          }
+          if (method === 'DELETE') {
+            geofences = geofences.filter((g) => g.id !== id);
+            return {};
+          }
+        }
+
+        if (path === '/api/v1/vehicles/privacy-zones' && method === 'GET') return zones;
+        if (path === '/api/v1/vehicles/privacy-zones' && method === 'POST') {
+          const body = init?.body as {
+            name: string;
+            lat: number;
+            lon: number;
+            radiusM: number;
+          };
+          const created: ZoneFixture = {
+            id: `z${zones.length + 1}`,
+            ...body,
+            enabled: true,
+          };
+          zones.push(created);
+          return created;
+        }
+        if (path.startsWith('/api/v1/vehicles/privacy-zones/')) {
+          const id = path.split('/').pop() ?? '';
+          if (method === 'PATCH') {
+            const body = init?.body as { name: string; radiusM: number };
+            zones = zones.map((z) => (z.id === id ? { ...z, ...body } : z));
+            return {};
+          }
+          if (method === 'DELETE') {
+            zones = zones.filter((z) => z.id !== id);
+            return {};
+          }
+        }
+
+        if (path === '/api/v1/charging?pageSize=50') {
+          return {
+            items: [
+              {
+                id: 'c1',
+                lat: 47.6,
+                lon: -122.3,
+                locationName: 'Volt Charger',
+                vehicleName: 'Aurora',
+              },
+            ],
+          };
+        }
+
+        if (path === '/api/v1/drives/d1?route=true') {
+          return {
+            data: {
+              route: [
+                { lat: 47.6, lon: -122.3 },
+                { lat: 47.61, lon: -122.31 },
+              ],
+            },
+          };
+        }
+        if (path.startsWith('/api/v1/drives?')) {
+          return { items: [{ id: 'd1' }], total: 1, page: 1, pageSize: 1 };
+        }
+        if (path.startsWith('/api/v1/drives')) {
+          return { items: [], total: 0, page: 1, pageSize: 20 };
+        }
+
+        if (path.includes('/geocode')) return [];
+        return {};
+      },
+    );
   });
 
-  it('renders the map page with vehicle, places, geofences and privacy zones', async () => {
+  it('renders the map, demo basemap notice, vehicle and saved layers', async () => {
     renderPage('/map', <MapPage />);
 
-    expect(await screen.findByRole('heading', { name: 'Map' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Map' })).toBeInTheDocument();
+    expect(screen.getByText(/Fictional demo map/)).toBeInTheDocument();
+    expect(await screen.findByText(/Demo basemap/)).toBeInTheDocument();
+    expect(screen.getByTestId('map-view')).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'Map layers' })).toBeInTheDocument();
 
-    const aurora = await screen.findAllByText('Aurora');
-    expect(aurora.length).toBeGreaterThan(0);
-    expect(await screen.findByText('Home Base')).toBeTruthy();
-    expect(await screen.findByText('Work Ring')).toBeTruthy();
-    expect(await screen.findByText('Private Block')).toBeTruthy();
-    expect(screen.getByLabelText('Map layers')).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Show on map: Aurora' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Edit Home' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Edit Campus' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Delete Home Zone' })).toBeInTheDocument();
   });
 
-  it('shows empty states when there are no vehicles, places, geofences or privacy zones', async () => {
-    emptyMode = true;
+  it('opens place pick mode, uses map centre, repicks and cancels with Escape', async () => {
+    const user = userEvent.setup();
     renderPage('/map', <MapPage />);
+    await screen.findByRole('heading', { name: 'Map' });
 
-    expect(await screen.findByRole('heading', { name: 'Map' })).toBeTruthy();
-    const emptyMarkers = await screen.findAllByText('None yet.');
-    expect(emptyMarkers.length).toBe(4);
-    expect(screen.queryByText('Home Base')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Pick map point' }));
+    await user.click(screen.getByRole('button', { name: /Add place/i }));
+
+    expect(screen.getByRole('status')).toHaveTextContent(/place the place/i);
+
+    await user.click(screen.getByRole('button', { name: 'Use map centre' }));
+    expect(await screen.findByRole('button', { name: 'Save place' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Repick' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(/place the place/i);
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() =>
+      expect(screen.queryByRole('status')).not.toBeInTheDocument(),
+    );
   });
 
-  it('starts place pick mode when Add place is clicked and cancels on Escape', async () => {
+  it('creates a place from a geocode result', async () => {
+    const user = userEvent.setup();
+    renderPage('/map', <MapPage />);
+    await screen.findByRole('heading', { name: 'Map' });
+
+    await user.click(screen.getByRole('button', { name: 'Choose geocode result' }));
+
+    const name = screen.getByLabelText('Name') as HTMLInputElement;
+    await user.clear(name);
+    await user.type(name, 'Office');
+
+    const type = screen.getByLabelText('Type') as HTMLSelectElement;
+    fireEvent.change(type, { target: { value: 'work' } });
+
+    await user.click(screen.getByRole('button', { name: 'Save place' }));
+
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/vehicles/places/all',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.objectContaining({ name: 'Office', type: 'work' }),
+        }),
+      ),
+    );
+    expect(await screen.findByRole('button', { name: 'Edit Office' })).toBeInTheDocument();
+  });
+
+  it('creates a geofence with radius and alert mode', async () => {
+    const user = userEvent.setup();
+    renderPage('/map', <MapPage />);
+    await screen.findByRole('heading', { name: 'Map' });
+
+    await user.click(
+      within(getSection('Geofences')).getByRole('button', { name: /Add/i }),
+    );
+    expect(await screen.findByRole('status')).toHaveTextContent(/place the geofence/i);
+
+    await user.click(screen.getByRole('button', { name: 'Pick map point' }));
+    expect(await screen.findByRole('button', { name: 'Save geofence' })).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Name'), 'Depot');
+    fireEvent.change(screen.getByLabelText('Radius (m)'), { target: { value: '750' } });
+    fireEvent.change(screen.getByLabelText('Alert on'), { target: { value: 'enter' } });
+
+    await user.click(screen.getByRole('button', { name: 'Save geofence' }));
+
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/vehicles/geofences/all',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.objectContaining({
+            name: 'Depot',
+            radiusM: 750,
+            alertOn: 'enter',
+            enabled: true,
+          }),
+        }),
+      ),
+    );
+    expect(await screen.findByRole('button', { name: 'Edit Depot' })).toBeInTheDocument();
+  });
+
+  it('creates a privacy zone with a radius', async () => {
+    const user = userEvent.setup();
+    renderPage('/map', <MapPage />);
+    await screen.findByRole('heading', { name: 'Map' });
+
+    await user.click(
+      within(getSection('Privacy zones')).getByRole('button', { name: /Add/i }),
+    );
+    expect(await screen.findByRole('status')).toHaveTextContent(/place the privacy/i);
+
+    await user.click(screen.getByRole('button', { name: 'Pick map point' }));
+    expect(await screen.findByRole('button', { name: 'Save privacy' })).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Name'), 'Private');
+    fireEvent.change(screen.getByLabelText('Radius (m)'), { target: { value: '300' } });
+
+    await user.click(screen.getByRole('button', { name: 'Save privacy' }));
+
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/vehicles/privacy-zones',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.objectContaining({ name: 'Private', radiusM: 300 }),
+        }),
+      ),
+    );
+    expect(await screen.findByRole('button', { name: 'Delete Private' })).toBeInTheDocument();
+  });
+
+  it('edits a place name and type', async () => {
+    const user = userEvent.setup();
+    renderPage('/map', <MapPage />);
+    await screen.findByRole('heading', { name: 'Map' });
+
+    await user.click(await screen.findByRole('button', { name: 'Edit Home' }));
+
+    const name = screen.getByLabelText('Name') as HTMLInputElement;
+    await user.clear(name);
+    await user.type(name, 'Home Updated');
+    fireEvent.change(screen.getByLabelText('Place type'), { target: { value: 'work' } });
+
+    const editRow = name.closest('li');
+    expect(editRow).not.toBeNull();
+    await user.click(within(editRow as HTMLElement).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/vehicles/places/all/p1',
+        expect.objectContaining({
+          method: 'PATCH',
+          body: expect.objectContaining({
+            name: 'Home Updated',
+            type: 'work',
+            radiusM: 150,
+          }),
+        }),
+      ),
+    );
+    expect(await screen.findByRole('button', { name: 'Edit Home Updated' })).toBeInTheDocument();
+  });
+
+  it('edits a geofence and toggles enabled', async () => {
+    const user = userEvent.setup();
+    renderPage('/map', <MapPage />);
+    await screen.findByRole('heading', { name: 'Map' });
+
+    await user.click(await screen.findByRole('button', { name: 'Edit Campus' }));
+
+    const name = screen.getByLabelText('Name') as HTMLInputElement;
+    await user.clear(name);
+    await user.type(name, 'Campus West');
+    await user.click(screen.getByRole('checkbox', { name: /Enabled/i }));
+
+    const editRow = name.closest('li');
+    expect(editRow).not.toBeNull();
+    await user.click(within(editRow as HTMLElement).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/vehicles/geofences/all/g1',
+        expect.objectContaining({
+          method: 'PATCH',
+          body: expect.objectContaining({
+            name: 'Campus West',
+            radiusM: 500,
+            enabled: false,
+          }),
+        }),
+      ),
+    );
+    expect(await screen.findByRole('button', { name: 'Edit Campus West' })).toBeInTheDocument();
+  });
+
+  it('deletes a privacy zone and removes it from the list', async () => {
+    const user = userEvent.setup();
+    renderPage('/map', <MapPage />);
+    await screen.findByRole('heading', { name: 'Map' });
+
+    await user.click(await screen.findByRole('button', { name: 'Delete Home Zone' }));
+
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/vehicles/privacy-zones/z1', {
+        method: 'DELETE',
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Delete Home Zone' }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it('changes the vehicle filter and stores the selected vehicle', async () => {
+    renderPage('/map', <MapPage />);
+    await screen.findByRole('heading', { name: 'Map' });
+
+    const filter = (await screen.findByLabelText('Vehicle filter')) as HTMLSelectElement;
+    fireEvent.change(filter, { target: { value: 'v1' } });
+
+    expect(filter.value).toBe('v1');
+    expect(setVehicleMock).toHaveBeenCalledWith('v1');
+  });
+
+  it('shows the map data error state when places fail to load', async () => {
+    failPlaces = true;
     renderPage('/map', <MapPage />);
 
-    const addButton = await screen.findByRole('button', { name: /add place/i });
-    addButton.click();
-
-    expect(await screen.findByText(/Click the map to place the place/i)).toBeTruthy();
-    expect(screen.getByRole('button', { name: /use map centre/i })).toBeTruthy();
-
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    await waitFor(() => {
-      expect(screen.queryByText(/Click the map to place the place/i)).toBeNull();
-    });
+    expect(await screen.findByText('Couldn’t load map data')).toBeInTheDocument();
   });
 });

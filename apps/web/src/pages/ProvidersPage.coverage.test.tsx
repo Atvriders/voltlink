@@ -123,23 +123,34 @@ function renderPage(path: string, ui: React.ReactNode) {
 
 afterEach(cleanup);
 
-import { fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { within } from '@testing-library/react';
+import { ApiError } from '../api/client';
 import ProvidersPage from './ProvidersPage';
 
-const providerAccounts = [
+const providersFixture = [
   {
     id: 'acct-demo',
     provider: 'demo',
-    label: 'Volt Demo Account',
+    label: 'Demo fleet',
     demo: true,
     status: 'connected',
     vehicleCount: 5,
-    lastSyncAt: new Date().toISOString(),
+    lastSyncAt: new Date('2024-01-01T00:00:00Z').toISOString(),
   },
   {
-    id: 'acct-tessie',
+    id: 'acct-1',
+    provider: 'tesla',
+    label: 'Personal Tesla',
+    demo: false,
+    status: 'connected',
+    vehicleCount: 2,
+    lastSyncAt: new Date('2024-01-02T00:00:00Z').toISOString(),
+  },
+  {
+    id: 'acct-2',
     provider: 'tessie',
-    label: 'Tessie Account',
+    label: 'Tessie token',
     demo: false,
     status: 'error',
     vehicleCount: 0,
@@ -147,91 +158,192 @@ const providerAccounts = [
   },
 ];
 
-const providerReadiness = [
+const readinessFixture = [
   {
     provider: 'tesla',
     ok: true,
     configured: true,
     checks: [
-      { ok: true, detail: 'Client ID configured' },
-      { ok: true, detail: 'Client secret configured' },
+      { ok: true, detail: 'TESLA_CLIENT_ID configured' },
+      { ok: true, detail: 'OAuth redirect registered' },
     ],
   },
   {
     provider: 'tessie',
     ok: false,
     configured: false,
-    checks: [{ ok: false, detail: 'TESSIE_API_TOKEN is not set' }],
+    checks: [{ ok: false, detail: 'TESSIE_API_TOKEN missing' }],
   },
 ];
 
 describe('ProvidersPage', () => {
   beforeEach(() => {
-    window.matchMedia =
-      window.matchMedia ||
-      ((q: string) =>
-        ({
-          matches: false,
-          media: q,
-          onchange: null,
-          addListener: () => {},
-          removeListener: () => {},
-          addEventListener: () => {},
-          removeEventListener: () => {},
-          dispatchEvent: () => false,
-        }) as unknown as typeof window.matchMedia);
-
+    apiMock.mockClear();
+    csvMock.mockClear();
     apiMock.mockImplementation(async (path: string) => {
-      if (path === '/api/v1/providers') return providerAccounts;
-      if (path === '/api/v1/providers/readiness') return providerReadiness;
+      if (path === '/api/v1/providers/readiness') return readinessFixture;
+      if (path === '/api/v1/providers') return providersFixture;
       if (path === '/api/v1/providers/demo/connect') return { vehiclesImported: 5 };
+      if (path === '/api/v1/providers/acct-1/import') return { imported: 2 };
+      if (path === '/api/v1/providers/acct-1/disconnect') return {};
       if (path === '/api/v1/providers/tessie/connect') return {};
       if (path === '/api/v1/providers/tesla/authorize')
         return { url: 'https://tesla.example/oauth' };
-      if (path.startsWith('/api/v1/providers/') && path.endsWith('/import'))
-        return { imported: 1 };
-      if (path.startsWith('/api/v1/providers/') && path.endsWith('/disconnect'))
-        return {};
       return {};
     });
   });
 
-  it('renders provider cards, readiness diagnostics, and connected accounts', async () => {
-    renderPage('/providers', <ProvidersPage />);
-
-    expect(await screen.findByText('Demo fleet')).toBeTruthy();
-    expect(await screen.findByText('Tesla (official API)')).toBeTruthy();
-    expect(await screen.findByText('Provider-readiness diagnostics')).toBeTruthy();
-    expect(await screen.findByText('Connected accounts')).toBeTruthy();
-    expect(await screen.findByText('Volt Demo Account')).toBeTruthy();
-    expect(await screen.findByText('5 demo vehicles')).toBeTruthy();
-    expect(await screen.findByText('Client ID configured')).toBeTruthy();
-    expect(await screen.findByText('Token expired')).toBeTruthy();
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
-  it('shows the empty account state and demo enable action when no providers are connected', async () => {
-    apiMock.mockImplementation(async (path: string) => {
-      if (path === '/api/v1/providers') return [];
-      if (path === '/api/v1/providers/readiness') return [];
-      return {};
-    });
-
+  it('renders provider sections, readiness diagnostics, and connected accounts', async () => {
     renderPage('/providers', <ProvidersPage />);
 
-    expect(await screen.findByText('No provider accounts')).toBeTruthy();
-    expect(await screen.findByText('Enable demo mode')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Providers' })).toBeInTheDocument();
+    expect(await screen.findByText(/five fictional vehicles/i)).toBeInTheDocument();
+    expect(screen.getByText('Tesla (official API)')).toBeInTheDocument();
+    expect(await screen.findByText('Provider-readiness diagnostics')).toBeInTheDocument();
+    expect(screen.getByText('TESLA_CLIENT_ID configured')).toBeInTheDocument();
+    expect(screen.getByText('TESSIE_API_TOKEN missing')).toBeInTheDocument();
+    expect(screen.getAllByText('ready').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('needs configuration').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('account connected').length).toBeGreaterThan(0);
+    expect(screen.getByText('Personal Tesla')).toBeInTheDocument();
+    expect(screen.getByText('2 vehicles')).toBeInTheDocument();
+    expect(screen.getByText('Token expired')).toBeInTheDocument();
+    expect(screen.getAllByText('connected').length).toBeGreaterThan(0);
+    expect(screen.getByText('error')).toBeInTheDocument();
   });
 
-  it('opens the Tessie token connection modal', async () => {
+  it('submits the demo fleet connect action', async () => {
+    const user = userEvent.setup();
     renderPage('/providers', <ProvidersPage />);
 
-    const tessieButton = await screen.findByRole('button', {
-      name: /Connect with Tessie token/i,
-    });
-    fireEvent.click(tessieButton);
+    const demoButton = await screen.findByRole('button', { name: /Refresh demo fleet/i });
+    await user.click(demoButton);
 
-    expect(await screen.findByText('Connect Tessie (optional)')).toBeTruthy();
-    const connectButton = await screen.findByRole('button', { name: 'Connect' });
-    expect((connectButton as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/providers/demo/connect', {
+        method: 'POST',
+      }),
+    );
+  });
+
+  it('imports vehicles from a connected provider account', async () => {
+    const user = userEvent.setup();
+    renderPage('/providers', <ProvidersPage />);
+
+    const row = (await screen.findByText('Personal Tesla')).closest('li');
+    expect(row).not.toBeNull();
+
+    await user.click(within(row as HTMLElement).getByRole('button', { name: /Import/i }));
+
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/providers/acct-1/import', {
+        method: 'POST',
+      }),
+    );
+  });
+
+  it('disconnects a provider account after confirmation', async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.fn(() => true);
+    vi.stubGlobal('confirm', confirmSpy);
+
+    renderPage('/providers', <ProvidersPage />);
+
+    const row = (await screen.findByText('Personal Tesla')).closest('li');
+    expect(row).not.toBeNull();
+
+    await user.click(within(row as HTMLElement).getByRole('button', { name: /Disconnect/i }));
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      'Disconnect tesla? Stored credentials will be removed.',
+    );
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/providers/acct-1/disconnect', {
+        method: 'POST',
+      }),
+    );
+  });
+
+  it('opens, cancels, and submits the Tessie token modal', async () => {
+    const user = userEvent.setup();
+    renderPage('/providers', <ProvidersPage />);
+
+    await user.click(
+      await screen.findByRole('button', { name: /Connect with Tessie token/i }),
+    );
+    expect(await screen.findByText('Connect Tessie (optional)')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() =>
+      expect(screen.queryByText('Connect Tessie (optional)')).not.toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole('button', { name: /Connect with Tessie token/i }));
+
+    const tokenInput = document.querySelector(
+      'input[type="password"]',
+    ) as HTMLInputElement | null;
+    expect(tokenInput).not.toBeNull();
+
+    expect(screen.getByRole('button', { name: 'Connect' })).toBeDisabled();
+    await user.type(tokenInput!, 'token-123');
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled(),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/providers/tessie/connect', {
+        method: 'POST',
+        body: { token: 'token-123', label: 'Tessie' },
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText('Connect Tessie (optional)')).not.toBeInTheDocument(),
+    );
+  });
+
+  it('shows the Tesla configuration error when OAuth start returns 503', async () => {
+    const user = userEvent.setup();
+    renderPage('/providers', <ProvidersPage />);
+
+    await screen.findByText('Tesla (official API)');
+    apiMock.mockImplementationOnce(() =>
+      Promise.reject(new ApiError('tesla_not_configured', 'Tesla not configured', 503)),
+    );
+
+    await user.click(screen.getByRole('button', { name: /Connect with Tesla/i }));
+
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/providers/tesla/authorize'),
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /Tesla isn.t configured on this server/,
+    );
+  });
+
+  it('shows an error alert when demo connect fails', async () => {
+    const user = userEvent.setup();
+    renderPage('/providers', <ProvidersPage />);
+
+    const demoButton = await screen.findByRole('button', { name: /Refresh demo fleet/i });
+    apiMock.mockImplementationOnce(() =>
+      Promise.reject(new ApiError('demo_failed', 'Demo connect failed', 500)),
+    );
+
+    await user.click(demoButton);
+
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/providers/demo/connect', {
+        method: 'POST',
+      }),
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent('Demo connect failed');
   });
 });

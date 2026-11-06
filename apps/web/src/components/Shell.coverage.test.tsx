@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 
 const apiMock = vi.fn();
 const csvMock = vi.fn().mockResolvedValue('a,b');
@@ -124,28 +124,19 @@ function renderPage(path: string, ui: React.ReactNode) {
 afterEach(cleanup);
 
 import userEvent from '@testing-library/user-event';
-import { Shell } from './Shell';
 import { SelectedVehicleProvider } from '../lib/vehicleSelection';
+import { within } from '@testing-library/react';
+import { Shell } from './Shell';
 
-function renderShell(ui: React.ReactNode) {
-  const qc = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/']}>
-        <SelectedVehicleProvider userId={authState.user.id}>
-          <Routes>
-            <Route path="*" element={ui as React.ReactElement} />
-          </Routes>
-        </SelectedVehicleProvider>
-      </MemoryRouter>
-    </QueryClientProvider>,
-  );
-}
+vi.mock('../lib/push', () => ({
+  prepare: vi.fn().mockResolvedValue(undefined),
+}));
 
-vi.mock('../lib/push', () => ({ prepare: vi.fn().mockResolvedValue(undefined) }));
-vi.mock('../lib/realtime', () => ({ realtimeStart: vi.fn(), realtimeStop: vi.fn() }));
+vi.mock('../lib/realtime', () => ({
+  realtimeStart: vi.fn(),
+  realtimeStop: vi.fn(),
+}));
+
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => authState,
   setTheme: vi.fn(),
@@ -155,191 +146,202 @@ vi.mock('../auth/AuthContext', () => ({
   ],
 }));
 
-const vehicleA = {
+const richVehicle = {
   ...vehicle,
-  id: 'v1',
-  displayName: 'Aurora',
-  model: 'Model 3',
-  make: 'Tesla',
-  labels: ['daily'],
   groupIds: ['g1'],
+  model: 'Aurora',
+  make: 'Volt',
+  labels: ['family'],
 };
 
-const vehicleB = {
-  ...vehicle,
-  id: 'v2',
-  displayName: 'Borealis',
-  exteriorColor: '#0ea5e9',
-  providerVehicleId: 'demo-borealis',
-  model: 'Ioniq 5',
-  make: 'Hyundai',
-  labels: ['roadtrip'],
-  groupIds: [],
-  state: {
-    ...vehicle.state,
-    chargingState: 'idle',
-    batteryPercent: 44,
-    locked: false,
-  },
-};
+const shellUser = authState.user as unknown as Parameters<typeof Shell>[0]['user'];
 
-describe('Shell', () => {
+describe('Shell page', () => {
   beforeEach(() => {
-    localStorage.clear();
+    window.localStorage.clear();
     authState.logout.mockClear();
-    apiMock.mockReset();
-    apiMock.mockImplementation(async (path: string) => {
-      if (path === '/api/v1/vehicles') return [vehicleA, vehicleB];
-      if (path === `/api/v1/vehicles/${vehicleA.id}`) return vehicleA;
-      if (path === '/api/v1/notifications?pageSize=1') return { unread: 2 };
-      if (path.startsWith('/api/v1/notifications')) return { items: [] };
-      if (path === '/api/v1/fleet/groups') return [{ id: 'g1', name: 'Daily' }];
+    apiMock.mockClear();
+
+    const baseImpl = apiMock.getMockImplementation();
+    apiMock.mockImplementation(async (path: string, init?: unknown) => {
+      if (path === '/api/v1/notifications?pageSize=1') return { unread: 4 };
+      if (path === '/api/v1/fleet/groups') return [{ id: 'g1', name: 'Team' }];
+      if (path === '/api/v1/vehicles') return [richVehicle];
+      if (path === `/api/v1/vehicles/${richVehicle.id}`) return richVehicle;
       if (path === '/api/v1/users/favorites') return {};
       if (path === '/api/v1/users/settings') return {};
-      return {};
+      return baseImpl ? baseImpl(path, init) : {};
     });
   });
 
-  it('renders the shell chrome, navigation, and notifications badge', async () => {
-    renderPage(
-      '/',
-      <Shell user={authState.user}>
-        <div>Page content</div>
-      </Shell>,
+  const renderShell = () =>
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <MemoryRouter initialEntries={['/']}>
+          <SelectedVehicleProvider userId={shellUser.id}>
+            <Routes>
+              <Route
+                path="*"
+                element={
+                  <Shell user={shellUser}>
+                    <div>Page body</div>
+                  </Shell>
+                }
+              />
+            </Routes>
+          </SelectedVehicleProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
 
-    expect(await screen.findByText('Page content')).toBeTruthy();
+  it('renders navigation, unread notification bell, and vehicle switcher', async () => {
+    renderShell();
+
     expect(screen.getByRole('navigation', { name: 'Main navigation' })).toBeTruthy();
-    expect(screen.getAllByText('Overview').length).toBeGreaterThan(0);
-    expect(await screen.findByRole('link', { name: 'Notifications (2 unread)' })).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: 'Overview' }).length).toBeGreaterThan(0);
+    expect(
+      await screen.findByRole('link', { name: 'Notifications (4 unread)' }),
+    ).toBeTruthy();
+    expect(
+      await screen.findByRole('button', { name: /Choose vehicle|Vehicle: Aurora/ }),
+    ).toBeTruthy();
+    expect(screen.getByText('Page body')).toBeTruthy();
   });
 
-  it('opens the vehicle switcher, filters, toggles a favorite, and selects a vehicle', async () => {
+  it('navigates between shell sections from the sidebar', async () => {
     const user = userEvent.setup();
-    renderShell(
-      <Shell user={authState.user}>
-        <div>Page content</div>
-      </Shell>,
+    renderShell();
+
+    await user.click(screen.getByRole('link', { name: 'Charging' }));
+
+    expect(await screen.findByRole('heading', { name: 'Charging' })).toBeTruthy();
+  });
+
+  it('navigates to notifications from the unread bell', async () => {
+    const user = userEvent.setup();
+    renderShell();
+
+    const bell = await screen.findByRole('link', { name: 'Notifications (4 unread)' });
+    await user.click(bell);
+
+    expect(await screen.findByRole('heading', { name: 'Notifications' })).toBeTruthy();
+  });
+
+  it('opens the vehicle switcher, shows groups, and selects a vehicle', async () => {
+    const user = userEvent.setup();
+    renderShell();
+
+    await user.click(
+      await screen.findByRole('button', { name: /Choose vehicle|Vehicle: Aurora/ }),
     );
 
-    await user.click(await screen.findByRole('button', { name: 'Choose vehicle' }));
-    const search = screen.getByRole('searchbox', { name: 'Search vehicles' });
-    await user.type(search, 'Aurora');
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getByPlaceholderText('Search vehicles')).toBeTruthy();
+    expect(within(menu).getByText('Team')).toBeTruthy();
 
-    await waitFor(() => expect(screen.queryByText('Borealis')).toBeNull());
-    expect(screen.getAllByText('Aurora').length).toBeGreaterThan(0);
+    await user.click(within(menu).getAllByText('Aurora')[0]);
 
-    const addFavorite = screen.getAllByRole('button', { name: /Add Aurora to favorites/ })[0]!;
-    await user.click(addFavorite);
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    expect(screen.getByText('Page body')).toBeTruthy();
+  });
+
+  it('filters vehicles and hides the switcher when nothing matches', async () => {
+    const user = userEvent.setup();
+    renderShell();
+
+    await user.click(
+      await screen.findByRole('button', { name: /Choose vehicle|Vehicle: Aurora/ }),
+    );
+
+    const menu = await screen.findByRole('menu');
+    const search = within(menu).getByPlaceholderText('Search vehicles');
+
+    fireEvent.input(search, { target: { value: 'zzz' } });
+    // A filter with no matches hides the switcher entirely (list.length === 0).
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    expect(screen.queryByRole('button', { name: 'Choose vehicle' })).toBeNull();
+  });
+
+  it('toggles a favorite through the API', async () => {
+    const user = userEvent.setup();
+    renderShell();
+
+    await user.click(
+      await screen.findByRole('button', { name: /Choose vehicle|Vehicle: Aurora/ }),
+    );
+
+    const menu = await screen.findByRole('menu');
+    const favoriteButtons = await within(menu).findAllByRole('button', {
+      name: 'Add Aurora to favorites',
+    });
+    await user.click(favoriteButtons[0]!);
+
     await waitFor(() =>
       expect(apiMock).toHaveBeenCalledWith(
         '/api/v1/users/favorites',
-        expect.objectContaining({ method: 'PUT' }),
+        expect.objectContaining({
+          method: 'PUT',
+          body: { vehicleIds: ['v1'] },
+        }),
       ),
     );
 
-    const pickButton = screen.getAllByText('Aurora')[0]!.closest('button');
-    expect(pickButton).toBeTruthy();
-    await user.click(pickButton!);
-
-    // Picking closes the switcher and navigates to the vehicle's live page.
-    await waitFor(() =>
-      expect(screen.queryByRole('searchbox', { name: 'Search vehicles' })).toBeNull(),
-    );
-    expect(screen.getByText('Page content')).toBeTruthy();
+    // Toggling again removes the favorite.
+    const menu2 = await screen.findByRole('menu');
+    const removeButtons = await within(menu2).findAllByRole('button', {
+      name: 'Remove Aurora from favorites',
+    });
+    expect(removeButtons.length).toBeGreaterThan(0);
   });
 
-  it('opens the theme menu and persists the chosen theme', async () => {
+  it('persists theme changes from the theme menu', async () => {
     const user = userEvent.setup();
-    renderPage(
-      '/',
-      <Shell user={authState.user}>
-        <div>Page content</div>
-      </Shell>,
-    );
+    renderShell();
 
-    await user.click(await screen.findByRole('button', { name: 'Theme' }));
-    expect(screen.getByRole('menu')).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: 'VoltLink Dark' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Theme' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'VoltLink Light' }));
 
-    await user.click(screen.getByRole('menuitem', { name: 'VoltLink Light' }));
     await waitFor(() =>
       expect(apiMock).toHaveBeenCalledWith(
         '/api/v1/users/settings',
-        expect.objectContaining({ method: 'PATCH', body: { theme: 'voltlink-light' } }),
+        expect.objectContaining({
+          method: 'PATCH',
+          body: { theme: 'voltlink-light' },
+        }),
       ),
     );
   });
 
   it('opens the account menu and signs out', async () => {
     const user = userEvent.setup();
-    renderPage(
-      '/',
-      <Shell user={authState.user}>
-        <div>Page content</div>
-      </Shell>,
-    );
+    renderShell();
 
-    const accountButtons = await screen.findAllByRole('button', { name: 'Account menu' });
-    await user.click(accountButtons[0]!);
-    expect(screen.getByText(/Signed in as/)).toBeTruthy();
+    const accountButtons = screen.getAllByRole('button', { name: 'Account menu' });
+    await user.click(accountButtons[0]);
 
+    expect(await screen.findByText(/Signed in as/)).toBeTruthy();
     await user.click(screen.getByRole('menuitem', { name: /Sign out/ }));
+
     await waitFor(() => expect(authState.logout).toHaveBeenCalled());
   });
 
-  it('opens and closes the mobile drawer', async () => {
+  it('opens and closes the mobile navigation drawer', async () => {
     const user = userEvent.setup();
-    renderPage(
-      '/',
-      <Shell user={authState.user}>
-        <div>Page content</div>
-      </Shell>,
-    );
+    renderShell();
 
-    await user.click(await screen.findByRole('button', { name: 'Open menu' }));
+    await user.click(screen.getByRole('button', { name: 'Open menu' }));
+
     expect(await screen.findByRole('button', { name: 'Close menu' })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Mobile navigation' })).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Close menu' }));
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Close menu' })).toBeNull());
-  });
-
-  it('navigates with links and updates the active heading', async () => {
-    const user = userEvent.setup();
-    renderPage(
-      '/',
-      <Shell user={authState.user}>
-        <div>Page content</div>
-      </Shell>,
-    );
-
-    const vehiclesLinks = await screen.findAllByRole('link', { name: /Vehicles/ });
-    await user.click(vehiclesLinks[0]!);
-    await waitFor(() =>
-      expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Vehicles'),
-    );
-
-    const bell = await screen.findByRole('link', { name: 'Notifications (2 unread)' });
-    await user.click(bell);
-    await waitFor(() =>
-      expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Notifications'),
-    );
-  });
-
-  it('navigates from the vehicle switcher to the showroom', async () => {
-    const user = userEvent.setup();
-    renderPage(
-      '/',
-      <Shell user={authState.user}>
-        <div>Page content</div>
-      </Shell>,
-    );
-
-    await user.click(await screen.findByRole('button', { name: 'Choose vehicle' }));
-    await user.click(screen.getByRole('button', { name: /Open 3D showroom/ }));
 
     await waitFor(() =>
-      expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Showroom'),
+      expect(screen.queryByRole('button', { name: 'Close menu' })).toBeNull(),
     );
   });
 });

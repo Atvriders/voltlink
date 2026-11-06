@@ -123,121 +123,253 @@ function renderPage(path: string, ui: React.ReactNode) {
 
 afterEach(cleanup);
 
+import userEvent from '@testing-library/user-event';
+import { fireEvent } from '@testing-library/react';
 import AdminPage from './AdminPage';
 
-const adminHealth = {
-  database: 'ok',
-  redis: 'ok',
-  migrationsCurrent: true,
-  workersActive: true,
-  queueDepth: 42,
-  telemetryFresh: true,
-  uptimeSec: 7200,
-  memoryMb: 128,
+const settingsFixture = {
+  appVersion: '1.2.3',
+  telemetryRetentionDays: '30',
 };
 
-const adminUsers = [
+const usersFixture = [
   {
     id: 'u1',
     email: 'alice@example.test',
-    name: 'Alice Example',
+    name: 'Alice',
     role: 'ADMIN',
     emailVerified: true,
     vehicleCount: 2,
     createdAt: new Date().toISOString(),
   },
+  {
+    id: 'u2',
+    email: 'bob@example.test',
+    name: 'Bob',
+    role: 'VIEWER',
+    emailVerified: false,
+    vehicleCount: 0,
+    createdAt: new Date().toISOString(),
+  },
 ];
 
-const commandSwitches = {
-  globalReadOnly: false,
-  commandsEnabled: true,
-  providerCommandsEnabled: true,
-  vehicleCommandsEnabled: true,
-};
-
-const failedJob = {
-  id: 'job-1',
-  queue: 'vehicle-commands',
-  error: 'Command timed out',
-  attempts: 3,
-};
-
-function adminApiMock(
-  options: { deadJobs?: unknown[]; switches?: typeof commandSwitches } = {},
-) {
-  return async (path: string, init?: unknown) => {
-    if (path === '/api/v1/admin/settings') {
-      const method =
-        init && typeof init === 'object' ? (init as { method?: string }).method : undefined;
-      if (method === 'PATCH') return {};
-      return {
-        appVersion: '1.2.3',
-        telemetryRetentionDays: '365',
-        instanceName: 'VoltLink',
-      };
-    }
-    if (path === '/api/v1/admin/users') return adminUsers;
-    if (path === '/api/v1/admin/health') return adminHealth;
-    if (path === '/api/v1/commands/switches/status') return options.switches ?? commandSwitches;
-    if (path === '/api/v1/admin/queue/dead') return options.deadJobs ?? [failedJob];
-    if (path.startsWith('/api/v1/admin/users/')) return {};
-    if (path === '/api/v1/commands/switches') return {};
-    if (path === '/api/v1/admin/retention/run') return {};
-    if (path.includes('/queue/')) return {};
-    return {};
-  };
-}
+let deadJobsFixture: Array<{
+  id: string;
+  queue: string;
+  error: string;
+  attempts: number;
+}> = [];
 
 describe('AdminPage', () => {
   beforeEach(() => {
-    apiMock.mockImplementation(adminApiMock());
+    deadJobsFixture = [
+      {
+        id: 'job-1',
+        queue: 'vehicle-commands',
+        error: 'Command timed out',
+        attempts: 3,
+      },
+    ];
+
+    apiMock.mockImplementation(
+      async (path: string, opts?: { method?: string; body?: unknown }) => {
+        if (path === '/api/v1/admin/settings') {
+          if (opts?.method === 'PATCH') return { ok: true };
+          return settingsFixture;
+        }
+        if (path === '/api/v1/admin/users') return usersFixture;
+        if (path.startsWith('/api/v1/admin/users/') && path.endsWith('/role')) {
+          return { ok: true };
+        }
+        if (path === '/api/v1/admin/health') {
+          return {
+            database: 'ok',
+            redis: 'ok',
+            migrationsCurrent: true,
+            workersActive: true,
+            queueDepth: 3,
+            telemetryFresh: true,
+            uptimeSec: 7200,
+            memoryMb: 256,
+          };
+        }
+        if (path === '/api/v1/commands/switches/status') {
+          return {
+            globalReadOnly: false,
+            commandsEnabled: true,
+            providerCommandsEnabled: true,
+            vehicleCommandsEnabled: true,
+          };
+        }
+        if (path === '/api/v1/commands/switches' && opts?.method === 'POST') {
+          return { ok: true };
+        }
+        if (path === '/api/v1/admin/queue/dead') return deadJobsFixture;
+        if (path.startsWith('/api/v1/admin/queue/') && path.endsWith('/flush')) {
+          return { ok: true };
+        }
+        if (path === '/api/v1/admin/retention/run') return { ok: true };
+        return {};
+      },
+    );
   });
 
-  it('renders admin settings, health, users and failed jobs', async () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('renders platform health, command switches, users, retention, and failed jobs', async () => {
     renderPage('/admin', <AdminPage />);
 
-    expect(await screen.findByText('Administration')).toBeTruthy();
-    expect(screen.getByText(/VoltLink v1\.2\.3/)).toBeTruthy();
-    expect(screen.getByText('Database')).toBeTruthy();
+    expect(await screen.findByText('Administration')).toBeInTheDocument();
+    expect(await screen.findByText('Platform health')).toBeInTheDocument();
+    expect(await screen.findByText('VoltLink v1.2.3')).toBeInTheDocument();
     expect(screen.getAllByText('Healthy').length).toBeGreaterThan(0);
-    expect(screen.getByText('Queue depth')).toBeTruthy();
-    expect(screen.getByText('Alice Example')).toBeTruthy();
-    expect(screen.getByLabelText('Role for Alice Example')).toBeTruthy();
-    expect(screen.getByText('vehicle-commands')).toBeTruthy();
-    expect(screen.getByText('3 attempts')).toBeTruthy();
-    expect(screen.getByText('Requeue command jobs')).toBeTruthy();
+    expect(screen.getByText('Command safety switches')).toBeInTheDocument();
+    expect(screen.getByText('Emergency global command-disable')).toBeInTheDocument();
+    expect(screen.getByText('Global read-only mode')).toBeInTheDocument();
+    expect(await screen.findByText('2 accounts')).toBeInTheDocument();
+    expect(await screen.findByText('Alice')).toBeInTheDocument();
+    expect(await screen.findByText('Bob')).toBeInTheDocument();
+    expect(screen.getByText('Data retention')).toBeInTheDocument();
+    expect(screen.getByText('Failed background jobs')).toBeInTheDocument();
+    expect(await screen.findByText('vehicle-commands')).toBeInTheDocument();
+    expect(await screen.findByText('Command timed out')).toBeInTheDocument();
   });
 
-  it('shows the empty failed-jobs state', async () => {
-    apiMock.mockImplementation(adminApiMock({ deadJobs: [] }));
+  it('updates a user role from the users list', async () => {
+    const user = userEvent.setup();
     renderPage('/admin', <AdminPage />);
 
-    expect(await screen.findByText('No failed jobs.')).toBeTruthy();
-    expect(screen.queryByText('Requeue command jobs')).toBeNull();
-  });
+    const roleSelect = await screen.findByLabelText('Role for Alice');
+    fireEvent.change(roleSelect, { target: { value: 'DRIVER' } });
 
-  it('runs retention from the data retention card', async () => {
-    renderPage('/admin', <AdminPage />);
-
-    const runButton = await screen.findByRole('button', { name: /run retention now/i });
-    runButton.click();
-
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /run retention now/i })).toBeTruthy(),
-    );
-  });
-
-  it('renders safety switches and toggles the global read-only switch', async () => {
-    renderPage('/admin', <AdminPage />);
-
-    const readOnlySwitch = await screen.findByRole('switch', {
-      name: /global read-only mode/i,
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/admin/users/u1/role', {
+        method: 'PATCH',
+        body: { role: 'DRIVER' },
+      });
     });
-    expect(readOnlySwitch.getAttribute('aria-checked')).toBe('false');
-    readOnlySwitch.click();
 
-    await waitFor(() =>
-      expect(screen.getByRole('switch', { name: /global read-only mode/i })).toBeTruthy(),
-    );
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+  });
+
+  it('saves the telemetry retention setting', async () => {
+    const user = userEvent.setup();
+    renderPage('/admin', <AdminPage />);
+
+    await screen.findByText('Data retention');
+    const retentionInput = screen.getByRole('spinbutton');
+    const saveButton = screen.getByRole('button', { name: 'Save' });
+
+    expect(saveButton).toBeDisabled();
+    fireEvent.change(retentionInput, { target: { value: '90' } });
+    expect(saveButton).not.toBeDisabled();
+
+    await user.click(saveButton);
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/admin/settings', {
+        method: 'PATCH',
+        body: { telemetryRetentionDays: '90' },
+      });
+    });
+  });
+
+  it('shows a usable retention form when saving fails', async () => {
+    const user = userEvent.setup();
+    renderPage('/admin', <AdminPage />);
+
+    await screen.findByText('Data retention');
+    fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '45' } });
+
+    apiMock.mockRejectedValueOnce(new Error('save failed'));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/admin/settings', {
+        method: 'PATCH',
+        body: { telemetryRetentionDays: '45' },
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
+    });
+  });
+
+  it('runs the retention job now', async () => {
+    const user = userEvent.setup();
+    renderPage('/admin', <AdminPage />);
+
+    await screen.findByText('Data retention');
+    await user.click(screen.getByRole('button', { name: /Run retention now/i }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/admin/retention/run', {
+        method: 'POST',
+      });
+    });
+  });
+
+  it('toggles the emergency global command-disable switch', async () => {
+    const user = userEvent.setup();
+    renderPage('/admin', <AdminPage />);
+
+    await screen.findByText('Command safety switches');
+    const disableSwitch = screen.getByRole('switch', {
+      name: 'Emergency global command-disable',
+    });
+
+    expect(disableSwitch).toHaveAttribute('aria-checked', 'false');
+    await user.click(disableSwitch);
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/commands/switches', {
+        method: 'POST',
+        body: { commandsEnabled: false },
+      });
+    });
+  });
+
+  it('toggles global read-only mode', async () => {
+    const user = userEvent.setup();
+    renderPage('/admin', <AdminPage />);
+
+    await screen.findByText('Command safety switches');
+    const readOnlySwitch = screen.getByRole('switch', { name: 'Global read-only mode' });
+
+    expect(readOnlySwitch).toHaveAttribute('aria-checked', 'false');
+    await user.click(readOnlySwitch);
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/commands/switches', {
+        method: 'POST',
+        body: { globalReadOnly: true },
+      });
+    });
+  });
+
+  it('requeues failed command jobs after confirmation', async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderPage('/admin', <AdminPage />);
+
+    expect(await screen.findByText('vehicle-commands')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Requeue command jobs/i }));
+
+    expect(confirmSpy).toHaveBeenCalledWith('Requeue all failed jobs?');
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/admin/queue/vehicle-commands/flush', {
+        method: 'POST',
+      });
+    });
+  });
+
+  it('renders the empty failed-jobs state', async () => {
+    deadJobsFixture = [];
+    renderPage('/admin', <AdminPage />);
+
+    expect(await screen.findByText('No failed jobs.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Requeue command jobs/i })).not.toBeInTheDocument();
   });
 });
