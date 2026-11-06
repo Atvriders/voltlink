@@ -146,3 +146,21 @@ describe('buildTeslaSteps', () => {
     });
     expect(buildTeslaSteps('sentry_mode', { sentryOn: true }, ctx)[0]!.body).toEqual({ on: true });
   });
+
+  it('covers nullish context fallbacks', () => {
+    const bare: CmdCtx = {};
+    expect(buildTeslaSteps('set_temperature', {}, bare)[0]!.body).toEqual({
+      driver_temp: 21,
+      passenger_temp: 21,
+    });
+    expect(buildTeslaSteps('homelink', {}, bare)[0]!.body).toEqual({ lat: 0, lon: 0 });
+    expect(buildTeslaSteps('valet_mode', { valetOn: true }, bare)[0]!.body).toEqual({
+      on: true,
+      password: '',
+    });
+    const off = buildTeslaSteps('speed_limit', { speedLimitOn: false }, bare);
+    expect(off[0]!.body).toEqual({ pin: '' });
+    const on = buildTeslaSteps('speed_limit', { speedLimitOn: true }, bare);
+    expect(on[0]!.body).toEqual({ limit_mph: 68 });
+    expect(on[1]!.body).toEqual({ pin: '' });
+  });
