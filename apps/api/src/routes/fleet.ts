@@ -676,11 +676,57 @@ fleetRouter.get('/report', fleetManage, async (req, res) => {
       e.chargeCost += c.cost;
     }
   }
+  const rows = vehicles.map((v) => ({
+    ...({
+      id: v.id,
+      displayName: v.displayName,
+      demo: v.demo,
+      ...(per.get(v.id) ?? {
+        distanceKm: 0,
+        energyKwh: 0,
+        driveCost: 0,
+        chargeEnergyKwh: 0,
+        chargeCost: 0,
+      }),
+    }),
+  }));
+
+  // N-FLEETRPT: the report download is real CSV, not JSON masquerading as one.
+  if (req.query.format === 'csv') {
+    const esc = (x: unknown) => `"${String(x ?? '').replaceAll('"', '""')}"`;
+    const csv = [
+      [
+        'Vehicle',
+        'Demo',
+        'Distance (km)',
+        'Drive energy (kWh)',
+        'Drive cost',
+        'Charge energy (kWh)',
+        'Charge cost',
+      ].join(','),
+      ...rows.map((v) =>
+        [
+          esc(v.displayName),
+          esc(v.demo),
+          v.distanceKm,
+          v.energyKwh,
+          v.driveCost,
+          v.chargeEnergyKwh,
+          v.chargeCost,
+        ].join(','),
+      ),
+    ].join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="voltlink-fleet-report.csv"');
+    res.send(csv);
+    return;
+  }
+
   res.json({
     data: {
       generatedAt: new Date().toISOString(),
       organizationId: orgId,
-      vehicles: vehicles.map((v) => ({
+      vehicles: rows.map((v) => ({
         id: v.id,
         displayName: v.displayName,
         demo: v.demo,

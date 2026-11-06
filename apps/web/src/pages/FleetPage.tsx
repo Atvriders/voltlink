@@ -64,11 +64,11 @@ export default function FleetPage() {
     : null;
 
   const report = async () => {
-    const res = await fetch('/api/v1/fleet/report', { credentials: 'same-origin' });
+    const res = await fetch('/api/v1/fleet/report?format=csv', { credentials: 'same-origin' });
     const blob = await res.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'voltlink-fleet-report.json';
+    a.download = 'voltlink-fleet-report.csv';
     a.click();
   };
 
