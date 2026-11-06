@@ -27,6 +27,8 @@ export const ENV_SPEC = z.object({
   JWT_EXPIRES_SEC: z.coerce.number().int().positive().default(1_209_600),
   VL_MASTER_KEY: optionalString,
   VL_MASTER_KEYS: optionalString,
+  VL_MASTER_KEY_VERSION: optionalString,
+  TESSIE_API_KEY: optionalString,
   VL_RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(900),
   VL_STEPUP_WINDOW_SEC: z.coerce.number().int().positive().default(300),
   VL_SETUP_TOKEN: optionalString,

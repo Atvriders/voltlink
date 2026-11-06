@@ -1,6 +1,6 @@
 // Sign-in page with TOTP step and passkey support.
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { startAuthentication } from '@simplewebauthn/browser';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { KeyRound, ShieldCheck } from 'lucide-react';
@@ -20,6 +20,22 @@ export default function LoginPage() {
   const [totpEmail, setTotpEmail] = useState('');
   const [mfaMethods, setMfaMethods] = useState<string[]>([]);
   const [recoveryMode, setRecoveryMode] = useState(false);
+  const [needsSetup, setNeedsSetup] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await api<{ needsSetup: boolean }>('/api/v1/auth/setup-status');
+        if (alive) setNeedsSetup(!!res.needsSetup);
+      } catch {
+        /* the login page stays usable regardless */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [passkeyBusy, setPasskeyBusy] = useState(false);
@@ -175,6 +191,11 @@ export default function LoginPage() {
             <Link className="text-accent hover:underline" to="/forgot-password">
               Forgot password?
             </Link>
+            {needsSetup && (
+              <Link className="text-accent hover:underline" to="/setup">
+                Set up this instance
+              </Link>
+            )}
             <Link className="text-accent hover:underline" to="/register">
               Create account
             </Link>
@@ -190,4 +211,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

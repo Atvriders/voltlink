@@ -24,7 +24,7 @@ x-voltlink-common: &voltlink
     NODE_ENV: production
     PORT: '3000'
     HOST: 0.0.0.0
-    DATABASE_URL: 'postgresql://voltlink:${POSTGRES_PASSWORD}@postgres:5432/voltlink'
+    DATABASE_URL: '${DATABASE_URL:-postgresql://voltlink:${POSTGRES_PASSWORD}@postgres:5432/voltlink}'
     REDIS_URL: 'redis://redis:6379'
     PUBLIC_URL: '${PUBLIC_URL:-https://voltlink.example.com}'
     VL_ALLOW_INSECURE_HTTP: '${VL_ALLOW_INSECURE_HTTP:-false}'
@@ -36,6 +36,8 @@ x-voltlink-common: &voltlink
     JWT_EXPIRES_SEC: '${JWT_EXPIRES_SEC:-1209600}'
     VL_MASTER_KEY: '${VL_MASTER_KEY:-}'
     VL_MASTER_KEYS: '${VL_MASTER_KEYS:-}'
+    VL_MASTER_KEY_VERSION: '${VL_MASTER_KEY_VERSION:-}'
+    TESSIE_API_KEY: '${TESSIE_API_KEY:-}'
     VL_RATE_LIMIT_PER_MIN: '${VL_RATE_LIMIT_PER_MIN:-900}'
     VL_STEPUP_WINDOW_SEC: '${VL_STEPUP_WINDOW_SEC:-300}'
     VL_SETUP_TOKEN: '${VL_SETUP_TOKEN:-}'

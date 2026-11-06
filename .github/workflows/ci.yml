@@ -255,6 +255,23 @@ jobs:
           VL_E2E_SMTP_HTTP: http://127.0.0.1:1026
       - name: Test inventory (no e2e skips, no e2e failures)
         run: npx tsx scripts/test-inventory.ts
+      - name: Fresh-install browser test (docs path, no API or SQL shortcuts)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client >/dev/null
+          createdb -h 127.0.0.1 -U voltlink voltlink_fresh
+          DATABASE_URL=postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink_fresh \
+            REDIS_URL=redis://127.0.0.1:6379 \
+            JWT_SECRET=ci-e2e-jwt-secret-not-a-production-secret-0000 \
+            VL_MASTER_KEY=Y2ktZTJlLW1hc3Rlci1rZXktbm90LXByb2R1Y3Rpb24tMDAwMA== \
+            PUBLIC_URL=http://127.0.0.1:3112 VL_ALLOW_INSECURE_HTTP=true \
+            VL_QUEUE_PREFIX=voltlink-fresh PORT=3112 RUN_DIR="$PWD/scripts/e2e/run-fresh" \
+            VL_FRESH_SETUP=1 VL_SETUP_TOKEN= bash scripts/e2e/start-stack.sh
+          . scripts/e2e/run-fresh/fresh-setup.env
+          npx playwright install --with-deps chromium
+          npx playwright test tests/e2e/fresh-install.spec.ts --project=desktop
+          RUN_DIR="$PWD/scripts/e2e/run-fresh" bash scripts/e2e/start-stack.sh stop
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3112
       - name: Tesla e2e against the fake Fleet API
         run: bash scripts/e2e/tesla-e2e.sh
         env:

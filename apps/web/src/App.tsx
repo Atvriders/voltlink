@@ -21,6 +21,7 @@ import { ApiError } from './api/client';
 import { errorText, toast, ToastRegion } from './lib/toast';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import SetupPage from './pages/SetupPage';
 import { ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from './pages/ResetPasswordPage';
 import PublicStatusPage from './pages/PublicStatusPage';
 const PresentationPage = lazy(() => import('./pages/PresentationPage'));
@@ -149,6 +150,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/setup" element={<SetupPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />

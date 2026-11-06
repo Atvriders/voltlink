@@ -102,6 +102,23 @@ JAR="$RUN_DIR/admin.jar"
 ADMIN_EMAIL='admin@voltlink-e2e.test'
 ADMIN_PASSWORD='e2e-admin-password-123'
 
+# VL_FRESH_SETUP=1: leave the instance in setup mode for the fresh-install
+# browser test (R3). The token comes from VL_SETUP_TOKEN or, when unset, from
+# the one generated and logged by the web role at boot — exactly what the
+# install docs describe.
+if [ "${VL_FRESH_SETUP:-}" = "1" ]; then
+  if [ -n "${VL_SETUP_TOKEN:-}" ]; then
+    FRESH_TOKEN="$VL_SETUP_TOKEN"
+  else
+    grep -o 'first-run setup token [A-Za-z0-9_-]*' "$LOG_DIR/api.log" | head -1 | awk '{print $NF}' > "$RUN_DIR/fresh-token"
+    FRESH_TOKEN="$(cat "$RUN_DIR/fresh-token")"
+    [ -n "$FRESH_TOKEN" ] || { echo "no first-run token in api.log" >&2; exit 1; }
+  fi
+  echo "FRESH_SETUP_TOKEN=$FRESH_TOKEN" > "$RUN_DIR/fresh-setup.env"
+  echo "stack up (fresh setup): web on :$PORT; setup token written to $RUN_DIR/fresh-setup.env"
+  exit 0
+fi
+
 curl -sf -c "$JAR" "$BASE/api/v1/auth/setup-status" > "$RUN_DIR/setup-status.json"
 NEEDS_SETUP=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$RUN_DIR/setup-status.json','utf8')).data.needsSetup)")
 
