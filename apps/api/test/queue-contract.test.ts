@@ -7,15 +7,17 @@ process.env.NODE_ENV = 'test';
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { buildApp } from '../src/app';
 import { prisma } from '../src/core/db';
 import { initRedis } from '../src/core/redis';
-import { enqueue, QUEUE_DEFAULTS } from '../src/jobs/queues';
+import { Queue, Worker } from 'bullmq';
+import { enqueue, PREFIX, QUEUE_DEFAULTS } from '../src/jobs/queues';
 import { queue } from '../src/jobs/queues';
+import { producerConnection, workerConnection } from '../src/core/redis';
 import { randomId } from '../src/core/crypto';
 import { createSession } from '../src/auth/service';
 import { setSetting } from '../src/core/settings';
@@ -298,5 +300,44 @@ describe('kill switches (P-KILLSW)', () => {
     await prisma.providerAccount.delete({ where: { id: account.id } });
     await prisma.organization.delete({ where: { id: org.id } });
     await prisma.user.delete({ where: { id: user.id } });
+  });
+});
+
+describe('retries and dead-lettering', () => {
+  it('retries with backoff and dead-letters once attempts are exhausted', async () => {
+    const name = 'reports';
+    const q = new Queue(name, {
+      connection: producerConnection(),
+      prefix: PREFIX,
+      defaultJobOptions: {
+        attempts: 2,
+        backoff: { type: 'fixed', delay: 50 },
+        removeOnComplete: { age: 1, count: 1 },
+        removeOnFail: { age: 1 },
+      },
+    });
+    const processor = vi.fn().mockRejectedValue(new Error('boom'));
+    const w = new Worker(name, processor, {
+      connection: workerConnection(),
+      prefix: PREFIX,
+    });
+    try {
+      const job = await q.add(name, { userId: 'u1', kind: 'fleet' });
+      const deadline = Date.now() + 20_000;
+      let state: { attemptsMade?: number; failedReason?: string | null } | null = null;
+      while (Date.now() < deadline) {
+        const raw = await q.getJob(job.id!);
+        state = raw ? { attemptsMade: raw.attemptsMade, failedReason: raw.failedReason } : null;
+        if (state && state.attemptsMade >= 2 && state.failedReason) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      expect(state?.attemptsMade).toBe(2);
+      expect(state?.failedReason).toContain('boom');
+      expect(processor).toHaveBeenCalledTimes(2);
+    } finally {
+      await w.close();
+      await q.obliterate({ force: true }).catch(() => undefined);
+      await q.close();
+    }
   });
 });
