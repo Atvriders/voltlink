@@ -1,7 +1,10 @@
 # Gitleaks configuration. Test fixtures and CI placeholders use
 # fictional secrets on purpose; real secrets must never be committed.
-# R2-26: only exact fixture strings are allowlisted — never a pattern that
-# could hide real API keys, and never whole directory paths.
+# R2-26: keep the full default ruleset and allowlist only exact fixture
+# strings — never a pattern that could hide real keys, never whole paths.
+
+[extend]
+  useDefault = true
 
 [allowlist]
   description = 'Exact fictional fixture strings only'
@@ -10,4 +13,14 @@
     'integration-pass',
     '0123456789abcdef',
     'Not a secret',
+    'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4',
+    '1f426ba798b13473ada9f62fc373b4c4',
+    'MWY0MjZiYTc5OGIxMzQ3M2FkYTlmNjJmYzM3M2I0',
+    'da1ed84cbe380e8b2639006b5bdfcdce0ebc4775',
+    '9f3b7c1d5e8a24609bd4f7a1c3e5079b2d6481fa',
+    '4c1f8e05a9d73b62f0ae14d78c3b95206ea7d41f',
+    'ci-e2e-master-key-not-produc',
+    'Y2ktZTJlLW1hc3Rlci1rZXktbm90LXByb2R1Y3Rp',
+    'yxsY2ujPvt0ELPAaflL6Dw',
+    '6d1c05e7f38b49a2ce7014b8d5f3a96201e8b7c4d90f523a6e18cb47f0d29a35',
   ]
