@@ -11,6 +11,7 @@ import { prisma } from './core/db';
 import { waitForMigrations } from './cli/migrate';
 import { ensureComponents, publicStatusBundle, runStatusChecks } from './status/service';
 import { renderBadgeSvg, renderRssXml } from './status/format';
+import { spaFallback } from './core/spaFallback';
 import { APP_VERSION } from '@voltlink/shared';
 import { PATHS } from './core/paths';
 
@@ -53,13 +54,8 @@ async function main(): Promise<void> {
   const spaDir = PATHS.webDist;
   if (fs.existsSync(spaDir)) {
     app.use(express.static(spaDir, { index: false, maxAge: '7d' }));
-    app.use((req, res, next) => {
-      if (req.method !== 'GET') {
-        next();
-        return;
-      }
-      res.sendFile(path.join(spaDir, 'index.html'));
-    });
+    // G-13: missing /assets/ or /3d/ files are 404, never index.html with 200.
+    spaFallback(app, spaDir);
   } else {
     app.get('/', (_req, res) => res.send('VoltLink status process — SPA not built.'));
   }

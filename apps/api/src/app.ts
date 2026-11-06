@@ -3,6 +3,7 @@
 
 import express from 'express';
 import { cspExtraOrigins, securityHeaders } from './core/securityHeaders';
+import { spaFallback } from './core/spaFallback';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import path from 'node:path';
@@ -235,18 +236,9 @@ export function buildApp(opts: { serveSpa?: boolean } = {}): express.Express {
         app.use('/3d', (_req, res) => res.status(404).end());
       }
       app.use(express.static(spaDir, { index: false, maxAge: '7d' }));
-      app.use((req, res, next) => {
-        if (req.path.startsWith('/api') || req.method !== 'GET') {
-          next();
-          return;
-        }
-        // G-13: missing asset or 3D files are 404, never index.html with 200.
-        if (req.path.startsWith('/assets/') || req.path.startsWith('/3d/')) {
-          res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Asset not found.' } });
-          return;
-        }
-        res.sendFile(path.join(spaDir, 'index.html'));
-      });
+      // G-13: /api 404s are registered earlier, and missing assets/3D files
+      // are never answered with index.html + 200 (shared with the status role).
+      spaFallback(app, spaDir);
     }
   }
 
