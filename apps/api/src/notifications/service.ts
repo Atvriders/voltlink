@@ -123,7 +123,14 @@ export async function processOutboxJob(payload: {
     return;
   }
   try {
-    await deliverChannel(row, user.email);
+    const delivered = await deliverChannel(row, user.email);
+    if (!delivered) {
+      await prisma.notificationOutbox.update({
+        where: { id: row.id },
+        data: { status: 'dropped', attempts: { increment: 1 }, lastError: 'dropped by design' },
+      });
+      return;
+    }
     await prisma.notificationOutbox.update({
       where: { id: row.id },
       data: { status: 'sent', sentAt: new Date(), attempts: { increment: 1 }, lastError: null },
@@ -157,7 +164,7 @@ interface OutboxRow {
   vehicleId: string | null;
 }
 
-async function deliverChannel(row: OutboxRow, email: string): Promise<void> {
+async function deliverChannel(row: OutboxRow, email: string): Promise<boolean> {
   const channel = row.channel as DeliveryChannel;
   const input = {
     userId: row.userId,
@@ -170,16 +177,18 @@ async function deliverChannel(row: OutboxRow, email: string): Promise<void> {
   if (channel === 'email') {
     // N-SMTP: failures throw here and are retried by the queue; callers of
     // notify() are long gone, so SMTP can never abort ingest or commands.
-    await sendMail({
+    const sent = await sendMail({
       to: email,
       subject: `VoltLink: ${input.title}`,
       text: input.body,
       html: `<p><strong>${escapeHtml(input.title)}</strong></p><p>${escapeHtml(input.body)}</p>`,
     });
-    return;
+    if (!sent.sent) throw new Error(`email not sent: ${sent.detail}`);
+    return true;
   }
   if (channel === 'push') {
     const subs = await prisma.pushSubscription.findMany({ where: { userId: row.userId } });
+    if (subs.length === 0) return false; // nothing delivered — never mark sent
     for (const sub of subs) {
       try {
         await sendPush(
@@ -200,12 +209,13 @@ async function deliverChannel(row: OutboxRow, email: string): Promise<void> {
         throw err;
       }
     }
-    return;
+    return true;
   }
   if (channel === 'webhook') {
     const endpoints = await prisma.webhookEndpoint.findMany({
       where: { userId: row.userId, enabled: true },
     });
+    if (endpoints.length === 0) return false;
     for (const ep of endpoints) {
       const payload = {
         event: input.event,
@@ -246,7 +256,9 @@ async function deliverChannel(row: OutboxRow, email: string): Promise<void> {
           where: { id: ep.id },
           data: { lastStatus: res.status, lastDeliveryAt: new Date() },
         });
-        if (res.status >= 500) throw new Error(`webhook ${res.status}`);
+        // N-DROPPED: any non-2xx answer means the endpoint did not accept
+        // the delivery — retry (and eventually dead-letter), never mark sent.
+        if (res.status < 200 || res.status >= 300) throw new Error(`webhook ${res.status}`);
       } catch (err) {
         await prisma.webhookEndpoint
           .update({ where: { id: ep.id }, data: { lastStatus: 0, lastDeliveryAt: new Date() } })
@@ -254,18 +266,19 @@ async function deliverChannel(row: OutboxRow, email: string): Promise<void> {
         throw err;
       }
     }
-    return;
+    return true;
   }
   // ntfy / gotify / discord / teams
-  if (throttled(row.userId, channel)) return; // dropped by design (rate limit)
+  if (throttled(row.userId, channel)) return false; // dropped by design (rate limit)
   const url = await userChannelUrl(row.userId, providerKey(channel));
-  if (!url) return;
+  if (!url) return false;
   await pushSimpleWebhook(row.userId, channel, {
     title: input.title,
     body: input.body,
     severity: input.severity,
     event: input.event,
   });
+  return true;
 }
 
 function providerKey(channel: string): string {
