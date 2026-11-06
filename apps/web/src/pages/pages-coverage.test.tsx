@@ -83,9 +83,9 @@ beforeEach(() => {
     if (path.includes('/drives/totals'))
       return { count: 0, distanceKm: 0, energyKwh: 0, estCost: 0, costPerKm: 0 };
     if (path.startsWith('/api/v1/drives')) return { items: [], total: 0, page: 1, pageSize: 20 };
-    if (path.startsWith('/api/v1/charging')) return { items: [], total: 0 };
-    if (path === '/api/v1/charging/totals') return { count: 0, energyKwh: 0, cost: 0 };
     if (path === '/api/v1/charging/rates/list') return [];
+    if (path === '/api/v1/charging/totals') return { count: 0, energyKwh: 0, cost: 0 };
+    if (path.startsWith('/api/v1/charging')) return { items: [], total: 0 };
     if (path === '/api/v1/providers') return [];
     if (path === '/api/v1/automations') return [];
     if (path === '/api/v1/status')
