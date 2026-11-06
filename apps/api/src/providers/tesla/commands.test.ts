@@ -138,4 +138,11 @@ describe('buildTeslaSteps', () => {
     expect(buildTeslaSteps('schedule_update', { updateDelaySec: 0 }, ctx)[0]!.body).toEqual({
       offset_sec: 0,
     });
+    expect(buildTeslaSteps('set_charging_amps', { chargingAmps: 0 }, ctx)[0]!.body).toEqual({
+      charging_amps: 1,
+    });
+    expect(buildTeslaSteps('speed_limit', { speedLimitKmh: 50, speedLimitOn: true }, ctx)[0]!.body).toEqual({
+      limit_mph: 50,
+    });
+    expect(buildTeslaSteps('sentry_mode', { sentryOn: true }, ctx)[0]!.body).toEqual({ on: true });
   });
