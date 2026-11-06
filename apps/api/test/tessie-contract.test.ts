@@ -67,9 +67,17 @@ beforeAll(async () => {
     },
     display_name: 'Tessie Test Car',
   };
-  app.get('/:vin/state', (_req, res) => res.json(state));
+  app.get('/:vin/state', (req, res) => {
+    const vin = String(req.params.vin);
+    if (vin === '5YJ3SLEEP0000001') return res.json({ ...state, state: 'asleep' });
+    if (vin === '5YJ3AUTH0000001') return res.status(401).json({ error: 'bad token' });
+    return res.json(state);
+  });
   app.get('/vins', (_req, res) => res.json({ results: ['5YJ3000000NEXUS02'] }));
-  app.post('/:vin/wake', (_req, res) => res.json({ result: true }));
+  app.post('/:vin/wake', (req, res) => {
+    if (req.params.vin === '5YJ3WAKEFAIL01') return res.json({ result: false });
+    return res.json({ result: true });
+  });
   app.post('/:vin/command/:name', (req, res) => {
     const DOCUMENTED_TESSIE_COMMANDS = new Set([
       'wake',
@@ -109,6 +117,11 @@ beforeAll(async () => {
     if (!DOCUMENTED_TESSIE_COMMANDS.has(String(req.params.name))) {
       return res.status(404).json({ result: false, reason: 'unknown_command' });
     }
+    if (req.params.vin === '5YJ3AUTH0000001') return res.status(401).json({ result: false });
+    if (req.params.vin === '5YJ3TRUNKERR01' && req.params.name === 'activate_rear_trunk')
+      return res.status(500).json({ result: false });
+    if (req.params.vin === '5YJ3NOTSUPP001' && req.params.name === 'set_charge_limit')
+      return res.json({ result: false, reason: 'not supported' });
     if (req.params.name === 'lock') return res.json({ result: true });
     if (req.params.name === 'set_charging_amps')
       return res.json({ result: false, reason: 'no cable' });
@@ -226,5 +239,75 @@ describe('Tessie provider commands + readiness (NEW-08)', () => {
     expect(list[0]!.model).toBe('Model 3');
     expect(list[0]!.capabilities).toContain('open_trunk');
     expect(list[0]!.capabilities).toContain('set_charging_amps');
+  });
+});
+
+describe('Tessie provider deeper contract paths', () => {
+  const p = new TessieProvider();
+
+  it('fetchState reports live=false for asleep vehicles', async () => {
+    const awake = await p.fetchState(ctx, '5YJ3000000NEXUS02');
+    expect(awake.live).toBe(true);
+    expect((awake.state as { batteryPercent?: number }).batteryPercent).toBe(42);
+    const asleep = await p.fetchState(ctx, '5YJ3SLEEP0000001');
+    expect(asleep.live).toBe(false);
+    expect(asleep.freshForSec).toBe(60);
+  });
+
+  it('wake: success and wake-failure timeouts', async () => {
+    const ok = await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'wake', {});
+    expect(ok.kind).toBe('accepted');
+    const fail = await p.sendCommand(ctx, '5YJ3WAKEFAIL01', 'wake', {});
+    expect(fail.kind).toBe('timed_out');
+  });
+
+  it('preWake: wakes the vehicle when asleep, skips wake when awake', async () => {
+    const asleep = await p.sendCommand(ctx, '5YJ3SLEEP0000001', 'climate_start', {});
+    expect(asleep.kind).toBe('accepted');
+    const awake = await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'climate_stop', {});
+    expect(awake.kind).toBe('accepted');
+  });
+
+  it('validates temperature, amps, sentry and speed-limit parameters', async () => {
+    expect((await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'set_temperature', { temperatureC: 50 })).kind).toBe('rejected');
+    expect((await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'set_temperature', { temperatureC: 20 })).kind).toBe('accepted');
+    expect((await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'set_charging_amps', { chargingAmps: 1.5 })).kind).toBe('rejected');
+    expect((await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'sentry_mode', {})).kind).toBe('rejected');
+    expect((await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'sentry_mode', { sentryOn: true })).kind).toBe('accepted');
+    expect((await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'speed_limit', { speedLimitOn: true, pin: '123' })).kind).toBe('rejected');
+    const twoStep = await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'speed_limit', {
+      speedLimitKmh: 80,
+      speedLimitOn: true,
+      pin: '1234',
+    });
+    expect(twoStep.kind).toBe('accepted');
+  });
+
+  it('guard precheck rejects when the charge port is already open', async () => {
+    const out = await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'charge_port_open', {});
+    expect(out.kind).toBe('rejected');
+    expect(out.providerCode).toBe('PRECHECK');
+  });
+
+  it('maps "not supported" and non-idempotent upstream failures', async () => {
+    const unsupported = await p.sendCommand(ctx, '5YJ3NOTSUPP001', 'set_charge_limit', { chargeLimitPct: 80 });
+    expect(unsupported.kind).toBe('unsupported');
+    const trunk = await p.sendCommand(ctx, '5YJ3TRUNKERR01', 'open_trunk', {});
+    expect(trunk.kind).toBe('outcome_unknown');
+  });
+
+  it('surfaces auth failures and demo guards without retries', async () => {
+    const auth = await p.sendCommand(ctx, '5YJ3AUTH0000001', 'lock', {});
+    expect(auth.kind).toBe('failed');
+    expect(auth.providerCode).toBe('AUTH');
+    const demo = await p.sendCommand({ ...ctx, meta: { ...ctx.meta, demo: true } }, '5YJ3000000NEXUS02', 'lock', {});
+    expect(demo.kind).toBe('failed');
+    expect(demo.providerCode).toBe('DEMO_GUARD');
+  });
+
+  it('health reports reachability from the live endpoint', async () => {
+    const h = await p.health(ctx);
+    expect(h.ok).toBe(true);
+    expect(h.detail).toContain('200');
   });
 });

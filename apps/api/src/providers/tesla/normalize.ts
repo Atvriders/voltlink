@@ -54,9 +54,13 @@ export function normalizeTeslaError(
 }
 
 export function normalizeTeslaResponse(
-  body: { response?: { result?: boolean; reason?: string } },
-  _step: CommandStep | null,
+  body: { response?: { result?: boolean; reason?: string; state?: string } },
+  step: CommandStep | null,
 ): CommandDispatchResult {
+  // Fleet API wake_up answers with { response: { state: 'online' } }, not a
+  // result flag (guide 01 §10).
+  if (step?.name === 'wake_up' && body.response?.state === 'online')
+    return { kind: 'accepted', response: 'Vehicle is awake.', providerCode: 'OK' };
   const result = body.response?.result;
   if (result === true)
     return { kind: 'accepted', response: 'Vehicle command accepted.', providerCode: 'OK' };

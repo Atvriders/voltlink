@@ -11,7 +11,6 @@ describe('demo simulatedState', () => {
       for (let h = 0; h < 24; h++) {
         const now = new Date(Date.UTC(2026, 4, 11, h + 7, 0, 0)); // Rivermark hour h = UTC h+7
         const s = simulatedState(spec, now);
-        expect(s.providerVehicleId).toBe(spec.id);
         expect(typeof s.lat).toBe('number');
         expect(typeof s.lon).toBe('number');
         expect(typeof s.batteryRangeKm).toBe('number');

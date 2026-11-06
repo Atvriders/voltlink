@@ -15,6 +15,8 @@ import { deriveTeslaCapabilities } from '../src/providers/tesla/capabilities';
 import { buildTeslaSteps } from '../src/providers/tesla/commands';
 import { discoverRegion } from '../src/providers/tesla/region';
 import { getValidAccessToken } from '../src/providers/tesla/tokens';
+import { TeslaProviderImpl, parseClass } from '../src/providers/tesla/index';
+import { seal } from '../src/core/keyring';
 
 let fake: FakeTesla;
 
@@ -25,6 +27,7 @@ beforeAll(async () => {
   process.env.TESLA_AUTHORIZE_URL = `${fake.base}/oauth2/v3/authorize`;
   process.env.TESLA_FLEET_BASE_NA = `${fake.base}`;
   process.env.TESLA_FLEET_BASE_EU = `${fake.base}`;
+  process.env.TESLA_DEFAULT_AUDIENCE = `${fake.base}`;
   process.env.TESLA_COMMAND_PROXY_URL = `${fake.proxy}`;
   process.env.TESLA_CLIENT_ID = 'test-client';
   process.env.TESLA_CLIENT_SECRET = 'test-secret';
@@ -298,5 +301,143 @@ describe('token refresh rotation (P-TESLAREFRESH)', () => {
     await prisma.providerAccount.deleteMany({ where: { id: account.id } });
     await prisma.organization.deleteMany({ where: { id: org.id } });
     await prisma.user.deleteMany({ where: { id: user.id } });
+  });
+});
+
+describe('Tesla provider-level flows', () => {
+  it('parseClass maps VIN digit 8 and falls back', () => {
+    expect(parseClass('5YJ30000000000001')).toBe('fallback');
+    expect(parseClass('5YJ30003000000001')).toBe('compact_sedan');
+    expect(parseClass('5YJ3000S000000001')).toBe('sport_sedan');
+    expect(parseClass('5YJ3000X000000001')).toBe('suv');
+    expect(parseClass('5YJ3000Y000000001')).toBe('compact_crossover');
+  });
+
+  it('readiness reports per-vehicle key pairing from fleet_status', async () => {
+    const org = await prisma.organization.create({ data: { name: 'Tesla Org' } });
+    const pa = await prisma.providerAccount.create({
+      data: { organizationId: org.id, provider: 'tesla', label: 'Tesla', status: 'connected', demo: false },
+    });
+    await prisma.vehicle.create({
+      data: {
+        organizationId: org.id,
+        providerAccountId: pa.id,
+        provider: 'tesla',
+        providerVehicleId: '5YJ3000000NEXUS01',
+        displayName: 'Nexus One',
+      },
+    });
+    await prisma.vehicle.create({
+      data: {
+        organizationId: org.id,
+        providerAccountId: pa.id,
+        provider: 'tesla',
+        providerVehicleId: '5YJ3000000N0KEY01',
+        displayName: 'No Key',
+      },
+    });
+    fake.pairKey('5YJ3000000NEXUS01');
+    const jwt = `eyJhbGciOiJub25lIn0.${Buffer.from(JSON.stringify({ scp: [] })).toString('base64url')}.sig`;
+    await prisma.providerCredential.create({
+      data: {
+        providerAccountId: pa.id,
+        keyVersion: seal(JSON.stringify({ accessToken: jwt, refreshToken: 'rt', expiresAt: Date.now() + 3600_000 }), `provider-credential:${pa.id}`).keyVersion,
+        algorithm: 'v1',
+        ciphertext: seal(JSON.stringify({ accessToken: jwt, refreshToken: 'rt', expiresAt: Date.now() + 3600_000 }), `provider-credential:${pa.id}`).ciphertext,
+      },
+    });
+    const p = new TeslaProviderImpl();
+    const r = await p.readiness({ accountId: pa.id });
+    const paired = r.checks.find((c) => c.name === 'vehicle.US01.key');
+    const unpaired = r.checks.find((c) => c.name === 'vehicle.EY01.key');
+    expect(paired?.ok).toBe(true);
+    expect(unpaired?.ok).toBe(false);
+    expect(r.ok).toBe(false);
+  });
+
+  it('fetchState online maps vehicle_data and reports live', async () => {
+    const org = await prisma.organization.create({ data: { name: 'Tesla Org 2' } });
+    const pa = await prisma.providerAccount.create({
+      data: { organizationId: org.id, provider: 'tesla', label: 'Tesla', status: 'connected', demo: false },
+    });
+    await prisma.vehicle.create({
+      data: {
+        organizationId: org.id,
+        providerAccountId: pa.id,
+        provider: 'tesla',
+        providerVehicleId: '5YJ3000000NEXUS01',
+        displayName: 'Nexus One',
+      },
+    });
+    const payload = Buffer.from(
+      JSON.stringify({ scp: ['vehicle_location', 'vehicle_device_data', 'vehicle_cmds'] }),
+    ).toString('base64url');
+    const jwt = `eyJhbGciOiJub25lIn0.${payload}.sig`;
+    await prisma.providerCredential.create({
+      data: {
+        providerAccountId: pa.id,
+        keyVersion: seal(JSON.stringify({ accessToken: jwt, refreshToken: 'rt', expiresAt: Date.now() + 3600_000 }), `provider-credential:${pa.id}`).keyVersion,
+        algorithm: 'v1',
+        ciphertext: seal(JSON.stringify({ accessToken: jwt, refreshToken: 'rt', expiresAt: Date.now() + 3600_000 }), `provider-credential:${pa.id}`).ciphertext,
+      },
+    });
+    fake.setConnectivity('5YJ3000000NEXUS01', 'online');
+    const p = new TeslaProviderImpl();
+    const out = await p.fetchState(
+      { accountId: pa.id, userId: 'u1', credentials: {}, meta: { provider: 'tesla', label: 'T', demo: false, scopes: [] } },
+      '5YJ3000000NEXUS01',
+    );
+    expect(out.live).toBe(true);
+    expect(out.freshForSec).toBe(60);
+  });
+
+  it('fetchState asleep falls back to cached data or throws vehicle_asleep', async () => {
+    const org = await prisma.organization.create({ data: { name: 'Tesla Org 3' } });
+    const pa = await prisma.providerAccount.create({
+      data: { organizationId: org.id, provider: 'tesla', label: 'Tesla', status: 'connected', demo: false },
+    });
+    const jwt = `eyJhbGciOiJub25lIn0.${Buffer.from(JSON.stringify({ scp: [] })).toString('base64url')}.sig`;
+    await prisma.providerCredential.create({
+      data: {
+        providerAccountId: pa.id,
+        keyVersion: seal(JSON.stringify({ accessToken: jwt, refreshToken: 'rt', expiresAt: Date.now() + 3600_000 }), `provider-credential:${pa.id}`).keyVersion,
+        algorithm: 'v1',
+        ciphertext: seal(JSON.stringify({ accessToken: jwt, refreshToken: 'rt', expiresAt: Date.now() + 3600_000 }), `provider-credential:${pa.id}`).ciphertext,
+      },
+    });
+    fake.setConnectivity('5YJ3000000NEXUS01', 'asleep');
+    const p = new TeslaProviderImpl();
+    await expect(
+      p.fetchState(
+        { accountId: pa.id, userId: 'u1', credentials: {}, meta: { provider: 'tesla', label: 'T', demo: false, scopes: [] } },
+        '5YJ3000000NEXUS01',
+      ),
+    ).rejects.toThrow('vehicle_asleep');
+  });
+
+  it('sendCommand wake goes to the fleet host and health reports reachability', async () => {
+    const org = await prisma.organization.create({ data: { name: 'Tesla Org 4' } });
+    const pa = await prisma.providerAccount.create({
+      data: { organizationId: org.id, provider: 'tesla', label: 'Tesla', status: 'connected', demo: false },
+    });
+    const jwt = `eyJhbGciOiJub25lIn0.${Buffer.from(JSON.stringify({ scp: ['vehicle_cmds'] })).toString('base64url')}.sig`;
+    await prisma.providerCredential.create({
+      data: {
+        providerAccountId: pa.id,
+        keyVersion: seal(JSON.stringify({ accessToken: jwt, refreshToken: 'rt', expiresAt: Date.now() + 3600_000 }), `provider-credential:${pa.id}`).keyVersion,
+        algorithm: 'v1',
+        ciphertext: seal(JSON.stringify({ accessToken: jwt, refreshToken: 'rt', expiresAt: Date.now() + 3600_000 }), `provider-credential:${pa.id}`).ciphertext,
+      },
+    });
+    fake.pairKey('5YJ3000000NEXUS01');
+    fake.setConnectivity('5YJ3000000NEXUS01', 'online');
+    const ctx = { accountId: pa.id, userId: 'u1', credentials: {}, meta: { provider: 'tesla', label: 'T', demo: false, scopes: [] } };
+    const p = new TeslaProviderImpl();
+    const wake = await p.sendCommand(ctx, '5YJ3000000NEXUS01', 'wake', {});
+    expect(wake.kind).toBe('accepted');
+    const unsupported = await p.sendCommand(ctx, '5YJ3000000NEXUS01', 'definitely_not_mapped' as never, {});
+    expect(unsupported.kind).toBe('unsupported');
+    const h = await p.health(ctx);
+    expect(h.ok).toBe(true);
   });
 });
