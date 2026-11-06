@@ -792,6 +792,7 @@ const DESTRUCTIVE: ReadonlySet<string> = new Set([
   'DELETE /api/v1/drives/:id',
   'DELETE /api/v1/automations/:id',
   'DELETE /api/v1/fleet/assignments/:id',
+  'PATCH /api/v1/fleet/assignments/:id',
   'DELETE /api/v1/fleet/cost-centers/:id',
   'DELETE /api/v1/fleet/departments/:id',
   'DELETE /api/v1/fleet/drivers/:id',
@@ -872,7 +873,8 @@ async function throwawayFor(
       return `/api/v1/drives/${await make(() => prisma.drive.create({ data: { vehicleId: persona === 'ownerB' ? ids.vehicleB1 : ids.vehicleA1, startAt: new Date(), endAt: new Date(Date.now() + 1000), distanceKm: 1, durationSec: 60, avgSpeedKmh: 60, maxSpeedKmh: 60, energyKwh: 0.2, efficiencyWhPerKm: 200 } }))}`;
     case 'DELETE /api/v1/automations/:id':
       return `/api/v1/automations/${await make(() => prisma.automation.create({ data: { organizationId: orgId, userId: persona === 'ownerB' ? ids.userOwnerB : ids.userOwnerA, name: 'TA', triggerType: 'scheduled', triggerParams: {}, conditions: [], actions: [] } }))}`;
-    case 'DELETE /api/v1/fleet/assignments/:id': {
+    case 'DELETE /api/v1/fleet/assignments/:id':
+    case 'PATCH /api/v1/fleet/assignments/:id': {
       const d = await make(() =>
         prisma.driver.create({ data: { organizationId: orgId, name: 'TD' } }),
       );
