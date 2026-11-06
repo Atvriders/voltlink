@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import FleetPage from './pages/FleetPage';
 import AutomationsPage from './pages/AutomationsPage';
+import LiveVehiclePage from './pages/LiveVehiclePage';
 
 const apiMock = vi.fn();
 vi.mock('./api/client', () => ({
@@ -42,6 +43,9 @@ vi.mock('./auth/AuthContext', () => ({
     logout: vi.fn(),
     refresh: vi.fn(),
   }),
+}));
+vi.mock('./webgl/VehicleViewer', () => ({
+  default: () => <div data-testid="viewer" />,
 }));
 
 const automation = {
@@ -81,13 +85,13 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function renderPage(path: string, ui: React.ReactNode) {
+function renderPage(path: string, ui: React.ReactNode, routePath = '*') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
-          <Route path="*" element={ui as React.ReactElement} />
+          <Route path={routePath} element={ui as React.ReactElement} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -133,6 +137,71 @@ describe('missing UI capabilities (F-NOUI)', () => {
       expect(apiMock).toHaveBeenCalledWith(
         '/api/v1/fleet/cost-centers',
         expect.objectContaining({ method: 'POST', body: { name: 'CC-1' } }),
+      ),
+    );
+  });
+
+  it('shares a vehicle and revokes a share from the live page', async () => {
+    apiMock.mockImplementation(async (path: string, init?: { method?: string; body?: unknown }) => {
+      if (path === '/api/v1/vehicles')
+        return [
+          {
+            id: 'v1',
+            displayName: 'Aurora',
+            exteriorColor: '#334455',
+            providerVehicleId: 'demo-aurora',
+            provider: 'demo',
+            demo: true,
+            capabilities: [],
+            state: {
+              status: 'online',
+              chargingState: 'parked',
+              batteryPercent: 72,
+              batteryRangeKm: 420,
+              locked: true,
+              odometerKm: 1234,
+              interiorTempC: 21,
+              outsideTempC: 12,
+              speedKmh: 0,
+              latitude: 40,
+              longitude: -100,
+              address: '1 Main St',
+              freshness: 'recent',
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        ];
+      if (path === '/api/v1/vehicles/v1') return { id: 'v1', displayName: 'Aurora' };
+      if (path === '/api/v1/vehicles/v1/shares' && init?.method === 'POST') return { status: 'invited' };
+      if (path === '/api/v1/vehicles/v1/shares')
+        return [{ id: 's1', userEmail: 'b@test.dev', level: 'viewer', allowHighRisk: false }];
+      if (path.startsWith('/api/v1/vehicles/v1/shares/s1')) return { ok: true };
+      if (path.startsWith('/api/v1/commands?')) return { items: [], total: 0 };
+      if (path.startsWith('/api/v1/drives')) return { items: [], total: 0 };
+      if (path.includes('/drives/totals')) return { count: 0, distanceKm: 0, energyKwh: 0 };
+      if (path.startsWith('/api/v1/charging')) return { items: [], total: 0 };
+      if (path === '/api/v1/status')
+        return { overall: 'operational', components: [], incidents: [], maintenance: [], updatedAt: new Date().toISOString() };
+      if (path === '/api/v1/auth/setup-status') return { needsSetup: false, registrationMode: 'invite' };
+      return {};
+    });
+    renderPage('/vehicles/v1', <LiveVehiclePage />, '/vehicles/:id');
+    await waitFor(() => expect(screen.getByText('Aurora')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('b@test.dev')).toBeTruthy());
+    const emailInput = screen.getByLabelText(/email/i);
+    fireEvent.change(emailInput, { target: { value: 'c@test.dev' } });
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/vehicles/v1/shares',
+        expect.objectContaining({ method: 'POST', body: { email: 'c@test.dev', level: 'viewer' } }),
+      ),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /revoke/i }));
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/vehicles/v1/shares/s1',
+        expect.objectContaining({ method: 'DELETE' }),
       ),
     );
   });

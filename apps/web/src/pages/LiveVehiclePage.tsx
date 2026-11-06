@@ -273,6 +273,8 @@ export default function LiveVehiclePage() {
         {/* Right rail: state detail */}
         <div className="space-y-4">
           <StateDetails vehicle={vehicle} state={state ?? null} units={units} />
+          {/* F-NOUI: vehicle sharing UI (invitations + revoke). */}
+          <SharingCard vehicleId={vehicle.id} />
         </div>
       </div>
 
@@ -840,5 +842,86 @@ function Row({ k, v, span }: { k: string; v: string; span?: boolean }) {
       <dt className="text-[10px] font-bold uppercase tracking-wider text-faint">{k}</dt>
       <dd className="truncate text-sm">{v}</dd>
     </div>
+  );
+}
+
+
+// F-NOUI: per-vehicle sharing — invite by email, revoke grants.
+function SharingCard({ vehicleId }: { vehicleId: string }) {
+  const qc = useQueryClient();
+  const { data: shares } = useQuery({
+    queryKey: ['shares', vehicleId],
+    queryFn: () =>
+      api<{ id: string; userEmail: string; level: string; allowHighRisk: boolean }[]>(
+        `/api/v1/vehicles/${vehicleId}/shares`,
+      ),
+  });
+  const [email, setEmail] = useState('');
+  const [level, setLevel] = useState('viewer');
+  const share = useMutation({
+    mutationFn: () =>
+      api(`/api/v1/vehicles/${vehicleId}/shares`, { method: 'POST', body: { email, level } }),
+    onSuccess: () => {
+      setEmail('');
+      qc.invalidateQueries({ queryKey: ['shares', vehicleId] });
+    },
+  });
+  const revoke = useMutation({
+    mutationFn: (id: string) => api(`/api/v1/vehicles/${vehicleId}/shares/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shares', vehicleId] }),
+  });
+  return (
+    <Card title="Sharing">
+      <div className="space-y-2">
+        <Field label="Invite by email">
+          <Input
+            aria-label="Email"
+            type="email"
+            placeholder="teammate@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </Field>
+        <div className="flex gap-2">
+          <Select aria-label="Level" value={level} onChange={(e) => setLevel(e.target.value)}>
+            <option value="viewer">Viewer</option>
+            <option value="driver">Driver</option>
+            <option value="manager">Manager</option>
+          </Select>
+          <Button
+            loading={share.isPending}
+            disabled={!email.includes('@')}
+            onClick={() => share.mutate()}
+          >
+            Share
+          </Button>
+        </div>
+        {(shares ?? []).length > 0 ? (
+          <ul className="space-y-1 pt-1">
+            {shares!.map((s) => (
+              <li
+                key={s.id}
+                className="flex items-center justify-between rounded-lg bg-panel2 px-2.5 py-1.5 text-sm"
+              >
+                <span>
+                  <span className="font-medium">{s.userEmail}</span>{' '}
+                  <span className="text-xs text-faint">{s.level}</span>
+                </span>
+                <Button
+                  variant="ghost"
+                  className="px-2 py-1 text-xs text-danger"
+                  aria-label={`Revoke ${s.userEmail}`}
+                  onClick={() => revoke.mutate(s.id)}
+                >
+                  Revoke
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-faint">Not shared with anyone yet.</p>
+        )}
+      </div>
+    </Card>
   );
 }
