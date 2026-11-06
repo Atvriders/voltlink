@@ -401,6 +401,11 @@ fleetRouter.post('/assignments', fleetManage, async (req, res) => {
       .json({ error: { code: 'VALIDATION', message: 'Driver must be in this organization.' } });
     return;
   }
+  // N-ASSIGN: assigning a vehicle ends the previous active assignment.
+  await prisma.vehicleAssignment.updateMany({
+    where: { vehicleId, organizationId: orgId, toAt: null },
+    data: { toAt: new Date() },
+  });
   const a = await prisma.vehicleAssignment.create({
     data: {
       organizationId: orgId,
@@ -413,6 +418,31 @@ fleetRouter.post('/assignments', fleetManage, async (req, res) => {
   });
   res.status(201).json({ data: { id: a.id } });
 });
+
+// N-ASSIGN: assignments are editable — department/cost center remapping and
+// end-dating without deleting history.
+fleetRouter.patch(
+  '/assignments/:id',
+  {
+    auth: 'session',
+    target: { kind: 'resource', resource: 'assignment', from: 'param:id', perm: 'fleet.manage' },
+  },
+  async (req, res) => {
+    const { departmentId, costCenterId, toAt } = (req.body ?? {}) as Record<
+      string,
+      string | null | undefined
+    >;
+    const data: { departmentId?: string | null; costCenterId?: string | null; toAt?: Date | null } = {};
+    if (departmentId !== undefined) data.departmentId = departmentId || null;
+    if (costCenterId !== undefined) data.costCenterId = costCenterId || null;
+    if (toAt !== undefined) data.toAt = toAt === null ? null : new Date(String(toAt));
+    await prisma.vehicleAssignment.update({
+      where: { id: req.access!.resource!.id },
+      data,
+    });
+    res.json({ data: { ok: true } });
+  },
+);
 
 fleetRouter.delete(
   '/assignments/:id',
