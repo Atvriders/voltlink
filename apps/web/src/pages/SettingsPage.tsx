@@ -269,6 +269,7 @@ function SecurityTab() {
                 <Button
                   variant="ghost"
                   className="px-2 py-1 text-xs text-danger"
+                  aria-label={`Delete passkey ${p.name ?? p.id}`}
                   onClick={() => deletePasskey.mutate(p.id)}
                 >
                   <Trash2 size={12} />

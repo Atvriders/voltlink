@@ -107,6 +107,7 @@ export default function DriveDetailPage() {
               <div className="flex items-center gap-1">
                 <Button
                   variant="secondary"
+                  aria-label="Restart route replay"
                   onClick={() => {
                     setProgress(0);
                     setPlaying(false);

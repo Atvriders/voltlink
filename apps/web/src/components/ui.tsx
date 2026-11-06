@@ -9,6 +9,7 @@ import {
   type ReactElement,
   type ReactNode,
   useEffect,
+  useRef,
   type SelectHTMLAttributes,
 } from 'react';
 import { Loader2, X } from 'lucide-react';
@@ -177,26 +178,62 @@ export function Modal({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const titleId = useId();
+
+  // F-A11Y: initial focus, Tab trap, focus restore and aria-labelledby.
   useEffect(() => {
     if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const focusables = (): HTMLElement[] =>
+      Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+    const first: HTMLElement | null = focusables()[0] ?? dialogRef.current;
+    first?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const index = items.indexOf(document.activeElement as HTMLElement);
+      if (e.shiftKey) {
+        if (index <= 0) {
+          e.preventDefault();
+          items[items.length - 1]!.focus();
+        }
+      } else if (index === items.length - 1 || index === -1) {
+        e.preventDefault();
+        items[0]!.focus();
+      }
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      previous?.focus?.();
+    };
+  }, [open]);
 
   if (!open) return null;
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"
-      aria-label={typeof title === 'string' ? title : 'Dialog'}
+      aria-labelledby={titleId}
+      tabIndex={-1}
     >
       <div className="max-h-[92vh] w-full overflow-auto rounded-t-2xl border border-line bg-panel p-0 shadow-2xl sm:max-w-lg sm:rounded-2xl">
         <header className="sticky top-0 flex items-center justify-between border-b border-line bg-panel px-5 py-3">
-          <h2 className="text-base font-bold">{title}</h2>
+          <h2 id={titleId} className="text-base font-bold">{title}</h2>
           <button
             onClick={onClose}
             className="rounded-md p-1 text-subtle hover:bg-panel2 hover:text-ink"

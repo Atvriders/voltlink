@@ -356,6 +356,7 @@ function DriversTab() {
               <Button
                 variant="ghost"
                 className="px-2 py-1 text-xs text-danger"
+                aria-label={`Remove driver ${d.name}`}
                 onClick={() => {
                   if (confirm('Remove driver?')) removeDriver.mutate(d.id);
                 }}

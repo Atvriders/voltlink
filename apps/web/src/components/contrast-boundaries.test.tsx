@@ -58,7 +58,7 @@ describe('contrast boundaries (F-CONTRAST)', () => {
     expect(input.className).not.toContain('border-line');
     expect(select.className).toContain('border-control');
     expect(select.className).not.toContain('border-line');
-    const secondary = [...c1.querySelectorAll('button')].find((b) => b.textContent === 'secondary')!;
+    const secondary = Array.from(c1.querySelectorAll('button')).find((b) => b.textContent === 'secondary')!;
     expect(secondary.className).toContain('border-control');
   });
 

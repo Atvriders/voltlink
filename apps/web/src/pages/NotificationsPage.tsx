@@ -399,6 +399,7 @@ function WebhooksTab() {
               <Button
                 variant="ghost"
                 className="px-2 py-1 text-xs text-danger"
+                aria-label={`Delete webhook ${w.name ?? w.id}`}
                 onClick={() => {
                   if (confirm('Delete webhook?')) remove.mutate(w.id);
                 }}

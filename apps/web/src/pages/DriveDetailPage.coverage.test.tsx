@@ -216,7 +216,7 @@ describe('DriveDetailPage', () => {
     });
 
     expect(screen.getByText('Route replay')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /replay/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Restart route replay' })).toBeTruthy();
     expect(screen.getByText('Business')).toBeTruthy();
   });
 
@@ -231,9 +231,9 @@ describe('DriveDetailPage', () => {
   it('toggles replay playback state', async () => {
     renderPage('/drives/v1', <DriveDetailPage />);
 
-    const replayButton = await screen.findByRole('button', { name: /replay/i });
-    fireEvent.click(replayButton);
+    const playButton = await screen.findByRole('button', { name: 'Replay' });
+    fireEvent.click(playButton);
 
-    expect(await screen.findByRole('button', { name: /pause/i })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Pause' })).toBeTruthy();
   });
 });

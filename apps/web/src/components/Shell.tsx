@@ -153,6 +153,16 @@ function VehicleSwitcher() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') setOpen(false);
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setOpen(true);
+            requestAnimationFrame(() =>
+              ref.current?.querySelector<HTMLButtonElement>('[role="menuitem"], button[data-veh]')?.focus(),
+            );
+          }
+        }}
         className="flex items-center gap-2 rounded-lg border border-line bg-panel2 px-2.5 py-1.5 text-sm hover:border-faint"
         aria-expanded={open}
         aria-haspopup="menu"
@@ -324,6 +334,16 @@ function ThemeMenu() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') setOpen(false);
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setOpen(true);
+            requestAnimationFrame(() =>
+              ref.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus(),
+            );
+          }
+        }}
         className="rounded-lg p-2 text-subtle hover:bg-panel2 hover:text-ink"
         aria-label="Theme"
         aria-expanded={open}
@@ -332,6 +352,20 @@ function ThemeMenu() {
       </button>
       {open && (
         <div
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              setOpen(false);
+              return;
+            }
+            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+            e.preventDefault();
+            const items = Array.from(
+              ref.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [],
+            );
+            const i = items.indexOf(document.activeElement as HTMLButtonElement);
+            const next = e.key === 'ArrowDown' ? (i + 1) % items.length : (i - 1 + items.length) % items.length;
+            items[next]?.focus();
+          }}
           className="absolute right-0 top-full z-40 mt-1 w-52 rounded-xl border border-line bg-panel p-1 shadow-2xl"
           role="menu"
         >
