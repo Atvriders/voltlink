@@ -6,8 +6,10 @@ import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
+  Ban,
   BatteryCharging,
   Bell,
+  CheckCircle2,
   Car,
   CircleDot,
   Clock,
@@ -27,6 +29,7 @@ import {
   Thermometer,
   Unlock,
   Wind,
+  XCircle,
   Zap,
 } from 'lucide-react';
 import { api, ApiError } from '../api/client';
@@ -114,7 +117,13 @@ export default function LiveVehiclePage() {
   const [activeCommandId, setActiveCommandId] = useState<string | null>(null);
   const { data: activeCommand } = useQuery({
     queryKey: ['command', activeCommandId],
-    queryFn: () => api<CommandWithEvents>(`/api/v1/commands/${activeCommandId}`),
+    queryFn: () =>
+      api<{
+        command: VehicleCommand;
+        events: { id: string; event: string; actor: string; detail: string; createdAt: string }[];
+      }>(`/api/v1/commands/${activeCommandId}`).then(
+        (d) => ({ ...d.command, events: d.events }) as CommandWithEvents,
+      ),
     enabled: !!activeCommandId,
     refetchInterval: 1500,
   });
@@ -579,10 +588,34 @@ function CommandModal({
   onClose: () => void;
   units: 'metric' | 'imperial';
 }) {
+  const qc = useQueryClient();
+  const cancelMutation = useMutation({
+    mutationFn: () =>
+      api<{ ok: boolean }>(`/api/v1/commands/${command?.id}/cancel`, { method: 'POST' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['command', command?.id] });
+      void qc.invalidateQueries({ queryKey: ['commands'] });
+    },
+  });
   if (!command) return null;
+  // F-LIFECYCLEUI: the response shape is {command, events}; by the time it
+  // reaches this modal it is flattened. Steps reflect the last stage actually
+  // reached (from the audit trail), and terminal states are named with their
+  // own icon instead of painting every step red.
   const statuses = ['queued', 'submitted', 'accepted', 'confirmed'] as const;
-  const idx = statuses.indexOf(command.status as (typeof statuses)[number]);
+  const lastStage = (() => {
+    const inEvents = (statuses as readonly string[]).filter((st) =>
+      command.events?.some((e) => e.event === st),
+    );
+    if (inEvents.length > 0) return statuses.indexOf(inEvents[inEvents.length - 1] as (typeof statuses)[number]);
+    const idx = statuses.indexOf(command.status as (typeof statuses)[number]);
+    return idx === -1 ? 0 : idx;
+  })();
+  const terminal = !(statuses as readonly string[]).includes(command.status);
+  const failure = terminal && !['canceled'].includes(command.status);
+  const outcome = outcomeFor(command.status);
   const steps = ['Queued', 'Submitted', 'Provider accepted', 'Vehicle confirmed'];
+  const cancelable = command.status === 'queued' || command.status === 'submitted';
   return (
     <Modal
       open
@@ -593,37 +626,69 @@ function CommandModal({
           {COMMAND_DEFINITIONS[command.type]?.label ?? command.type}
         </span>
       }
+      footer={
+        cancelable ? (
+          <Button
+            variant="danger"
+            loading={cancelMutation.isPending}
+            onClick={() => cancelMutation.mutate()}
+          >
+            <Ban size={14} /> Cancel command
+          </Button>
+        ) : (
+          <Button variant="secondary" onClick={onClose}>
+            Close dialog
+          </Button>
+        )
+      }
     >
       <div className="space-y-4">
         <ol className="space-y-2">
           {steps.map((label, i) => {
-            const done = idx >= i;
-            const failed = ['failed', 'rejected', 'timed_out', 'unsupported', 'canceled'].includes(
-              command.status,
-            );
+            const done = lastStage >= i;
+            const isCurrent = !terminal && lastStage === i;
             return (
               <li
                 key={label}
-                className={`flex items-center gap-2 text-sm ${done && !failed ? 'text-ok' : failed && i >= idx ? 'text-danger' : i === idx + 1 ? 'text-subtle' : 'text-faint'}`}
+                className={`flex items-center gap-2 text-sm ${
+                  done ? 'text-ok' : isCurrent ? 'text-subtle' : 'text-faint'
+                }`}
               >
-                {done || failed ? <CircleDot size={14} /> : <Clock size={14} />}
+                {done ? <CheckCircle2 size={14} /> : <Clock size={14} />}
                 {label}
-                {i === idx && <span className="text-xs text-faint">· current</span>}
+                {isCurrent && <span className="text-xs text-faint">· current</span>}
               </li>
             );
           })}
         </ol>
+        {terminal && (
+          <div
+            className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+              failure
+                ? 'border-danger/40 bg-danger/10 text-danger'
+                : 'border-line bg-panel2 text-subtle'
+            }`}
+          >
+            {failure ? <XCircle size={16} /> : <CircleDot size={16} />}
+            <span className="font-bold">{outcome.label}</span>
+            {outcome.explain && <span>— {outcome.explain}</span>}
+          </div>
+        )}
         {command.errorMessage && (
           <div className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
             {command.errorMessage}
           </div>
         )}
-        {outcomeFor(command.status).explain && command.status !== 'confirmed' && (
-          <p className="text-sm text-subtle">{outcomeFor(command.status).explain}</p>
+        {!terminal && outcome.explain && command.status !== 'confirmed' && (
+          <p className="text-sm text-subtle">{outcome.explain}</p>
         )}
         {command.status === 'confirmed' && (
-          <div className="rounded-lg border border-ok/40 bg-ok/10 px-3 py-2 text-sm text-ok">
-            Vehicle state confirms the command completed.
+          <div className="flex items-center gap-2 rounded-lg border border-ok/40 bg-ok/10 px-3 py-2 text-sm text-ok">
+            <CheckCircle2 size={16} />
+            <span>
+              <span className="font-bold">Confirmed</span> — Vehicle state confirms the command
+              completed.
+            </span>
           </div>
         )}
         {command.events && command.events.length > 0 && (

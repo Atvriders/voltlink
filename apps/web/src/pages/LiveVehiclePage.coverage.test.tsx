@@ -228,7 +228,8 @@ beforeEach(() => {
       const id = path.split('/').pop() ?? '';
       const known = commandItems.find((c) => c.id === id);
       const type = known?.type ?? (id.startsWith('cmd-') ? id.slice(4) : 'honk_horn');
-      return { ...postedCommand, id, type, status: 'confirmed', events: auditEvents };
+      // Real API shape: { command, events }.
+      return { command: { ...postedCommand, id, type, status: 'confirmed' }, events: auditEvents };
     }
 
     if (path === `/api/v1/vehicles/${vehicle.id}/refresh`) return { ok: true };
@@ -288,7 +289,7 @@ describe('LiveVehiclePage', () => {
       ),
     );
 
-    expect(await screen.findByText('Vehicle state confirms the command completed.')).toBeTruthy();
+    expect(await screen.findByText(/Vehicle state confirms the command completed/)).toBeTruthy();
   });
 
   it('issues a lock command and shows confirmation', async () => {
@@ -307,7 +308,7 @@ describe('LiveVehiclePage', () => {
       ),
     );
 
-    expect(await screen.findByText('Vehicle state confirms the command completed.')).toBeTruthy();
+    expect(await screen.findByText(/Vehicle state confirms the command completed/)).toBeTruthy();
   });
 
   it('issues a wake command and shows confirmation', async () => {
@@ -326,7 +327,7 @@ describe('LiveVehiclePage', () => {
       ),
     );
 
-    expect(await screen.findByText('Vehicle state confirms the command completed.')).toBeTruthy();
+    expect(await screen.findByText(/Vehicle state confirms the command completed/)).toBeTruthy();
   });
 
   it('opens a parameter modal for a configurable command and submits it', async () => {
@@ -356,7 +357,7 @@ describe('LiveVehiclePage', () => {
       ),
     );
 
-    expect(await screen.findByText('Vehicle state confirms the command completed.')).toBeTruthy();
+    expect(await screen.findByText(/Vehicle state confirms the command completed/)).toBeTruthy();
   });
 
   it('shows an error when a command fails', async () => {
