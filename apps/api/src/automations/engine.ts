@@ -102,7 +102,13 @@ function toAutomation(row: {
 
 export async function evaluateConditions(
   conditions: { type: ConditionType; params: Record<string, unknown> }[],
-  ctx: { vehicleId?: string; state?: Record<string, unknown> | null; now: Date; timezone?: string },
+  ctx: {
+    vehicleId?: string;
+    state?: Record<string, unknown> | null;
+    now: Date;
+    timezone?: string;
+    previousResult?: string | null;
+  },
 ): Promise<boolean> {
   for (const c of conditions) {
     const ok = await evaluateCondition(c.type, c.params, ctx);
@@ -114,7 +120,13 @@ export async function evaluateConditions(
 export async function evaluateCondition(
   type: ConditionType,
   params: Record<string, unknown>,
-  ctx: { vehicleId?: string; state?: Record<string, unknown> | null; now: Date; timezone?: string },
+  ctx: {
+    vehicleId?: string;
+    state?: Record<string, unknown> | null;
+    now: Date;
+    timezone?: string;
+    previousResult?: string | null;
+  },
 ): Promise<boolean> {
   switch (type) {
     case 'vehicle': {
@@ -156,8 +168,9 @@ export async function evaluateCondition(
       return (ctx.state?.plugConnected as boolean | undefined) === want;
     }
     case 'previous_result': {
-      // handled by caller when running (needs automation row) — default true
-      return true;
+      // N-CONDITIONS: compare with the automation's last run result; a first
+      // run never matches.
+      return ctx.previousResult === String(params.value ?? 'success');
     }
     default:
       return false;
@@ -285,6 +298,23 @@ async function executeAction(
       });
       return isPublic ? `Incident created${dry}` : `Incident created (private: public posting is operator-only)${dry}`;
     }
+    case 'tag_drive': {
+      if (!ctx.vehicleId) return `Tag drive skipped (no vehicle)${dry}`;
+      const drive = await prisma.drive.findFirst({
+        where: { vehicleId: ctx.vehicleId },
+        orderBy: { endAt: 'desc' },
+      });
+      if (!drive) return 'No drive found to tag';
+      const tag = String(action.params.tag ?? 'automation');
+      const existing = Array.isArray(drive.tags)
+        ? drive.tags
+        : JSON.parse(String(drive.tags ?? '[]'));
+      await prisma.drive.update({
+        where: { id: drive.id },
+        data: { tags: [...existing, tag] },
+      });
+      return `Drive tagged: ${tag}${dry}`;
+    }
     case 'generate_report': {
       await getQueue().enqueue(
         'reports',
@@ -364,6 +394,7 @@ export async function runAutomation(
       state,
       now: new Date(),
       timezone,
+      previousResult: row.lastResult,
     },
   );
   if (!conditionsMet) {
@@ -380,17 +411,35 @@ export async function runAutomation(
     return { result: 'skipped', actionResults: [] };
   }
 
-  const actionResults = await executeActions(
-    row.userId,
-    (row.actions ?? []) as { type: ActionType; params: Record<string, unknown> }[],
-    {
+  // Loop prevention: the hourly budget never lets a misbehaving automation
+  // run away (N-ACTIONSTUBS).
+  if (!opts.dryRun && !(await automationRunBudget(row.id))) {
+    await prisma.automationExecution.create({
+      data: {
+        automationId: row.id,
+        triggeredAt: new Date(),
+        triggerEvent: event.type,
+        result: 'budget_exceeded',
+        actionResults: JSON.parse('[]'),
+      },
+    });
+    return { result: 'budget_exceeded', actionResults: [] };
+  }
+
+  const actions = (row.actions ?? []) as { type: ActionType; params: Record<string, unknown> }[];
+  // maxRetries: failed actions are retried up to the configured count.
+  const attempts = Math.max(1, (row.maxRetries ?? 0) + 1);
+  let actionResults: { action: ActionType; ok: boolean; detail: string }[] = [];
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    actionResults = await executeActions(row.userId, actions, {
       vehicleId: event.vehicleId ?? undefined,
       vehicleName: vehicle?.displayName,
       dryRun: !!opts.dryRun,
       automationId: row.id,
       organizationId: row.organizationId,
-    },
-  );
+    });
+    if (actionResults.every((r) => r.ok)) break;
+  }
   const ok = actionResults.every((r) => r.ok);
   const result = opts.dryRun ? 'dry_run' : ok ? 'success' : 'failed';
   await prisma.automationExecution.create({
