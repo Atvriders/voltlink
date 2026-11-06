@@ -93,7 +93,8 @@ beforeEach(() => {
     if (path === '/api/v1/vehicles/places/all') return [];
     if (path === '/api/v1/vehicles/geofences/all') return [];
     if (path === '/api/v1/vehicles/privacy-zones') return [];
-    if (path === '/api/v1/config') return { map: { mode: 'demo' } };
+    if (path === '/api/v1/config/client')
+      return { map: { mode: 'demo', assetsUrl: '/assets/' }, geocoder: { enabled: false, autocomplete: false } };
     if (path.startsWith('/api/v1/charging')) return { items: [] };
     if (path.startsWith('/api/v1/drives')) return { items: [] };
     return {};
@@ -126,7 +127,8 @@ describe('save place picker (NEW-12)', () => {
     expect(screen.getByText(/click the map to place/i)).toBeTruthy();
     fireEvent.click(screen.getByText('pick-here'));
     expect(await screen.findByText(/selected: 40\.1234, -100\.5678/i)).toBeTruthy();
-    const name = screen.getByRole('textbox');
+    const textboxes = screen.getAllByRole('textbox');
+    const name = textboxes[textboxes.length - 1]!;
     fireEvent.change(name, { target: { value: 'HQ' } });
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
     await waitFor(() =>
