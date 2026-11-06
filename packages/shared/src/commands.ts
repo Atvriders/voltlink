@@ -285,7 +285,7 @@ export interface CommandParams {
   valetOn?: boolean;
   pin?: string;
   speedLimitKmh?: number;
-  destination?: { name: string; lat: number; lon: number };
+  destination?: { name: string; lat?: number; lon?: number };
   updateDelaySec?: number;
   homelinkName?: string;
   defrostOn?: boolean;
@@ -387,8 +387,9 @@ export const COMMAND_PARAM_SCHEMAS: Record<CommandType, z.ZodTypeAny> = {
     .object({
       destination: z.object({
         name: z.string().min(1).max(200),
-        lat: z.number().min(-90).max(90),
-        lon: z.number().min(-180).max(180),
+        // R2-14: coords are optional; the address alone is a valid destination.
+        lat: z.number().min(-90).max(90).optional(),
+        lon: z.number().min(-180).max(180).optional(),
       }),
     })
     .optional(),

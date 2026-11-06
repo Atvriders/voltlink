@@ -524,8 +524,8 @@ function ParamModal({
     } else if (c.kind === 'pin') {
       if (/^\d{4}$/.test(v)) (params as Record<string, unknown>)[c.param] = v;
     } else if (c.kind === 'destination') {
-      if (v.trim())
-        (params as Record<string, unknown>)[c.param] = { name: v.trim(), lat: 0, lon: 0 };
+      // R2-14: an address alone is valid — never fabricate 0,0 coordinates.
+      if (v.trim()) (params as Record<string, unknown>)[c.param] = { name: v.trim() };
     }
   }
   const setValue = (param: string, v: string) => setValues((prev) => ({ ...prev, [param]: v }));

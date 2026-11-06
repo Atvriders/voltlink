@@ -5,11 +5,13 @@ import './index.css';
 import { applyTheme } from './auth/AuthContext';
 import { ErrorBoundary, RootErrorFallback } from './components/boundaries';
 import { AnnouncerProvider } from './lib/announcer';
+import { installDefaultPreloadGuard } from './lib/preloadGuard';
 
 applyTheme();
 
-// F-WEBGLBLANK: nothing — not even a WebGL or chunk error — may blank the app.
-window.addEventListener('vite:preloadError', () => location.reload());
+// R2-37: a failing chunk may reload at most once per 30s — a persistent
+// failure lands on the route error card instead of a blank reload loop.
+installDefaultPreloadGuard();
 
 createRoot(document.getElementById('root')!, {
   onUncaughtError: (error) => console.error('[voltlink] uncaught:', error),

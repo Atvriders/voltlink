@@ -177,6 +177,37 @@ adminRouter.patch(
   },
 );
 
+adminRouter.patch(
+  '/users/:id/role',
+  { auth: 'session', stepUp: {}, target: { kind: 'instanceAdmin' } },
+  async (req, res) => {
+    // R2-22: the admin UI's role change reaches a real endpoint.
+    const target = await prisma.user.findUnique({ where: { id: String(req.params.id) } });
+    if (!target) {
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found.' } });
+      return;
+    }
+    const { role } = (req.body ?? {}) as { role?: string };
+    if (role !== 'admin' && role !== 'member') {
+      res.status(400).json({
+        error: { code: 'VALIDATION', message: 'role must be admin or member.' },
+      });
+      return;
+    }
+    await prisma.user.update({
+      where: { id: target.id },
+      data: { isInstanceAdmin: role === 'admin' },
+    });
+    await audit({
+      actorId: sessionActor(req).userId,
+      action: role === 'admin' ? 'admin.granted' : 'admin.revoked',
+      entityType: 'user',
+      entityId: target.id,
+    });
+    res.json({ data: { ok: true } });
+  },
+);
+
 adminRouter.post(
   '/users/:id/mfa-reset',
   { auth: 'session', stepUp: {}, target: { kind: 'instanceAdmin' } },

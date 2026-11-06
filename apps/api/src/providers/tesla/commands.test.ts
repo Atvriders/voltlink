@@ -123,6 +123,15 @@ describe('buildTeslaSteps', () => {
     expect((named.body.value as Record<string, string>)['android.intent.extra.TEXT']).toBe(
       'Rivermark',
     );
+    // R2-14: 0,0 means "no coordinates" — the typed address is sent instead.
+    const zeros = buildTeslaSteps(
+      'send_navigation',
+      { destination: { name: '3500 Deer Creek Rd', lat: 0, lon: 0 } as never },
+      ctx,
+    )[0]!;
+    expect((zeros.body.value as Record<string, string>)['android.intent.extra.TEXT']).toBe(
+      '3500 Deer Creek Rd',
+    );
   });
 });
 

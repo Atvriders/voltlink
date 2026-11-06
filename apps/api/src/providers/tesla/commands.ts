@@ -137,10 +137,11 @@ export function buildTeslaSteps(type: CommandType, p: CommandParams, ctx: CmdCtx
     }
     case 'send_navigation': {
       const d = p.destination;
-      const text =
-        d && Number.isFinite(d.lat) && Number.isFinite(d.lon)
-          ? `${d.lat!.toFixed(6)},${d.lon!.toFixed(6)}`
-          : (d?.name?.trim() ?? '');
+      // R2-14: 0,0 means "no coordinates" — fall back to the typed address.
+      const hasCoords = d && Number.isFinite(d.lat) && Number.isFinite(d.lon) && (d.lat !== 0 || d.lon !== 0);
+      const text = hasCoords
+        ? `${d!.lat!.toFixed(6)},${d!.lon!.toFixed(6)}`
+        : (d?.name?.trim() ?? '');
       return one('navigation_request', false, {
         type: 'share_ext_content_raw',
         value: {

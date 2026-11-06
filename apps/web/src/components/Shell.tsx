@@ -62,7 +62,7 @@ function Logo() {
       <img src="/logo.svg" alt="" className="h-8 w-8 rounded-lg" />
       <div className="leading-tight">
         <p className="text-base font-extrabold tracking-tight">VoltLink</p>
-        <p className="text-[10px] uppercase tracking-widest text-faint">
+        <p className="hidden text-[10px] uppercase tracking-widest text-faint sm:block">
           Connected Vehicle Platform
         </p>
       </div>
@@ -106,7 +106,11 @@ function VehicleSwitcher() {
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        // R2-38: a stale search query must not outlive the menu.
+        setQuery('');
+      }
     };
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
@@ -144,11 +148,14 @@ function VehicleSwitcher() {
 
   const pick = (id: string) => {
     setOpen(false);
+    setQuery('');
     setVehicle(id);
     navigate(`/vehicles/${id}`);
   };
 
-  if (list.length === 0) return null;
+  // R2-38: the switcher disappears only when there are no vehicles at all —
+  // an empty search shows "No vehicles match." inside the open menu.
+  if ((vehicles ?? []).length === 0) return null;
   return (
     <div className="relative" ref={ref}>
       <button
@@ -414,7 +421,7 @@ function AccountMenu({ align = 'left', email }: { align?: 'left' | 'right'; emai
         aria-expanded={open}
       >
         <CircleUserRound size={15} />
-        <span className="min-w-0 flex-1 truncate">{email}</span>
+        <span className="hidden min-w-0 flex-1 truncate lg:inline">{email}</span>
       </button>
       {open && (
         <div
@@ -607,14 +614,19 @@ export function Shell({ user, children }: { user: UserPublic | null; children: R
             <div className="lg:hidden">
               <AccountMenu align="right" email={user?.email ?? ''} />
             </div>
-            <ThemeMenu />
-            <Link
-              to="/settings/profile"
-              className="rounded-lg p-2 text-subtle hover:bg-panel2 hover:text-ink"
-              aria-label="Settings"
-            >
-              <Settings size={17} />
-            </Link>
+            {/* R2-36: theme + settings collapse into the account menu on phones. */}
+            <div className="hidden lg:block">
+              <ThemeMenu />
+            </div>
+            <div className="hidden lg:block">
+              <Link
+                to="/settings/profile"
+                className="rounded-lg p-2 text-subtle hover:bg-panel2 hover:text-ink"
+                aria-label="Settings"
+              >
+                <Settings size={17} />
+              </Link>
+            </div>
           </div>
         </header>
 

@@ -249,7 +249,27 @@ describe('Shell page', () => {
     expect(screen.getByText('Page body')).toBeTruthy();
   });
 
-  it('filters vehicles and hides the switcher when nothing matches', async () => {
+  it('keeps mobile header controls inside the viewport (R2-36)', async () => {
+    renderShell();
+    await screen.findByRole('button', { name: /Choose vehicle|Vehicle: Aurora/ });
+    // The standalone Settings link and Theme menu collapse into the account
+    // menu below lg, so the phone header never overflows.
+    const settingsLink = screen
+      .getAllByRole('link', { name: 'Settings' })
+      .find((a) => a.getAttribute('aria-label') === 'Settings')!;
+    expect(settingsLink.closest('div.hidden.lg\\:block')).toBeTruthy();
+    const themeButton = screen.getByRole('button', { name: 'Theme' });
+    expect(themeButton.closest('div.hidden.lg\\:block')).toBeTruthy();
+    // The logo subtitle is hidden below sm.
+    const subtitles = screen.getAllByText('Connected Vehicle Platform');
+    expect(subtitles.length).toBeGreaterThan(0);
+    for (const subtitle of subtitles) {
+      expect(subtitle.className).toContain('hidden');
+      expect(subtitle.className).toContain('sm:block');
+    }
+  });
+
+  it('keeps the switcher and shows a no-match message for an empty search (R2-38)', async () => {
     const user = userEvent.setup();
     renderShell();
 
@@ -261,9 +281,9 @@ describe('Shell page', () => {
     const search = within(menu).getByPlaceholderText('Search vehicles');
 
     fireEvent.input(search, { target: { value: 'zzz' } });
-    // A filter with no matches hides the switcher entirely (list.length === 0).
-    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
-    expect(screen.queryByRole('button', { name: 'Choose vehicle' })).toBeNull();
+    // The switcher stays, and the menu explains there are no matches.
+    expect(await within(menu).findByText('No vehicles match.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Choose vehicle' })).toBeTruthy();
   });
 
   it('toggles a favorite through the API', async () => {

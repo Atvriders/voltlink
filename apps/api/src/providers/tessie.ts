@@ -166,10 +166,11 @@ function planTessieCommand(type: CommandType, p: CommandParams): Plan {
     }
     case 'send_navigation': {
       const d = p.destination;
-      const value =
-        d && Number.isFinite(d.lat) && Number.isFinite(d.lon)
-          ? `${d.lat!.toFixed(6)},${d.lon!.toFixed(6)}`
-          : d?.name?.trim();
+      // R2-14: 0,0 means "no coordinates" — fall back to the typed address.
+      const hasCoords = d && Number.isFinite(d.lat) && Number.isFinite(d.lon) && (d.lat !== 0 || d.lon !== 0);
+      const value = hasCoords
+        ? `${d!.lat!.toFixed(6)},${d!.lon!.toFixed(6)}`
+        : d?.name?.trim();
       return value
         ? one('share', { value: value.slice(0, 300), locale: 'en-US' }, { idempotent: false })
         : bad('destination is required.');
