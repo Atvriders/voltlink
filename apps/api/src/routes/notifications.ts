@@ -127,13 +127,30 @@ notificationsRouter.put(
   '/preferences',
   { auth: 'session', target: { kind: 'none' } },
   async (req, res) => {
-    const { channel, event, severity, enabled } = (req.body ?? {}) as {
+    const { channel, event, severity, enabled, allEvents } = (req.body ?? {}) as {
       channel?: string;
       event?: string;
       severity?: string;
       enabled?: boolean;
+      allEvents?: boolean;
     };
-    if (!channel || !event || !severity || typeof enabled !== 'boolean') {
+    if (!channel || typeof enabled !== 'boolean') {
+      res.status(400).json({
+        error: { code: 'VALIDATION', message: 'channel and enabled are required.' },
+      });
+      return;
+    }
+    // F-ONBOARD: the onboarding master toggle updates every event row for a
+    // channel at once.
+    if (allEvents === true) {
+      await prisma.notificationPreference.updateMany({
+        where: { userId: sessionActor(req).userId, channel },
+        data: { enabled },
+      });
+      res.json({ data: { ok: true } });
+      return;
+    }
+    if (!event || !severity) {
       res.status(400).json({
         error: { code: 'VALIDATION', message: 'channel, event, severity, enabled required.' },
       });

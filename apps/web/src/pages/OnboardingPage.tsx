@@ -135,6 +135,13 @@ export default function OnboardingPage() {
     if (STEPS[step]!.id === 'units') await saveSettings.mutateAsync();
     if (STEPS[step]!.id === 'timezone') await saveSettings.mutateAsync();
     if (STEPS[step]!.id === 'retention') await saveRetention.mutateAsync();
+    // F-ONBOARD: the notifications step really saves the master in-app toggle.
+    if (STEPS[step]!.id === 'notifications') {
+      await api('/api/v1/notifications/preferences', {
+        method: 'PUT',
+        body: { channel: 'in_app', allEvents: true, enabled: notificationEnabled },
+      }).catch(() => undefined);
+    }
     setStep((s) => s + 1);
   };
 
