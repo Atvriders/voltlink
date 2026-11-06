@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { startRegistration } from '@simplewebauthn/browser';
 import { Badge, Button, Card, Field, Input, Modal, Select } from '../components/ui';
 import { fmtDateTime } from '../lib/format';
 import { ErrorState } from '../components/QueryState';
@@ -217,46 +218,16 @@ function SecurityTab() {
   const registerPasskey = async () => {
     setError('');
     try {
-      const options = await api<{
-        challenge: string;
-        user: { id: string; name: string; displayName: string };
-        rp: { id: string; name: string };
-        excludeCredentials?: { id: string }[];
-      }>('/api/v1/auth/passkey/register-options');
-      const cred = (await navigator.credentials.create({
-        publicKey: {
-          challenge: b64decode(options.challenge),
-          rp: options.rp,
-          user: {
-            id: b64decode(options.user.id),
-            name: options.user.name,
-            displayName: options.user.displayName,
-          },
-          pubKeyCredParams: [
-            { type: 'public-key', alg: -7 },
-            { type: 'public-key', alg: -257 },
-          ],
-          excludeCredentials: (options.excludeCredentials ?? []).map((c) => ({
-            id: b64decode(c.id),
-            type: 'public-key' as const,
-          })),
-          authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' },
-          attestation: 'none',
-        },
-      })) as PublicKeyCredential;
-      const response = cred.response as AuthenticatorAttestationResponse;
-      await api('/api/v1/auth/passkey/register-verify', {
+      // A-PASSKEY: real /auth/passkeys/* routes with a simplewebauthn JSON
+      // response, never a hand-built body.
+      const optionsJSON = await api<Parameters<typeof startRegistration>[0]['optionsJSON']>(
+        '/api/v1/auth/passkeys/options',
+        { method: 'POST' },
+      );
+      const response = await startRegistration({ optionsJSON });
+      await api('/api/v1/auth/passkeys', {
         method: 'POST',
-        body: {
-          id: cred.id,
-          rawId: b64encode(cred.rawId),
-          type: 'public-key',
-          response: {
-            clientDataJSON: b64encode(response.clientDataJSON),
-            attestationObject: b64encode(response.attestationObject),
-            transports: response.getTransports?.() ?? [],
-          },
-        },
+        body: { name: '', response },
       });
       setSuccess('Passkey registered. Use it on the sign-in page.');
       qc.invalidateQueries({ queryKey: ['passkeys'] });
@@ -695,16 +666,3 @@ function PrivacyTab() {
   );
 }
 
-function b64encode(buf: ArrayBuffer): string {
-  return btoa(String.fromCharCode(...new Uint8Array(buf)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-}
-function b64decode(s: string): Uint8Array<ArrayBuffer> {
-  const pad = s.replace(/-/g, '+').replace(/_/g, '/');
-  const bin = atob(pad);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
