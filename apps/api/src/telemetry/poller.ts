@@ -95,9 +95,11 @@ export class PollingScheduler {
       );
       if (plan.action === 'none') continue;
       // Lease: only the scheduler that flips nextPollAt plans this vehicle.
+      // P-SLEEP: the lease lands on the planned instant, not a fixed
+      // 2-minute offset that ignores sleep state.
       const leased = await prisma.vehiclePollState.updateMany({
         where: { vehicleId: row.vehicleId, nextPollAt: row.nextPollAt },
-        data: { nextPollAt: new Date(Date.now() + 120_000) },
+        data: { nextPollAt: new Date(plan.nextAt) },
       });
       if (leased.count !== 1) continue;
       planned++;

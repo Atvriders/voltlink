@@ -69,17 +69,17 @@ export function planNextPoll(
   if (input.backoffUntil && now < input.backoffUntil)
     return out('none', input.backoffUntil, 'backoff');
   if (input.connectivity === 'asleep')
-    return out('state', now + jitter(tuning.asleepSec), 'asleep');
+    return out('state', now + jitter(tuning.asleepSec) * 1000, 'asleep');
   if (input.connectivity === 'offline' || input.connectivity === 'unknown') {
-    return out('state', now + jitter(tuning.offlineSec), input.connectivity);
+    return out('state', now + jitter(tuning.offlineSec) * 1000, input.connectivity);
   }
   if (input.pendingCommandUntil && now < input.pendingCommandUntil) {
-    return out('vehicle_data', now + jitter(tuning.pendingSec), 'pending_command');
+    return out('vehicle_data', now + jitter(tuning.pendingSec) * 1000, 'pending_command');
   }
   const activity = input.activity ?? {};
   if (!input.lastActivityAt) return out('vehicle_data', now, 'first_fetch');
   if (input.suspendedUntil && now < input.suspendedUntil) {
-    return out('state', now + jitter(tuning.asleepSec), 'suspended');
+    return out('state', now + jitter(tuning.asleepSec) * 1000, 'suspended');
   }
   if (input.suspendedUntil && now >= input.suspendedUntil) {
     // One vehicle_data re-check after a suspension, then clear it.
@@ -91,19 +91,19 @@ export function planNextPoll(
     activity.shift_state === 'N' ||
     Number(activity.speedKmh ?? 0) > 0
   ) {
-    return out('vehicle_data', now + jitter(tuning.drivingSec), 'driving');
+    return out('vehicle_data', now + jitter(tuning.drivingSec) * 1000, 'driving');
   }
   if (activity.chargingState === 'Charging' || activity.chargingState === 'Starting') {
-    return out('vehicle_data', now + jitter(tuning.chargingSec), 'charging');
+    return out('vehicle_data', now + jitter(tuning.chargingSec) * 1000, 'charging');
   }
   if (activity.sentryMode === true)
-    return out('vehicle_data', now + jitter(tuning.sentrySec), 'sentry');
+    return out('vehicle_data', now + jitter(tuning.sentrySec) * 1000, 'sentry');
   const idleFor = (now - input.lastActivityAt) / 60_000;
   if (idleFor >= tuning.idleSleepWindowMin) {
-    return out('state', now + jitter(60), 'sleeping_window'); // keep state checks; suspend after re-check
+    return out('state', now + jitter(60) * 1000, 'sleeping_window'); // keep state checks; suspend after re-check
   }
   if (input.userActiveUntil && now < input.userActiveUntil) {
-    return out('vehicle_data', now + jitter(tuning.viewingSec), 'viewing');
+    return out('vehicle_data', now + jitter(tuning.viewingSec) * 1000, 'viewing');
   }
-  return out('vehicle_data', now + jitter(tuning.idleSec), 'idle');
+  return out('vehicle_data', now + jitter(tuning.idleSec) * 1000, 'idle');
 }
