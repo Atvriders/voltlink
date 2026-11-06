@@ -60,7 +60,7 @@ export function Button({
     'inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[38px]';
   const variants: Record<string, string> = {
     primary: 'bg-accent text-onaccent hover:bg-accent-hover',
-    secondary: 'bg-panel2 text-ink border border-line hover:border-faint',
+    secondary: 'bg-panel2 text-ink border border-control hover:border-faint',
     ghost: 'bg-transparent text-subtle hover:text-ink hover:bg-panel2',
     danger: 'bg-danger-strong text-ondanger hover:opacity-90',
     outline: 'border border-accent/60 text-accent hover:bg-accent/10',
@@ -80,7 +80,7 @@ export function Button({
 export function Input({ className = '', ...rest }: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className={`w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm text-ink placeholder:text-faint focus:border-focus focus:outline-none min-h-[38px] ${className}`}
+      className={`w-full rounded-lg border border-control bg-panel px-3 py-2 text-sm text-ink placeholder:text-faint focus:border-focus focus:outline-none min-h-[38px] ${className}`}
       {...rest}
     />
   );
@@ -93,7 +93,7 @@ export function Select({
 }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
-      className={`rounded-lg border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-focus focus:outline-none min-h-[38px] ${className}`}
+      className={`rounded-lg border border-control bg-panel px-3 py-2 text-sm text-ink focus:border-focus focus:outline-none min-h-[38px] ${className}`}
       {...rest}
     >
       {children}
