@@ -194,4 +194,12 @@ describe('PresentationPage', () => {
 
     expect(await screen.findByLabelText('Resume cycling')).toBeTruthy();
   });
+
+  it('labels the odometer as Odometer, not Efficiency (NEW-14)', async () => {
+    renderPage('/presentation', <PresentationPage />);
+    await screen.findByText('Aurora');
+    // The stats scene comes up after the 12s cycle.
+    await waitFor(() => expect(screen.getByText('Odometer')).toBeTruthy(), { timeout: 14000 });
+    expect(screen.queryByText('Efficiency')).toBeNull();
+  });
 });

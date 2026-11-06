@@ -183,9 +183,9 @@ function PresentationStats({ vehicle }: { vehicle: VehicleWithState }) {
       />
       <BigStat
         icon={<Gauge className="text-accent" />}
-        label="Efficiency"
+        label="Odometer"
         value={s ? `${Math.round(s.odometerKm ?? 0).toLocaleString()} km` : '—'}
-        sub="odometer"
+        sub="total distance"
       />
       <BigStat
         icon={<MapPin className="text-accent" />}
