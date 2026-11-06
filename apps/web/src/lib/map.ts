@@ -16,7 +16,7 @@ export type MapPoint = {
 /** Deterministic fictional city: grid of streets around the demo coordinates. */
 export function fictionalCityGeoJson(): { type: 'FeatureCollection'; features: unknown[] } {
   const features: unknown[] = [];
-  const center = { lat: 39.0734, lon: -104.6211 };
+  const center = { lat: 40.009, lon: -100.008 };
   const span = 0.11;
   const step = 0.008;
   // Street grid (index-based centre lines so float drift can't hide arterials).
@@ -145,7 +145,7 @@ export function createMap(
   const map = new maplibregl.Map({
     container,
     style: (styleOverride ?? buildStyle()) as never,
-    center: [-104.6211, 39.0734],
+    center: [-100.008, 40.009],
     zoom: 12.2,
     interactive,
     attributionControl: false,

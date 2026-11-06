@@ -65,7 +65,7 @@ const state = (over: Partial<VehicleState>): VehicleState =>
     locked: true,
     lat: 39.0421,
     lon: -104.6712,
-    address: '1420 Meridian Ave, Rivermark',
+    address: '1 Main St, Rivermark',
     speedKmh: 0,
     headingDeg: 0,
     insideTempC: 21,

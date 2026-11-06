@@ -16,11 +16,13 @@ import { prisma } from '../core/db';
 import type { Capability, CommandParams, CommandType, VehicleState } from '@voltlink/shared';
 
 // Fictional region: Rivermark County (clearly fictional coordinates).
-export const DEMO_HOME = { lat: 39.0421, lon: -104.6712, name: '1420 Meridian Ave, Rivermark' };
-export const DEMO_WORK = { lat: 39.1134, lon: -104.5841, name: '48 Copper Creek Rd, Rivermark' };
-export const DEMO_OFFICE = { lat: 39.1001, lon: -104.5902, name: 'Rivermark Commerce Park' };
-export const DEMO_SITE = { lat: 39.2211, lon: -104.4933, name: 'Hawk Ridge Trailhead' };
-export const DEMO_CHARGER = { lat: 39.0877, lon: -104.6033, name: 'Rivermark Supercharge' };
+// Fictional town coordinates: Rivermark sits on an empty plain, nowhere near
+// any real address (guide 06 / R4 demo rule — fictional means fictional).
+export const DEMO_HOME = { lat: 40.0, lon: -100.0, name: '1 Main St, Rivermark' };
+export const DEMO_WORK = { lat: 40.02, lon: -100.03, name: '2 Mill St, Rivermark' };
+export const DEMO_OFFICE = { lat: 40.01, lon: -100.015, name: 'Rivermark Commerce Park' };
+export const DEMO_SITE = { lat: 40.04, lon: -100.06, name: 'Hawk Ridge Trailhead' };
+export const DEMO_CHARGER = { lat: 40.015, lon: -100.02, name: 'Rivermark Supercharge' };
 
 const FULL_CAPABILITIES: Capability[] = [
   'wake',
@@ -230,9 +232,9 @@ function loopPosition(hourOfDay: number): {
   const inLoop = (hourOfDay >= 10 && hourOfDay < 12) || (hourOfDay >= 15 && hourOfDay < 17);
   const segs = [
     DEMO_HOME,
-    { lat: 39.0612, lon: -104.6531, name: 'Juniper Rd' },
+    { lat: 40.006, lon: -100.012, name: 'Juniper Rd' },
     DEMO_CHARGER,
-    { lat: 39.0734, lon: -104.6211, name: 'Lakefront Dr' },
+    { lat: 40.009, lon: -100.008, name: 'Lakefront Dr' },
     DEMO_HOME,
   ];
   const segLen = 8; // minutes per segment

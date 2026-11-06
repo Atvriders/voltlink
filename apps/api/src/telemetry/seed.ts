@@ -354,14 +354,14 @@ export async function seedDemoWorld(
         if (rng() > 0.3)
           await makeDrive(
             DEMO_HOME,
-            { lat: 39.0734, lon: -104.6211, name: 'Lakefront Dr' },
+            { lat: 40.009, lon: -100.008, name: 'Lakefront Dr' },
             10.5,
             26,
             72,
           );
         if (rng() > 0.3)
           await makeDrive(
-            { lat: 39.0734, lon: -104.6211, name: 'Lakefront Dr' },
+            { lat: 40.009, lon: -100.008, name: 'Lakefront Dr' },
             DEMO_HOME,
             15.8,
             25,

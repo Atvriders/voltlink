@@ -3,9 +3,14 @@
 // commutes, work, sleep, active, loop driving, charger, office, offline)
 // execute deterministically.
 import { describe, expect, it } from 'vitest';
-import { DEMO_VEHICLES, simulatedState } from './demo';
+import { DEMO_HOME, DEMO_VEHICLES, DEMO_WORK, simulatedState } from './demo';
 
 describe('demo simulatedState', () => {
+  it('uses fictional Rivermark coordinates, not real addresses', () => {
+    expect(DEMO_HOME.lat).toBe(40.0);
+    expect(DEMO_HOME.lon).toBe(-100.0);
+    expect(DEMO_WORK.lat).toBe(40.02);
+  });
   it('produces a complete state for every demo vehicle at every hour', () => {
     for (const spec of DEMO_VEHICLES) {
       for (let h = 0; h < 24; h++) {
