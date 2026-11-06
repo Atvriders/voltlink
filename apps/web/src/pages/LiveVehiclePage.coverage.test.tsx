@@ -123,157 +123,265 @@ function renderPage(path: string, ui: React.ReactNode) {
 
 afterEach(cleanup);
 
-import LiveVehiclePage from './LiveVehiclePage';
+import userEvent from '@testing-library/user-event';
 import { fireEvent } from '@testing-library/react';
-
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
-  return {
-    ...actual,
-    useParams: () => ({ id: 'v1' }),
-  };
-});
+import LiveVehiclePage from './LiveVehiclePage';
 
 vi.mock('../webgl/VehicleViewer', () => ({
-  default: () => null,
+  default: () => <div data-testid="vehicle-viewer" />,
 }));
 
-const liveState = {
-  ...vehicle.state,
-  fetchedAt: new Date().toISOString(),
-  chargeLimitPct: 80,
-  chargePowerKw: 11,
-  chargeCurrentA: 16,
-  timeToFullChargeMin: 42,
-  batteryCapacityKwh: 75,
-  climateOn: true,
-  insideTempC: 21,
-  driverTempSettingC: 22,
-  defrostOn: false,
-  seatHeaterLevel: 2,
-  trunkOpen: false,
-  frunkOpen: false,
-  windowsOpen: false,
-  sentryMode: false,
-  alarmState: 'disarmed',
-  valetMode: false,
-  softwareVersion: '2024.1',
-  headingDeg: 90,
-  doors: { frontLeft: false, frontRight: false, rearLeft: false, rearRight: false },
-  tirePressureKpa: { frontLeft: 240, frontRight: 241, rearLeft: 238, rearRight: 239 },
-};
+const auditEvents = [
+  {
+    id: 'e1',
+    event: 'queued',
+    actor: 'u1',
+    detail: 'Command accepted',
+    createdAt: '2024-01-01T00:00:01.000Z',
+  },
+];
 
-const liveVehicle = { ...vehicle, state: liveState };
+const commandItems = [
+  {
+    id: 'cmd-activity',
+    vehicleId: 'v1',
+    type: 'set_temperature',
+    status: 'queued',
+    createdAt: '2024-01-01T00:00:00.000Z',
+    params: {},
+    idempotencyKey: 'key-activity',
+    updatedAt: '2024-01-01T00:00:01.000Z',
+  },
+];
 
-const commandFixture = {
-  id: 'cmd-1',
+const postedCommand = {
+  id: 'cmd-posted',
   vehicleId: 'v1',
-  type: 'lock',
+  type: 'honk_horn',
   status: 'confirmed',
-  createdAt: new Date().toISOString(),
+  createdAt: '2024-01-01T00:00:00.000Z',
   params: {},
+  idempotencyKey: 'key-posted',
+  updatedAt: '2024-01-01T00:00:01.000Z',
 };
 
-const commandDetail = {
-  ...commandFixture,
-  events: [
-    {
-      id: 'ev-1',
-      event: 'confirmed',
-      actor: 'system',
-      detail: 'Vehicle locked',
-      createdAt: new Date().toISOString(),
-    },
-  ],
-};
+let commandsForTest = commandItems;
+let vehiclesOverride: typeof vehicle | null = null;
+let commandPostError: Error | null = null;
 
-function mockApi(commands: unknown[] = [commandFixture]) {
-  apiMock.mockImplementation(async (path: string, init?: { method?: string; body?: unknown }) => {
-    if (path === '/api/v1/vehicles') return [liveVehicle];
-    if (path === '/api/v1/vehicles/v1') return liveVehicle;
-    if (path === '/api/v1/vehicles/v1/refresh') return { ok: true };
-    if (path.startsWith('/api/v1/commands?')) return { items: commands };
-    if (path === '/api/v1/commands/cmd-1') return commandDetail;
-    if (path === '/api/v1/commands' && init?.method === 'POST') return commandFixture;
-    return {};
-  });
+function renderVehiclePage(path = '/vehicles/v1') {
+  return renderPage(
+    path,
+    <Routes>
+      <Route path="/vehicles/:id" element={<LiveVehiclePage />} />
+    </Routes>,
+  );
 }
 
-describe('LiveVehiclePage', () => {
-  beforeEach(() => {
-    window.matchMedia =
-      window.matchMedia ||
-      (((q: string) => ({
+beforeEach(() => {
+  commandsForTest = commandItems;
+  vehiclesOverride = null;
+  commandPostError = null;
+
+  if (!globalThis.crypto) {
+    vi.stubGlobal('crypto', { randomUUID: () => 'test-uuid' });
+  } else if (typeof globalThis.crypto.randomUUID !== 'function') {
+    Object.defineProperty(globalThis.crypto, 'randomUUID', {
+      value: () => 'test-uuid',
+      configurable: true,
+    });
+  }
+
+  if (!window.matchMedia) {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
         matches: false,
-        media: q,
+        media: query,
         onchange: null,
-        addListener: () => undefined,
-        removeListener: () => undefined,
-        addEventListener: () => undefined,
-        removeEventListener: () => undefined,
-        dispatchEvent: () => false,
-      })) as unknown as typeof window.matchMedia);
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+  }
 
-    vi.stubGlobal(
-      'ResizeObserver',
-      class {
-        observe() {}
-        unobserve() {}
-        disconnect() {}
-      },
-    );
-    vi.stubGlobal(
-      'IntersectionObserver',
-      class {
-        observe() {}
-        unobserve() {}
-        disconnect() {}
-        takeRecords() {
-          return [];
-        }
-      },
-    );
+  const original = apiMock.getMockImplementation();
 
-    mockApi();
+  apiMock.mockImplementation(async (path: string, init?: { method?: string; body?: unknown }) => {
+    if (vehiclesOverride && path === '/api/v1/vehicles') return [vehiclesOverride];
+
+    if (path === '/api/v1/commands?vehicleId=v1&pageSize=8') {
+      return { items: commandsForTest };
+    }
+
+    if (path === '/api/v1/commands' && init?.method === 'POST') {
+      if (commandPostError) throw commandPostError;
+      const body = init.body as { type?: string } | undefined;
+      const type = body?.type ?? 'honk_horn';
+      return { ...postedCommand, id: `cmd-${type}`, type, status: 'confirmed' };
+    }
+
+    if (path.startsWith('/api/v1/commands/')) {
+      const id = path.split('/').pop() ?? '';
+      const known = commandItems.find((c) => c.id === id);
+      const type = known?.type ?? (id.startsWith('cmd-') ? id.slice(4) : 'honk_horn');
+      return { ...postedCommand, id, type, status: 'confirmed', events: auditEvents };
+    }
+
+    if (path === `/api/v1/vehicles/${vehicle.id}/refresh`) return { ok: true };
+
+    return original ? original(path, init) : {};
   });
+});
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it('renders the live vehicle content, telemetry, and command activity', async () => {
-    renderPage('/vehicles/v1', <LiveVehiclePage />);
+describe('LiveVehiclePage', () => {
+  it('renders live vehicle telemetry, changes preset, and refreshes', async () => {
+    const user = userEvent.setup();
+    renderVehiclePage();
 
     expect(await screen.findByRole('heading', { name: 'Aurora' })).toBeTruthy();
+    expect(screen.getByText('Battery & charging')).toBeTruthy();
+    expect(screen.getByText('72%')).toBeTruthy();
 
-    await waitFor(() => {
-      expect(screen.getByText('Battery & charging')).toBeTruthy();
+    const preset = screen.getByLabelText('Graphics preset') as HTMLSelectElement;
+    fireEvent.change(preset, { target: { value: 'ultra' } });
+    expect(preset.value).toBe('ultra');
+
+    await user.click(screen.getByRole('button', { name: /refresh/i }));
+
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/vehicles/v1/refresh', { method: 'POST' }),
+    );
+  });
+
+  it('opens the command lifecycle modal from command activity', async () => {
+    const user = userEvent.setup();
+    renderVehiclePage();
+
+    const activityButton = await screen.findByRole('button', {
+      name: /set[_ ]temperature/i,
     });
+    await user.click(activityButton);
 
-    expect(screen.getByText('Remote controls')).toBeTruthy();
-    expect(screen.getByText('Command activity')).toBeTruthy();
-    expect((await screen.findAllByText('Lock')).length).toBeGreaterThan(0);
+    expect(await screen.findByText('Audit trail')).toBeTruthy();
+    expect(screen.getByText(/Provider accepted/)).toBeTruthy();
+    expect(screen.getByText(/Vehicle state confirms the command completed/)).toBeTruthy();
+    expect(apiMock).toHaveBeenCalledWith('/api/v1/commands/cmd-activity');
   });
 
-  it('shows the empty command state when no commands exist', async () => {
-    mockApi([]);
+  it('issues a honk command and shows confirmation', async () => {
+    const user = userEvent.setup();
+    renderVehiclePage();
 
-    renderPage('/vehicles/v1', <LiveVehiclePage />);
+    await user.click(await screen.findByRole('button', { name: /honk horn/i }));
 
-    expect(await screen.findByText('No commands issued for this vehicle yet.')).toBeTruthy();
-  });
-
-  it('submits a refresh request when the refresh button is clicked', async () => {
-    renderPage('/vehicles/v1', <LiveVehiclePage />);
-
-    const refreshButton = await screen.findByRole('button', { name: /refresh/i });
-    fireEvent.click(refreshButton);
-
-    await waitFor(() => {
+    await waitFor(() =>
       expect(apiMock).toHaveBeenCalledWith(
-        '/api/v1/vehicles/v1/refresh',
+        '/api/v1/commands',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.objectContaining({ vehicleId: 'v1', type: 'honk_horn' }),
+        }),
+      ),
+    );
+
+    expect(await screen.findByText('Vehicle state confirms the command completed.')).toBeTruthy();
+  });
+
+  it('issues a lock command and shows confirmation', async () => {
+    const user = userEvent.setup();
+    renderVehiclePage();
+
+    await user.click(await screen.findByRole('button', { name: /lock/i }));
+
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/commands',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.objectContaining({ vehicleId: 'v1', type: 'lock' }),
+        }),
+      ),
+    );
+
+    expect(await screen.findByText('Vehicle state confirms the command completed.')).toBeTruthy();
+  });
+
+  it('issues a wake command and shows confirmation', async () => {
+    const user = userEvent.setup();
+    renderVehiclePage();
+
+    await user.click(await screen.findByRole('button', { name: /wake/i }));
+
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/commands',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.objectContaining({ vehicleId: 'v1', type: 'wake' }),
+        }),
+      ),
+    );
+
+    expect(await screen.findByText('Vehicle state confirms the command completed.')).toBeTruthy();
+  });
+
+  it('opens a parameter modal for a configurable command and submits it', async () => {
+    const user = userEvent.setup();
+    commandsForTest = [];
+    vehiclesOverride = {
+      ...vehicle,
+      capabilities: [...vehicle.capabilities, 'set_charge_limit', 'charging'],
+    };
+
+    renderVehiclePage();
+
+    await user.click(await screen.findByRole('button', { name: /charge limit/i }));
+
+    const input = await screen.findByRole('spinbutton');
+    fireEvent.change(input, { target: { value: '80' } });
+
+    await user.click(screen.getByRole('button', { name: /set & send/i }));
+
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/commands',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.objectContaining({ vehicleId: 'v1', type: 'set_charge_limit' }),
+        }),
+      ),
+    );
+
+    expect(await screen.findByText('Vehicle state confirms the command completed.')).toBeTruthy();
+  });
+
+  it('shows an error when a command fails', async () => {
+    const user = userEvent.setup();
+    commandPostError = new Error('boom');
+    renderVehiclePage();
+
+    await user.click(await screen.findByRole('button', { name: /honk horn/i }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('Command failed.');
+
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/commands',
         expect.objectContaining({ method: 'POST' }),
-      );
-    });
+      ),
+    );
+  });
+
+  it('shows a not-found alert for an unknown vehicle id', async () => {
+    renderVehiclePage('/vehicles/missing');
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('Vehicle not found.');
+    expect(screen.getByRole('link', { name: /back to overview/i })).toBeTruthy();
   });
 });

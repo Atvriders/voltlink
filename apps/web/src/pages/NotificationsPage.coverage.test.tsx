@@ -123,119 +123,231 @@ function renderPage(path: string, ui: React.ReactNode) {
 
 afterEach(cleanup);
 
-vi.mock('@voltlink/shared', () => ({
-  EVENT_TYPES: ['charge_started', 'charge_completed', 'low_battery'],
-}));
+import userEvent from '@testing-library/user-event';
+import { within } from '@testing-library/react';
+import { EVENT_TYPES } from '@voltlink/shared';
+import NotificationsPage from './NotificationsPage';
+
 vi.mock('../lib/push', () => ({
   pushSupport: () => 'supported',
   enable: vi.fn().mockResolvedValue(undefined),
 }));
 
-import NotificationsPage from './NotificationsPage';
+const firstEvent = EVENT_TYPES[0];
 
-const notification = {
-  id: 'n1',
-  title: 'Charge complete',
-  body: 'Aurora finished charging.',
-  severity: 'success',
-  createdAt: new Date().toISOString(),
-  vehicleName: 'Aurora',
-  readAt: null,
-};
+const notificationFixtures = () => ({
+  items: [
+    {
+      id: 'n1',
+      title: 'Charging complete',
+      body: 'Aurora finished charging',
+      severity: 'success',
+      createdAt: new Date('2024-05-01T10:00:00Z').toISOString(),
+      vehicleName: 'Aurora',
+      readAt: null,
+    },
+    {
+      id: 'n2',
+      title: 'Lock reminder',
+      body: 'Aurora is unlocked',
+      severity: 'warning',
+      createdAt: new Date('2024-05-02T10:00:00Z').toISOString(),
+      vehicleName: 'Aurora',
+      readAt: new Date('2024-05-02T11:00:00Z').toISOString(),
+    },
+  ],
+  total: 2,
+  unread: 1,
+});
 
-const webhook = {
-  id: 'w1',
-  name: 'Ops webhook',
-  displayHint: 'https://example.com/hooks/voltlink',
-  enabled: true,
-  lastStatus: 200,
-};
+const webhookFixtures = () => [
+  {
+    id: 'w1',
+    name: 'Slack relay',
+    displayHint: 'https://hooks.example.test/slack',
+    enabled: true,
+    lastStatus: 200,
+  },
+  {
+    id: 'w2',
+    name: 'Backup hook',
+    displayHint: 'https://hooks.example.test/backup',
+    enabled: false,
+  },
+];
+
+const prefsFixtures = () => ({
+  prefs: [{ channel: 'email', event: firstEvent, severity: 'info', enabled: true }],
+  channelUrls: { ntfyUrl: '', gotifyUrl: '', discordWebhook: '', teamsWebhook: '' },
+});
+
+function apiImpl(path: string, opts?: { method?: string; body?: unknown }) {
+  const method = opts?.method ?? 'GET';
+  if (path === '/api/v1/notifications/read-all' && method === 'POST') return Promise.resolve({});
+  if (/^\/api\/v1\/notifications\/[^/]+\/read$/.test(path) && method === 'POST')
+    return Promise.resolve({});
+  if (/^\/api\/v1\/notifications\/webhooks\/[^/]+\/rotate-secret$/.test(path) && method === 'POST')
+    return Promise.resolve({ secret: 'whsec_rotated' });
+  if (/^\/api\/v1\/notifications\/webhooks\/[^/]+$/.test(path) && method === 'PATCH')
+    return Promise.resolve({});
+  if (/^\/api\/v1\/notifications\/webhooks\/[^/]+$/.test(path) && method === 'DELETE')
+    return Promise.resolve({});
+  if (path === '/api/v1/notifications/webhooks' && method === 'POST')
+    return Promise.resolve({ secret: 'whsec_created' });
+  if (path === '/api/v1/notifications/webhooks') return Promise.resolve(webhookFixtures());
+  if (path === '/api/v1/notifications/preferences' && method === 'PUT') return Promise.resolve({});
+  if (path === '/api/v1/notifications/preferences') return Promise.resolve(prefsFixtures());
+  if (path === '/api/v1/notifications/channel-urls') return Promise.resolve({});
+  if (path.startsWith('/api/v1/notifications')) return Promise.resolve(notificationFixtures());
+  return Promise.resolve({});
+}
 
 describe('NotificationsPage', () => {
   beforeEach(() => {
-    apiMock.mockImplementation(
-      async (path: string, init?: { method?: string }) => {
-        if (path.startsWith('/api/v1/notifications?')) {
-          return { items: [notification], total: 1, unread: 1 };
-        }
-        if (path === '/api/v1/notifications/read-all') return {};
-        if (path.endsWith('/read')) return {};
-        if (path === '/api/v1/notifications/preferences') {
-          if (init?.method === 'PUT') return {};
-          return {
-            prefs: [
-              {
-                channel: 'in_app',
-                event: 'charge_started',
-                severity: 'info',
-                enabled: true,
-              },
-            ],
-            channelUrls: {
-              ntfyUrl: '',
-              gotifyUrl: '',
-              discordWebhook: '',
-              teamsWebhook: '',
-            },
-          };
-        }
-        if (path === '/api/v1/notifications/channel-urls') return {};
-        if (path === '/api/v1/notifications/webhooks') {
-          if (init?.method === 'POST') return { secret: 'whsec_created_once' };
-          return [webhook];
-        }
-        if (path.startsWith('/api/v1/notifications/webhooks/')) {
-          if (path.endsWith('/rotate-secret')) return { secret: 'whsec_rotated' };
-          return {};
-        }
-        return {};
-      },
+    vi.clearAllMocks();
+    apiMock.mockImplementation(apiImpl);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('renders the inbox with notifications and an unread badge', async () => {
+    renderPage('/notifications', <NotificationsPage />);
+    expect(await screen.findByText('Charging complete')).toBeTruthy();
+    expect(screen.getByText('Lock reminder')).toBeTruthy();
+    expect(screen.getByText(/1 unread/)).toBeTruthy();
+    expect(screen.getByLabelText('unread')).toBeTruthy();
+  });
+
+  it('marks a single unread notification as read', async () => {
+    const user = userEvent.setup();
+    renderPage('/notifications', <NotificationsPage />);
+    const item = await screen.findByText('Charging complete');
+    await user.click(item);
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/notifications/n1/read',
+        expect.objectContaining({ method: 'POST' }),
+      ),
     );
   });
 
-  it('renders the inbox with notification fixtures', async () => {
+  it('marks all notifications as read', async () => {
+    const user = userEvent.setup();
     renderPage('/notifications', <NotificationsPage />);
-
-    await waitFor(() => expect(screen.getByText('Charge complete')).toBeTruthy());
-    expect(screen.getByText('1 unread')).toBeTruthy();
-    expect(screen.getByText('Aurora finished charging.')).toBeTruthy();
-    expect(screen.getByText('Aurora')).toBeTruthy();
+    await screen.findByText('Charging complete');
+    await user.click(screen.getByRole('button', { name: /mark all read/i }));
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/notifications/read-all',
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    );
   });
 
-  it('renders the empty inbox state', async () => {
-    apiMock.mockImplementation(async (path: string) => {
-      if (path.startsWith('/api/v1/notifications?')) {
-        return { items: [], total: 0, unread: 0 };
-      }
-      return {};
-    });
-
+  it('shows the empty state when there are no notifications', async () => {
+    apiMock.mockImplementation(async (path: string) =>
+      path.startsWith('/api/v1/notifications?') ? { items: [], total: 0, unread: 0 } : {},
+    );
     renderPage('/notifications', <NotificationsPage />);
-
-    await waitFor(() => expect(screen.getByText(/all caught up/i)).toBeTruthy());
-    expect(screen.queryByText('Charge complete')).toBeNull();
+    expect(await screen.findByText("You're all caught up")).toBeTruthy();
   });
 
-  it('shows notification preferences when the preferences tab is selected', async () => {
+  it('toggles an event preference checkbox', async () => {
+    const user = userEvent.setup();
     renderPage('/notifications', <NotificationsPage />);
-    await waitFor(() => expect(screen.getByText('Charge complete')).toBeTruthy());
-
-    screen.getByRole('tab', { name: 'preferences' }).click();
-
-    await waitFor(() => expect(screen.getByText('Event preferences')).toBeTruthy());
-    expect(screen.getByText('External channels')).toBeTruthy();
-    expect(screen.getByLabelText('charge_started via in_app')).toBeTruthy();
-    expect(screen.getByText('Enable push notifications')).toBeTruthy();
+    await user.click(screen.getByRole('tab', { name: /preferences/i }));
+    const checkboxes = await screen.findAllByRole('checkbox');
+    const emailCheckbox = checkboxes[1] as HTMLInputElement;
+    expect(emailCheckbox.checked).toBe(true);
+    await user.click(emailCheckbox);
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/notifications/preferences',
+        expect.objectContaining({ method: 'PUT' }),
+      ),
+    );
   });
 
-  it('shows configured webhooks on the webhooks tab', async () => {
+  it('saves external channel URLs', async () => {
+    const user = userEvent.setup();
     renderPage('/notifications', <NotificationsPage />);
-    await waitFor(() => expect(screen.getByText('Charge complete')).toBeTruthy());
+    await user.click(screen.getByRole('tab', { name: /preferences/i }));
+    const inputs = await screen.findAllByPlaceholderText('https://…');
+    await user.type(inputs[0], 'https://ntfy.example.test/topic');
+    await user.click(screen.getByRole('button', { name: /save channels/i }));
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/notifications/channel-urls',
+        expect.objectContaining({ method: 'PUT' }),
+      ),
+    );
+  });
 
-    screen.getByRole('tab', { name: 'webhooks' }).click();
+  it('enables browser push notifications', async () => {
+    const user = userEvent.setup();
+    renderPage('/notifications', <NotificationsPage />);
+    await user.click(screen.getByRole('tab', { name: /preferences/i }));
+    await user.click(await screen.findByRole('button', { name: /enable push notifications/i }));
+    expect(await screen.findByText('Push notifications enabled.')).toBeTruthy();
+  });
 
-    await waitFor(() => expect(screen.getByText('Ops webhook')).toBeTruthy());
-    expect(screen.getByText('HTTP 200')).toBeTruthy();
-    expect(screen.getByText('Add webhook')).toBeTruthy();
+  it('toggles a webhook enabled state', async () => {
+    const user = userEvent.setup();
+    renderPage('/notifications', <NotificationsPage />);
+    await user.click(screen.getByRole('tab', { name: /webhooks/i }));
+    const row = (await screen.findByText('Slack relay')).closest('li') as HTMLElement;
+    await user.click(within(row).getByRole('button', { name: /disable/i }));
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/notifications/webhooks/w1',
+        expect.objectContaining({ method: 'PATCH' }),
+      ),
+    );
+  });
+
+  it('creates a webhook through the modal and shows the generated secret', async () => {
+    const user = userEvent.setup();
+    renderPage('/notifications', <NotificationsPage />);
+    await user.click(screen.getByRole('tab', { name: /webhooks/i }));
+    await user.click(await screen.findByRole('button', { name: /add webhook/i }));
+    const textboxes = screen.getAllByRole('textbox');
+    await user.type(textboxes[0], 'New relay');
+    await user.type(textboxes[1], 'https://hooks.example.test/new');
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/notifications/webhooks',
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    );
+    expect(await screen.findByText('whsec_created')).toBeTruthy();
+  });
+
+  it('rotates a webhook secret and then deletes the webhook', async () => {
+    vi.stubGlobal('confirm', vi.fn().mockReturnValue(true));
+    const user = userEvent.setup();
+    renderPage('/notifications', <NotificationsPage />);
+    await user.click(screen.getByRole('tab', { name: /webhooks/i }));
+
+    const row = (await screen.findByText('Slack relay')).closest('li') as HTMLElement;
+    await user.click(within(row).getByRole('button', { name: /rotate secret/i }));
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/notifications/webhooks/w1/rotate-secret',
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    );
+
+    const refreshed = (await screen.findByText('Slack relay')).closest('li') as HTMLElement;
+    const rowButtons = within(refreshed).getAllByRole('button');
+    await user.click(rowButtons[rowButtons.length - 1]!);
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/notifications/webhooks/w1',
+        expect.objectContaining({ method: 'DELETE' }),
+      ),
+    );
   });
 });

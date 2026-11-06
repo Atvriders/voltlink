@@ -123,52 +123,101 @@ function renderPage(path: string, ui: React.ReactNode) {
 
 afterEach(cleanup);
 
-import { fireEvent } from '@testing-library/react';
+import { fireEvent, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import FleetPage from './FleetPage';
 
+type ApiInit = { method?: string; body?: unknown };
+
+let emptyMode = false;
+
+const fleetVehicle = {
+  id: 'v1',
+  displayName: 'Aurora',
+  make: 'Tesla',
+  model: 'Model 3',
+  labels: ['pool'],
+  vehicleClass: 'suv',
+  batteryPct: 72,
+  charging: true,
+  offline: false,
+  demo: true,
+  fetchedAt: new Date().toISOString(),
+};
+
+const offlineVehicle = {
+  id: 'v2',
+  displayName: 'Borealis',
+  make: 'Rivian',
+  model: 'R1T',
+  labels: [],
+  vehicleClass: 'pickup_truck',
+  batteryPct: null,
+  charging: false,
+  offline: true,
+  demo: false,
+  fetchedAt: null,
+};
+
+const fleetGroup = {
+  id: 'g1',
+  name: 'Ops',
+  description: 'Operations fleet',
+  vehicleIds: ['v1'],
+};
+
+const driver = { id: 'd1', name: 'Sam', email: 'sam@example.test' };
+const department = { id: 'dep1', name: 'Support' };
+const costCenter = { id: 'cc1', name: 'Field Ops' };
+const assignment = {
+  id: 'a1',
+  vehicleId: 'v1',
+  driverId: 'd1',
+  vehicleName: 'Aurora',
+  driverName: 'Sam',
+};
+
+const overdueRecord = {
+  id: 'm1',
+  vehicleId: 'v1',
+  vehicleName: 'Aurora',
+  title: 'Tire rotation',
+  kind: 'tires',
+  dueAt: '2020-01-01T00:00:00.000Z',
+  completedAt: null,
+};
+
+const completedRecord = {
+  id: 'm2',
+  vehicleId: 'v1',
+  vehicleName: 'Aurora',
+  title: 'Registration renewal',
+  kind: 'registration',
+  dueAt: null,
+  completedAt: '2021-01-01T00:00:00.000Z',
+};
+
 describe('FleetPage', () => {
-  const fleetVehicle = {
-    id: 'v1',
-    displayName: 'Aurora',
-    make: 'Tesla',
-    model: 'Model 3',
-    labels: ['north'],
-    vehicleClass: 'suv',
-    batteryPct: 72,
-    charging: true,
-    offline: false,
-    demo: true,
-    fetchedAt: new Date().toISOString(),
-  };
-  const group = {
-    id: 'g1',
-    name: 'Operations',
-    description: 'Ops fleet',
-    vehicleIds: ['v1'],
-  };
-  const driver = {
-    id: 'd1',
-    name: 'Dana Driver',
-    email: 'dana@example.test',
-  };
-  const maintenance = {
-    id: 'm1',
-    vehicleName: 'Aurora',
-    title: 'Tire rotation',
-    kind: 'service',
-    dueAt: new Date(Date.now() + 86400000).toISOString(),
-    dueOdometerKm: 15000,
-    completedAt: null,
-  };
-
-  let overviewVehicles = [fleetVehicle];
-
   beforeEach(() => {
-    overviewVehicles = [fleetVehicle];
-    apiMock.mockImplementation(async (path: string) => {
+    emptyMode = false;
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    apiMock.mockImplementation(async (path: string, init?: ApiInit) => {
+      const method = init?.method ?? 'GET';
+
       if (path === '/api/v1/fleet/overview') {
+        if (emptyMode) {
+          return {
+            vehicles: [],
+            driverCount: 0,
+            departmentCount: 0,
+            costCenterCount: 0,
+            groupCount: 0,
+            maintenanceDue: 0,
+          };
+        }
         return {
-          vehicles: overviewVehicles,
+          vehicles: [fleetVehicle, offlineVehicle],
           driverCount: 1,
           departmentCount: 1,
           costCenterCount: 1,
@@ -176,43 +225,285 @@ describe('FleetPage', () => {
           maintenanceDue: 1,
         };
       }
-      if (path === '/api/v1/fleet/groups') return [group];
-      if (path === '/api/v1/vehicles') return [{ id: 'v1', displayName: 'Aurora' }];
-      if (path === '/api/v1/fleet/drivers') return [driver];
-      if (path === '/api/v1/fleet/departments') return [{ id: 'dep1', name: 'Field Ops' }];
-      if (path === '/api/v1/fleet/cost-centers') return [{ id: 'cc1', name: 'North Region' }];
-      if (path === '/api/v1/fleet/assignments')
-        return [{ id: 'a1', vehicleName: 'Aurora', driverName: 'Dana Driver' }];
-      if (path === '/api/v1/fleet/maintenance') return [maintenance];
+
+      if (path === '/api/v1/fleet/groups') {
+        if (method === 'POST') return { id: 'g2', name: 'Service', vehicleIds: [] };
+        return emptyMode ? [] : [fleetGroup];
+      }
+      if (/^\/api\/v1\/fleet\/groups\/[^/]+\/vehicles$/.test(path)) return { ok: true };
+      if (/^\/api\/v1\/fleet\/groups\/[^/]+$/.test(path)) return { ok: true };
+
+      if (path === '/api/v1/fleet/drivers') {
+        if (method === 'POST') return { id: 'd2', name: 'Kim', email: '' };
+        return emptyMode ? [] : [driver];
+      }
+      if (/^\/api\/v1\/fleet\/drivers\/[^/]+$/.test(path)) return { ok: true };
+
+      if (path === '/api/v1/fleet/departments') return emptyMode ? [] : [department];
+      if (path === '/api/v1/fleet/cost-centers') return emptyMode ? [] : [costCenter];
+
+      if (path === '/api/v1/fleet/assignments') {
+        if (method === 'POST') return { id: 'a2' };
+        return emptyMode ? [] : [assignment];
+      }
+      if (/^\/api\/v1\/fleet\/assignments\/[^/]+$/.test(path)) return { ok: true };
+
+      if (path === '/api/v1/fleet/maintenance') {
+        if (method === 'POST') return { id: 'm3' };
+        return emptyMode ? [] : [overdueRecord, completedRecord];
+      }
+      if (/^\/api\/v1\/fleet\/maintenance\/[^/]+$/.test(path)) return { ok: true };
+
+      if (path === '/api/v1/vehicles') {
+        return emptyMode
+          ? []
+          : [
+              { id: 'v1', displayName: 'Aurora' },
+              { id: 'v2', displayName: 'Borealis' },
+            ];
+      }
+
       return {};
     });
   });
 
-  it('renders the fleet overview table and summary', async () => {
+  it('renders the fleet overview summary and vehicle rows', async () => {
     renderPage('/fleet', <FleetPage />);
 
-    await waitFor(() => {
-      expect(screen.getByText('Fleet status')).toBeTruthy();
-    });
-    expect(await screen.findByText(/Aurora/)).toBeTruthy();
-    expect(screen.getByText(/1 vehicles/)).toBeTruthy();
+    expect(await screen.findByText('Aurora')).toBeTruthy();
+    expect(screen.getByText('Borealis')).toBeTruthy();
+    expect(screen.getByText('Tesla Model 3')).toBeTruthy();
+    expect(
+      screen.getByText(/2 vehicles · 1 charging · 1 offline · 1 need attention/),
+    ).toBeTruthy();
+    expect(screen.getByText('72%')).toBeTruthy();
+    expect(screen.getByText('pickup truck')).toBeTruthy();
+    expect(screen.getByText('demo')).toBeTruthy();
+    expect(screen.getByText('offline')).toBeTruthy();
+    expect(screen.getByText('Fleet')).toBeTruthy();
   });
 
-  it('shows the empty fleet state when there are no vehicles', async () => {
-    overviewVehicles = [];
+  it('shows the empty state when the fleet has no vehicles', async () => {
+    emptyMode = true;
     renderPage('/fleet', <FleetPage />);
 
     expect(await screen.findByText('No fleet vehicles')).toBeTruthy();
-    expect(screen.getByText(/0 vehicles/)).toBeTruthy();
+    expect(screen.getByText(/0 vehicles · 0 charging · 0 offline/)).toBeTruthy();
   });
 
-  it('switches to the groups tab and lists vehicle groups', async () => {
+  it('opens the groups tab and creates a new group', async () => {
+    const user = userEvent.setup();
     renderPage('/fleet', <FleetPage />);
 
-    await screen.findByText(/Aurora/);
-    fireEvent.click(screen.getByRole('button', { name: 'groups' }));
+    await user.click(screen.getByRole('button', { name: 'groups' }));
 
     expect(await screen.findByText('Vehicle groups')).toBeTruthy();
-    expect(await screen.findByText('Operations')).toBeTruthy();
+    expect(screen.getByText('Ops')).toBeTruthy();
+    expect(screen.getByText('Operations fleet')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: /new group/i }));
+    expect(screen.getByText('New vehicle group')).toBeTruthy();
+
+    await user.type(screen.getByRole('textbox'), 'Service');
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/fleet/groups',
+        expect.objectContaining({ method: 'POST', body: { name: 'Service' } }),
+      );
+    });
+  });
+
+  it('toggles vehicle membership and deletes a group', async () => {
+    const user = userEvent.setup();
+    renderPage('/fleet', <FleetPage />);
+
+    await user.click(screen.getByRole('button', { name: 'groups' }));
+
+    const borealis = await screen.findByRole('button', { name: 'Borealis' });
+    await user.click(borealis);
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/fleet/groups/g1/vehicles',
+        expect.objectContaining({ method: 'PUT', body: { vehicleIds: ['v1', 'v2'] } }),
+      );
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Delete Ops' }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/fleet/groups/g1',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+  });
+
+  it('renders drivers with departments/cost centers and adds a driver', async () => {
+    const user = userEvent.setup();
+    renderPage('/fleet', <FleetPage />);
+
+    await user.click(screen.getByRole('button', { name: 'drivers' }));
+
+    expect((await screen.findAllByText('Sam')).length).toBeGreaterThan(0);
+    expect(screen.getByText('sam@example.test')).toBeTruthy();
+    expect(screen.getByText(/Departments: Support/)).toBeTruthy();
+    expect(screen.getByText(/Cost centers: Field Ops/)).toBeTruthy();
+
+    const openButton = screen
+      .getAllByRole('button', { name: /add driver/i })
+      .find((b) => !(b as HTMLButtonElement).disabled);
+    expect(openButton).toBeTruthy();
+    await user.click(openButton!);
+
+    expect(screen.getAllByText('Add driver').length).toBeGreaterThan(0);
+
+    const textboxes = screen.getAllByRole('textbox');
+    await user.type(textboxes[0]!, 'Kim');
+
+    await user.click(screen.getAllByRole('button', { name: 'Add driver' }).at(-1)!);
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/fleet/drivers',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+  });
+
+  it('removes a driver and unassigns a vehicle', async () => {
+    const user = userEvent.setup();
+    renderPage('/fleet', <FleetPage />);
+
+    await user.click(screen.getByRole('button', { name: 'drivers' }));
+
+    const driverRow = (await screen.findAllByText('Sam'))[0]!.closest('li');
+    expect(driverRow).toBeTruthy();
+    await user.click(within(driverRow as HTMLElement).getByRole('button'));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/fleet/drivers/d1',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+
+    const assignmentEl = screen.getAllByText(
+      (_, el) => el?.textContent === 'Aurora → Sam',
+    )[0]!;
+    const assignmentRow = assignmentEl.closest('li') ?? assignmentEl.parentElement!;
+    await user.click(within(assignmentRow as HTMLElement).getAllByRole('button')[0]!);
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/fleet/assignments/a1',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+  });
+
+  it('assigns a vehicle to a driver from the assignments card', async () => {
+    const user = userEvent.setup();
+    renderPage('/fleet', <FleetPage />);
+
+    await user.click(screen.getByRole('button', { name: 'drivers' }));
+
+    const vehicleSelect = await screen.findByLabelText('Vehicle to assign');
+    await screen.findByRole('option', { name: 'Borealis' });
+    fireEvent.change(vehicleSelect, { target: { value: 'v1' } });
+
+    const driverSelect = screen.getByLabelText('Driver');
+    await screen.findByRole('option', { name: 'Sam' });
+    fireEvent.change(driverSelect, { target: { value: 'd1' } });
+
+    const assignButton = screen.getByRole('button', { name: 'Assign' });
+    await waitFor(() => {
+      expect((assignButton as HTMLButtonElement).disabled).toBe(false);
+    });
+    await user.click(assignButton);
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/fleet/assignments',
+        expect.objectContaining({ method: 'POST', body: { vehicleId: 'v1', driverId: 'd1' } }),
+      );
+    });
+  });
+
+  it('renders maintenance records and completes an overdue record', async () => {
+    const user = userEvent.setup();
+    renderPage('/fleet', <FleetPage />);
+
+    await user.click(screen.getByRole('button', { name: 'maintenance' }));
+
+    expect(await screen.findByText('Tire rotation')).toBeTruthy();
+    expect(screen.getByText('tires')).toBeTruthy();
+    expect(screen.getByText('Registration renewal')).toBeTruthy();
+    expect(screen.getByText('Reopen')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Complete' }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/fleet/maintenance/m1',
+        expect.objectContaining({ method: 'PATCH' }),
+      );
+    });
+  });
+
+  it('reopens a completed maintenance record', async () => {
+    const user = userEvent.setup();
+    renderPage('/fleet', <FleetPage />);
+
+    await user.click(screen.getByRole('button', { name: 'maintenance' }));
+
+    await user.click(await screen.findByRole('button', { name: 'Reopen' }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/fleet/maintenance/m2',
+        expect.objectContaining({ method: 'PATCH', body: { completedAt: null } }),
+      );
+    });
+  });
+
+  it('adds a maintenance record from the modal', async () => {
+    const user = userEvent.setup();
+    renderPage('/fleet', <FleetPage />);
+
+    await user.click(screen.getByRole('button', { name: 'maintenance' }));
+
+    const openButton = (await screen.findAllByRole('button', { name: /add record/i })).find(
+      (b) => !(b as HTMLButtonElement).disabled,
+    );
+    expect(openButton).toBeTruthy();
+    await user.click(openButton!);
+
+    expect(screen.getByText('Add maintenance record')).toBeTruthy();
+
+    const submit = screen
+      .getAllByRole('button', { name: 'Add record' })
+      .find((b) => (b as HTMLButtonElement).disabled);
+    expect(submit).toBeTruthy();
+
+    await screen.findByRole('option', { name: 'Aurora' });
+    const combos = screen.getAllByRole('combobox');
+    fireEvent.change(combos[0], { target: { value: 'v1' } });
+
+    await user.type(screen.getByRole('textbox'), 'Oil change');
+
+    await user.click(submit!);
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/fleet/maintenance',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.objectContaining({ vehicleId: 'v1', title: 'Oil change' }),
+        }),
+      );
+    });
   });
 });

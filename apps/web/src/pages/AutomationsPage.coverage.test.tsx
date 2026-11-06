@@ -123,78 +123,263 @@ function renderPage(path: string, ui: React.ReactNode) {
 
 afterEach(cleanup);
 
+import type * as React from 'react';
+import userEvent from '@testing-library/user-event';
+import { fireEvent } from '@testing-library/react';
 import AutomationsPage from './AutomationsPage';
 
 const automationFixture = {
   id: 'a1',
-  name: 'Morning charge alert',
-  description: undefined,
+  name: 'Hook',
+  description: undefined as string | undefined,
   enabled: true,
   vehicleId: null,
-  trigger: { type: 'charging_completed', params: {} },
+  trigger: { type: 'webhook', params: {} },
   conditions: [],
-  actions: [{ type: 'notify_app', params: { message: 'Charged' } }],
+  actions: [{ type: 'notify_app', params: { message: 'Hello' } }],
   cooldownSec: 0,
   maxRetries: 1,
-  runCount: 5,
-  lastRunAt: new Date().toISOString(),
   lastResult: 'success',
+  runCount: 3,
+  lastRunAt: new Date('2024-01-01T00:00:00Z').toISOString(),
 };
 
-function mockAutomationApi(automations: unknown[] = [automationFixture]) {
-  apiMock.mockImplementation(async (path: string) => {
-    if (path === '/api/v1/automations') return automations;
-    if (path === '/api/v1/vehicles') return [{ id: 'v1', displayName: 'Aurora' }];
-    if (path === '/api/v1/notifications/webhooks') return [];
-    if (path.endsWith('/executions'))
-      return [
-        {
-          id: 'e1',
-          triggeredAt: new Date().toISOString(),
-          triggerEvent: 'charging_completed',
-          result: 'success',
-          conditionsMet: true,
-          actionResults: [{ action: 'notify_app', ok: true, detail: 'Sent' }],
-        },
-      ];
-    if (path.endsWith('/dry-run')) return { result: 'success', actionResults: [] };
-    if (path.endsWith('/inbound-webhook'))
-      return { url: 'https://example.test/hook', secret: 'secret-value', publicId: 'pub-1' };
-    if (path.startsWith('/api/v1/automations/')) return {};
-    return {};
-  });
-}
+const executionFixtures = [
+  {
+    id: 'e1',
+    triggeredAt: new Date('2024-01-02T03:04:05Z').toISOString(),
+    triggerEvent: 'charging_completed',
+    result: 'success',
+    conditionsMet: true,
+    actionResults: [{ action: 'notify_app', ok: true, detail: 'notified' }],
+    errorMessage: null,
+  },
+  {
+    id: 'e2',
+    triggeredAt: new Date('2024-01-03T03:04:05Z').toISOString(),
+    triggerEvent: 'door_open',
+    result: 'skipped',
+    conditionsMet: false,
+    actionResults: [],
+    errorMessage: null,
+  },
+];
 
 describe('AutomationsPage', () => {
   beforeEach(() => {
-    mockAutomationApi([automationFixture]);
-  });
-
-  it('renders the automations list with rule summaries', async () => {
-    renderPage('/automations', <AutomationsPage />);
-
-    expect(await screen.findByText('Morning charge alert')).toBeTruthy();
-    expect(screen.getByText('Charging completed')).toBeTruthy();
-    expect(screen.getByText('1 action')).toBeTruthy();
-    expect(screen.getAllByText(/runs/).length).toBeGreaterThan(0);
-  });
-
-  it('shows the empty state when there are no automations', async () => {
-    mockAutomationApi([]);
-    renderPage('/automations', <AutomationsPage />);
-
-    expect(await screen.findByText('No automations yet')).toBeTruthy();
-  });
-
-  it('opens the new automation editor', async () => {
-    renderPage('/automations', <AutomationsPage />);
-
-    const newButton = screen.getByRole('button', { name: /new automation/i });
-    newButton.click();
-
-    expect(await screen.findByPlaceholderText('Charge-complete notification')).toBeTruthy();
-    await waitFor(() => {
-      expect(screen.getByText('Create automation')).toBeTruthy();
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    apiMock.mockClear();
+    apiMock.mockImplementation(async (path: string, options?: { method?: string }) => {
+      const method = options?.method ?? 'GET';
+      if (path === '/api/v1/automations' && method === 'POST') {
+        return { ...automationFixture, id: 'a2', name: 'Created' };
+      }
+      if (path === '/api/v1/automations') return [automationFixture];
+      if (path === '/api/v1/vehicles') return [{ id: 'v1', displayName: 'Aurora' }];
+      if (path === '/api/v1/notifications/webhooks') {
+        return [{ id: 'wh1', name: 'Ops endpoint', displayHint: 'ops.example.test' }];
+      }
+      if (path === `/api/v1/automations/${automationFixture.id}/executions`) {
+        return executionFixtures;
+      }
+      if (path === `/api/v1/automations/${automationFixture.id}/dry-run`) {
+        return {
+          result: 'success',
+          actionResults: [{ action: 'notify_app', ok: true, detail: 'would notify' }],
+        };
+      }
+      if (
+        path === `/api/v1/automations/${automationFixture.id}/inbound-webhook` &&
+        method === 'POST'
+      ) {
+        return {
+          url: 'https://example.test/hook',
+          secret: 'supersecret',
+          publicId: 'pub1',
+        };
+      }
+      if (
+        path === `/api/v1/automations/${automationFixture.id}/inbound-webhook` &&
+        method === 'DELETE'
+      ) {
+        return { ok: true };
+      }
+      if (path === `/api/v1/automations/${automationFixture.id}` && method === 'PATCH') {
+        return { ...automationFixture, enabled: false };
+      }
+      if (path === `/api/v1/automations/${automationFixture.id}` && method === 'DELETE') {
+        return { ok: true };
+      }
+      return {};
     });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('renders automation cards with trigger, action count, scope, and run stats', async () => {
+    renderPage('/automations', <AutomationsPage />);
+
+    expect(await screen.findByText('Hook')).toBeInTheDocument();
+    expect(screen.getByText('Incoming webhook')).toBeInTheDocument();
+    expect(screen.getByText('1 action')).toBeInTheDocument();
+    expect(screen.getByText('all vehicles')).toBeInTheDocument();
+    expect(screen.getByText(/3 runs/)).toBeInTheDocument();
+  });
+
+  it('toggles an automation enabled state', async () => {
+    const user = userEvent.setup();
+    renderPage('/automations', <AutomationsPage />);
+
+    await screen.findByText('Hook');
+    await user.click(screen.getByRole('button', { name: /disable/i }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(
+        `/api/v1/automations/${automationFixture.id}`,
+        expect.objectContaining({ method: 'PATCH' }),
+      );
+    });
+  });
+
+  it('deletes an automation after confirmation', async () => {
+    const user = userEvent.setup();
+    renderPage('/automations', <AutomationsPage />);
+
+    await screen.findByText('Hook');
+    await user.click(screen.getByRole('button', { name: 'Delete Hook' }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(
+        `/api/v1/automations/${automationFixture.id}`,
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+  });
+
+  it('creates a new automation from the editor form', async () => {
+    const user = userEvent.setup();
+    renderPage('/automations', <AutomationsPage />);
+
+    await screen.findByText('Hook');
+    await user.click(screen.getByRole('button', { name: /new automation/i }));
+
+    const nameInput = await screen.findByPlaceholderText('Charge-complete notification');
+    await user.type(nameInput, 'Nightly check');
+
+    const selects = screen.getAllByRole('combobox');
+    fireEvent.change(selects[0], { target: { value: 'battery_threshold' } });
+    fireEvent.change(selects[2], { target: { value: 'webhook' } });
+
+    expect(
+      await screen.findByText(/"Nightly check": when battery threshold, webhook\./),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /create automation/i }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/automations',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.objectContaining({
+            name: 'Nightly check',
+            trigger: expect.objectContaining({ type: 'battery_threshold' }),
+            actions: expect.arrayContaining([expect.objectContaining({ type: 'webhook' })]),
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText('Charge-complete notification')).not.toBeInTheDocument();
+    });
+  });
+
+  it('runs a dry run and renders the result details', async () => {
+    const user = userEvent.setup();
+    renderPage('/automations', <AutomationsPage />);
+
+    await screen.findByText('Hook');
+    await user.click(screen.getByRole('button', { name: /dry run/i }));
+
+    await screen.findByRole('button', { name: /run dry run/i });
+    await user.click(screen.getByRole('button', { name: /run dry run/i }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(
+        `/api/v1/automations/${automationFixture.id}/dry-run`,
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    expect(await screen.findByText('Dry run result: success')).toBeInTheDocument();
+    expect(screen.getByText(/would notify/)).toBeInTheDocument();
+  });
+
+  it('opens execution history and renders execution rows', async () => {
+    const user = userEvent.setup();
+    renderPage('/automations', <AutomationsPage />);
+
+    await screen.findByText('Hook');
+    await user.click(screen.getByRole('button', { name: /history/i }));
+
+    expect(await screen.findByText(/Execution history — Hook/)).toBeInTheDocument();
+    expect(await screen.findByText('Conditions not met — skipped.')).toBeInTheDocument();
+    expect(screen.getByText(/notify_app: notified/)).toBeInTheDocument();
+  });
+
+  it('creates and deletes an inbound webhook', async () => {
+    const user = userEvent.setup();
+    renderPage('/automations', <AutomationsPage />);
+
+    await screen.findByText('Hook');
+    await user.click(screen.getByRole('button', { name: /inbound url/i }));
+
+    expect(await screen.findByText(/Inbound webhook — Hook/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /create inbound webhook/i }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(
+        `/api/v1/automations/${automationFixture.id}/inbound-webhook`,
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    expect(await screen.findByDisplayValue('https://example.test/hook')).toBeInTheDocument();
+    expect(screen.getByText('supersecret')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(
+        `/api/v1/automations/${automationFixture.id}/inbound-webhook`,
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+
+    expect(
+      await screen.findByRole('button', { name: /create inbound webhook/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('closes the new automation editor without saving', async () => {
+    const user = userEvent.setup();
+    renderPage('/automations', <AutomationsPage />);
+
+    await screen.findByText('Hook');
+    await user.click(screen.getByRole('button', { name: /new automation/i }));
+    await screen.findByPlaceholderText('Charge-complete notification');
+
+    await user.click(screen.getByRole('button', { name: /cancel/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText('Charge-complete notification')).not.toBeInTheDocument();
+    });
+    expect(apiMock).not.toHaveBeenCalledWith(
+      '/api/v1/automations',
+      expect.objectContaining({ method: 'POST' }),
+    );
   });
 });

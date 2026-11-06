@@ -123,64 +123,199 @@ function renderPage(path: string, ui: React.ReactNode) {
 
 afterEach(cleanup);
 
+import type * as React from 'react';
+import userEvent from '@testing-library/user-event';
+import { fireEvent } from '@testing-library/react';
 import OnboardingPage from './OnboardingPage';
 
 describe('OnboardingPage', () => {
-  beforeEach(() => {
-    const base = apiMock.getMockImplementation() as
-      | ((...args: unknown[]) => unknown)
-      | undefined;
+  let onboardingStep = 'welcome';
+  let onboardingCompletedAt: string | null = null;
+  let meVerified = false;
 
-    apiMock.mockImplementation(
-      async (path: string, init?: { method?: string; body?: unknown }) => {
-        if (path === '/api/v1/users/onboarding') {
-          if (init?.method === 'PUT') return { ok: true };
-          return { step: 'welcome', completedAt: null };
-        }
-        if (path === '/api/v1/auth/me') {
-          return {
-            user: { emailVerified: false },
-            memberships: [{ organizationId: 'org1' }],
-          };
-        }
-        if (path === '/api/v1/users/settings') return { ok: true };
-        if (path === '/api/v1/orgs/org1/settings/retention') return { ok: true };
-        if (path === '/api/v1/auth/resend-verification') return { ok: true };
-        if (path === '/api/v1/providers/demo/connect') return { vehiclesImported: 2 };
-        if (typeof base === 'function') return base(path, init);
-        return {};
-      },
+  beforeEach(() => {
+    onboardingStep = 'welcome';
+    onboardingCompletedAt = null;
+    meVerified = false;
+    apiMock.mockReset();
+    apiMock.mockImplementation(async (path: string, init?: { method?: string; body?: unknown }) => {
+      if (path === '/api/v1/users/onboarding') {
+        if (init?.method === 'PUT') return { ok: true };
+        return { step: onboardingStep, completedAt: onboardingCompletedAt };
+      }
+      if (path === '/api/v1/auth/resend-verification') return { ok: true };
+      if (path === '/api/v1/auth/me') {
+        return {
+          user: { ...authState.user, emailVerified: meVerified },
+          memberships: [{ organizationId: 'org1' }],
+        };
+      }
+      if (path === '/api/v1/users/settings') return { ok: true };
+      if (path === '/api/v1/orgs/org1/settings/retention') return { ok: true };
+      if (path === '/api/v1/providers/demo/connect') return { vehiclesImported: 3 };
+      return {};
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('renders the welcome step, enforces Back on step 1, and advances to privacy', async () => {
+    const user = userEvent.setup();
+    renderPage('/', <OnboardingPage />);
+
+    await screen.findByText('Welcome to VoltLink');
+    expect(screen.getByText(/step 1 of 16/)).toBeTruthy();
+    const back = screen.getByRole('button', { name: /back/i }) as HTMLButtonElement;
+    expect(back.disabled).toBe(true);
+
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    await screen.findByText('Your data stays yours');
+    expect(screen.getByText(/step 2 of 16/)).toBeTruthy();
+
+    const backNow = screen.getByRole('button', { name: /back/i }) as HTMLButtonElement;
+    expect(backNow.disabled).toBe(false);
+    await user.click(backNow);
+    await screen.findByText('Welcome to VoltLink');
+    expect(screen.getByText(/step 1 of 16/)).toBeTruthy();
+  });
+
+  it('resumes at the server-provided onboarding step', async () => {
+    onboardingStep = 'security';
+    renderPage('/', <OnboardingPage />);
+
+    await screen.findByText('Secure your account');
+    expect(apiMock).toHaveBeenCalledWith('/api/v1/users/onboarding');
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/users/onboarding',
+        expect.objectContaining({ method: 'PUT', body: { step: 'security' } }),
+      ),
     );
   });
 
-  it('renders the welcome step with onboarding progress', async () => {
-    renderPage('/onboarding', <OnboardingPage />);
+  it('shows account info and can resend a verification email', async () => {
+    onboardingStep = 'account';
+    meVerified = false;
+    const user = userEvent.setup();
+    renderPage('/', <OnboardingPage />);
 
-    await waitFor(() => {
-      expect(screen.getByText('Welcome to VoltLink')).toBeTruthy();
-    });
-    expect(screen.getByText(/step 1 of 16/i)).toBeTruthy();
-    expect(screen.getByRole('button', { name: /continue/i })).toBeTruthy();
+    await screen.findByText(/Signed in as/);
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    await screen.findByText('Check your inbox for the verification link.');
+
+    await user.click(screen.getByRole('button', { name: /resend verification email/i }));
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/auth/resend-verification',
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    );
   });
 
-  it('advances to the privacy step when continuing', async () => {
-    renderPage('/onboarding', <OnboardingPage />);
+  it('connects the demo fleet and advances to units', async () => {
+    onboardingStep = 'provider';
+    const user = userEvent.setup();
+    renderPage('/', <OnboardingPage />);
 
-    await screen.findByText('Welcome to VoltLink');
-    screen.getByRole('button', { name: /continue/i }).click();
-
-    expect(await screen.findByText('Your data stays yours')).toBeTruthy();
+    await screen.findByText('Vehicles');
+    await user.click(screen.getByRole('button', { name: /enable demo fleet/i }));
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/providers/demo/connect',
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    );
+    await screen.findByText(/step 7 of 16/);
   });
 
-  it('shows the no-vehicles edge state on the provider step', async () => {
-    apiMock.mockImplementationOnce(async () => ({
-      step: 'provider',
-      completedAt: null,
-    }));
+  it('can skip demo setup and continue to units', async () => {
+    onboardingStep = 'provider';
+    const user = userEvent.setup();
+    renderPage('/', <OnboardingPage />);
 
-    renderPage('/onboarding', <OnboardingPage />);
+    await screen.findByText('Vehicles');
+    await user.click(screen.getByRole('button', { name: /no vehicles yet/i }));
+    await screen.findByText(/step 7 of 16/);
+  });
 
-    expect(await screen.findByText('I have no vehicles yet — continue')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /enable demo fleet/i })).toBeTruthy();
+  it('saves units, time zone, and retention before advancing', async () => {
+    onboardingStep = 'units';
+    const user = userEvent.setup();
+    renderPage('/', <OnboardingPage />);
+    await screen.findByText(/step 7 of 16/);
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'imperial' } });
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    await screen.findByText(/step 8 of 16/);
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/users/settings',
+        expect.objectContaining({ method: 'PATCH', body: { units: 'imperial', timezone: 'UTC' } }),
+      ),
+    );
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'America/New_York' } });
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    await screen.findByText(/step 9 of 16/);
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/users/settings',
+        expect.objectContaining({
+          method: 'PATCH',
+          body: { units: 'imperial', timezone: 'America/New_York' },
+        }),
+      ),
+    );
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '90' } });
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    await screen.findByText(/step 10 of 16/);
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/orgs/org1/settings/retention',
+        expect.objectContaining({ method: 'PATCH', body: { telemetryRetentionDays: 90 } }),
+      ),
+    );
+  });
+
+  it('toggles in-app notifications and advances to vehicle import', async () => {
+    onboardingStep = 'notifications';
+    const user = userEvent.setup();
+    renderPage('/', <OnboardingPage />);
+
+    const checkbox = (await screen.findByRole('checkbox')) as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    await user.click(checkbox);
+    expect(checkbox.checked).toBe(false);
+
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    await screen.findByText(/step 12 of 16/);
+    expect(screen.getByText('Import your vehicles')).toBeTruthy();
+  });
+
+  it('walks through sharing, freshness, controls, and completes onboarding', async () => {
+    onboardingStep = 'sharing';
+    const user = userEvent.setup();
+    renderPage('/', <OnboardingPage />);
+    await screen.findByText('Sharing & access');
+
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    await screen.findByText('How data freshness works');
+
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    await screen.findByText('Control safety');
+
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    const finish = await screen.findByRole('button', { name: /open voltlink/i });
+    await user.click(finish);
+
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/users/onboarding',
+        expect.objectContaining({ method: 'PUT', body: { step: 'done', done: true } }),
+      ),
+    );
   });
 });

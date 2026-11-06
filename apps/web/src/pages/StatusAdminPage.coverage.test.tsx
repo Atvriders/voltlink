@@ -123,122 +123,233 @@ function renderPage(path: string, ui: React.ReactNode) {
 
 afterEach(cleanup);
 
-import StatusAdminPage from './StatusAdminPage';
+import userEvent from '@testing-library/user-event';
 import { fireEvent } from '@testing-library/react';
+import StatusAdminPage from './StatusAdminPage';
 
-const statusHistory = [
-  {
-    componentKey: 'api',
-    checkedAt: new Date().toISOString(),
-    status: 'operational',
-    latencyMs: 120,
-  },
-  {
-    componentKey: 'web',
-    checkedAt: new Date().toISOString(),
-    status: 'operational',
-    latencyMs: 80,
-  },
+const statusComponents = [
+  { key: 'api', name: 'API', group: 'core', status: 'operational', manualOverride: false },
+  { key: 'db', name: 'Database', group: 'data', status: 'degraded', manualOverride: true },
 ];
 
-const incidentFixture = {
+const statusHistory = [
+  { latencyMs: 120, checkedAt: new Date().toISOString() },
+  { latencyMs: 80, checkedAt: new Date().toISOString() },
+];
+
+const statusBundle = {
+  overall: 'degraded',
+  components: statusComponents,
+  incidents: [],
+  maintenance: [
+    {
+      id: 'm1',
+      title: 'Scheduled DB upgrade',
+      startsAt: '2025-03-01T10:00:00.000Z',
+      endsAt: '2025-03-01T11:00:00.000Z',
+      components: ['db'],
+    },
+  ],
+  uptime30dPct: 99.9,
+  updatedAt: new Date().toISOString(),
+};
+
+const incident = {
   id: 'i1',
-  title: 'Database latency',
+  title: 'Database outage',
   severity: 'major',
   status: 'investigating',
-  public: true,
+  public: false,
   updates: [
     {
       id: 'u1',
       phase: 'investigating',
-      message: 'Looking into elevated latency',
+      message: 'Looking into it',
       createdAt: new Date().toISOString(),
     },
   ],
 };
 
-const statusBundle = {
-  overall: 'degraded',
-  uptime30dPct: 99.95,
-  components: [
-    { key: 'api', name: 'API', group: 'Core', status: 'degraded', manualOverride: false },
-    { key: 'web', name: 'Web', group: 'Edge', status: 'operational', manualOverride: true },
-  ],
-  maintenance: [
-    {
-      id: 'm1',
-      title: 'Postgres upgrade',
-      startsAt: new Date().toISOString(),
-      endsAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-      components: ['postgres'],
-    },
-  ],
-  incidents: [incidentFixture],
-  updatedAt: new Date().toISOString(),
-};
-
 describe('StatusAdminPage', () => {
   beforeEach(() => {
-    apiMock.mockClear();
-    apiMock.mockImplementation(async (path: string, init?: { method?: string }) => {
+    apiMock.mockReset();
+    apiMock.mockImplementation(async (path: string, opts?: { method?: string }) => {
       if (path === '/api/v1/status') return statusBundle;
-      if (path === '/api/v1/status/checks/history?hours=24') return statusHistory;
-      if (path === '/api/v1/status/checks/run') return { ok: true };
-      if (path === '/api/v1/status/incidents') {
-        if (init?.method === 'POST') return incidentFixture;
-        return [incidentFixture];
+      if (path.startsWith('/api/v1/status/checks/history')) return statusHistory;
+      if (path === '/api/v1/status/checks/run') return { ok: true, checked: 1 };
+      if (path.startsWith('/api/v1/status/incidents/') && path.endsWith('/updates')) {
+        return { id: 'u2' };
       }
-      if (path === `/api/v1/status/incidents/${incidentFixture.id}`) {
-        return { ...incidentFixture, public: false };
+      if (path.startsWith('/api/v1/status/incidents/') && opts?.method === 'PATCH') {
+        return { ...incident, public: true };
       }
-      if (path === `/api/v1/status/incidents/${incidentFixture.id}/updates`) return { ok: true };
+      if (path === '/api/v1/status/incidents' && opts?.method === 'POST') {
+        return { ...incident, id: 'i2' };
+      }
+      if (path === '/api/v1/status/incidents') return [incident];
       if (path.startsWith('/api/v1/status/components/')) return { ok: true };
-      if (path === '/api/v1/status/maintenance') return { ok: true };
+      if (path === '/api/v1/status/maintenance') return { id: 'm2' };
       return {};
     });
   });
 
-  it('renders status components, incidents, maintenance windows, and latency history', async () => {
-    renderPage('/status-admin', <StatusAdminPage />);
+  it('renders the status dashboard with components, incidents, maintenance, and latency chart', async () => {
+    renderPage('/admin/status', <StatusAdminPage />);
 
-    expect(await screen.findByText('Components')).toBeTruthy();
     expect(await screen.findByText('API')).toBeTruthy();
-    expect(await screen.findByText('Database latency')).toBeTruthy();
-    expect(await screen.findByText('Postgres upgrade')).toBeTruthy();
-    expect(await screen.findByRole('img', { name: /response time chart/i })).toBeTruthy();
+    expect(screen.getByText('Database')).toBeTruthy();
+    expect(screen.getByText('Scheduled DB upgrade')).toBeTruthy();
+    expect(screen.getByText('30-day uptime: 99.9%')).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Response time chart' })).toBeTruthy();
+    expect(await screen.findByText('Database outage')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /public status page/i }).getAttribute('href')).toBe(
+      '/status',
+    );
+    expect(screen.queryByText('No scheduled maintenance.')).toBeNull();
   });
 
-  it('renders empty states when there are no incidents, maintenance windows, or latency data', async () => {
-    apiMock.mockImplementation(async (path: string) => {
-      if (path === '/api/v1/status') return { ...statusBundle, components: [], maintenance: [] };
-      if (path === '/api/v1/status/checks/history?hours=24') return [];
-      if (path === '/api/v1/status/incidents') return [];
-      return {};
-    });
+  it('runs automated status checks from the header', async () => {
+    const user = userEvent.setup();
+    renderPage('/admin/status', <StatusAdminPage />);
 
-    renderPage('/status-admin', <StatusAdminPage />);
-
-    expect(await screen.findByText('No incidents recorded.')).toBeTruthy();
-    expect(await screen.findByText('No scheduled maintenance.')).toBeTruthy();
-    expect(await screen.findByText('No latency data.')).toBeTruthy();
-  });
-
-  it('opens the create incident modal from the incidents card', async () => {
-    renderPage('/status-admin', <StatusAdminPage />);
-
-    fireEvent.click(await screen.findByRole('button', { name: /new incident/i }));
-
-    expect(await screen.findByText('Severity')).toBeTruthy();
-    expect(screen.getByText('Affected component keys (comma-separated)')).toBeTruthy();
-  });
-
-  it('posts a check run when the run checks button is clicked', async () => {
-    renderPage('/status-admin', <StatusAdminPage />);
-
-    fireEvent.click(await screen.findByRole('button', { name: /run checks/i }));
+    await screen.findByText('API');
+    await user.click(screen.getByRole('button', { name: /run checks/i }));
 
     await waitFor(() => {
       expect(apiMock).toHaveBeenCalledWith('/api/v1/status/checks/run', { method: 'POST' });
+    });
+  });
+
+  it('saves and clears component manual overrides', async () => {
+    const user = userEvent.setup();
+    renderPage('/admin/status', <StatusAdminPage />);
+
+    await screen.findByText('API');
+    await user.click(screen.getAllByRole('button', { name: 'edit' })[0]!);
+    expect(screen.getByText('Override API')).toBeTruthy();
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'degraded' } });
+    await user.click(screen.getByRole('button', { name: 'Apply' }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/status/components/api', {
+        method: 'PATCH',
+        body: { status: 'degraded', manualOverride: true },
+      });
+    });
+    await waitFor(() => expect(screen.queryByText('Override API')).toBeNull());
+
+    await user.click(screen.getAllByRole('button', { name: 'edit' })[1]!);
+    expect(screen.getByText('Override Database')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Clear override' }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/status/components/db', {
+        method: 'PATCH',
+        body: { manualOverride: false },
+      });
+    });
+  });
+
+  it('creates a new incident from the incident modal', async () => {
+    const user = userEvent.setup();
+    renderPage('/admin/status', <StatusAdminPage />);
+
+    await screen.findByText('Database outage');
+    await user.click(screen.getByRole('button', { name: /new incident/i }));
+
+    const textboxes = screen.getAllByRole('textbox');
+    fireEvent.change(textboxes[0]!, { target: { value: 'API outage' } });
+    fireEvent.change(textboxes[1]!, { target: { value: 'Investigating API errors' } });
+    fireEvent.change(textboxes[2]!, { target: { value: 'api, postgres' } });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'major' } });
+
+    await user.click(screen.getByRole('button', { name: 'Create incident' }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/status/incidents',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.objectContaining({
+            title: 'API outage',
+            severity: 'major',
+            message: 'Investigating API errors',
+            components: ['api', 'postgres'],
+            public: true,
+          }),
+        }),
+      );
+    });
+  });
+
+  it('toggles incident public visibility', async () => {
+    const user = userEvent.setup();
+    renderPage('/admin/status', <StatusAdminPage />);
+
+    await screen.findByText('Database outage');
+    await user.click(screen.getByRole('button', { name: 'Make public' }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/status/incidents/i1', {
+        method: 'PATCH',
+        body: { public: true },
+      });
+    });
+  });
+
+  it('posts an incident update', async () => {
+    const user = userEvent.setup();
+    renderPage('/admin/status', <StatusAdminPage />);
+
+    await screen.findByText('Database outage');
+    await user.click(screen.getByRole('button', { name: 'Update' }));
+
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'Root cause identified' },
+    });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'identified' } });
+
+    await user.click(screen.getByRole('button', { name: 'Post update' }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/status/incidents/i1/updates', {
+        method: 'POST',
+        body: { phase: 'identified', message: 'Root cause identified' },
+      });
+    });
+  });
+
+  it('schedules a maintenance window', async () => {
+    const user = userEvent.setup();
+    renderPage('/admin/status', <StatusAdminPage />);
+
+    await screen.findByText('Scheduled DB upgrade');
+    await user.click(screen.getAllByRole('button', { name: 'Schedule' })[0]!);
+
+    const textboxes = screen.getAllByRole('textbox');
+    fireEvent.change(textboxes[0]!, { target: { value: 'Database migration' } });
+    fireEvent.change(textboxes[1]!, { target: { value: 'db, workers' } });
+
+    const dateInputs = document.querySelectorAll<HTMLInputElement>('input[type="datetime-local"]');
+    fireEvent.change(dateInputs[0]!, { target: { value: '2025-03-01T10:00' } });
+    fireEvent.change(dateInputs[1]!, { target: { value: '2025-03-01T11:00' } });
+
+    const scheduleButtons = screen.getAllByRole('button', { name: 'Schedule' });
+    await user.click(scheduleButtons[scheduleButtons.length - 1]!);
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(
+        '/api/v1/status/maintenance',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.objectContaining({
+            title: 'Database migration',
+            components: ['db', 'workers'],
+          }),
+        }),
+      );
     });
   });
 });
