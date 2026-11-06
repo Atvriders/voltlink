@@ -69,6 +69,6 @@ describe('freshness at read time (F-FRESH)', () => {
     expect(res.status).toBe(200);
     const atlas = res.body.data.find((x: { id: string }) => x.id === v.id);
     expect(atlas.state.freshness).not.toBe('live');
-    expect(atlas.state.freshness).toBe('last_known');
+    expect(atlas.state.freshness).toBe('stale');
   });
 });
