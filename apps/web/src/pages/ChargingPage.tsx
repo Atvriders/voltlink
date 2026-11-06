@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Download, Plus, Zap } from 'lucide-react';
+import { Download, Plus, Trash2, Zap } from 'lucide-react';
 import { api, apiCsv } from '../api/client';
 import {
   Badge,
@@ -47,6 +47,14 @@ export default function ChargingPage() {
   const { data: rules } = useQuery({
     queryKey: ['rate-rules'],
     queryFn: () => api<RateRule[]>('/api/v1/charging/rates/list'),
+  });
+  const { data: places } = useQuery({
+    queryKey: ['places'],
+    queryFn: () => api<{ id: string; name: string }[]>('/api/v1/vehicles/places/all'),
+  });
+  const removeRule = useMutation({
+    mutationFn: (id: string) => api(`/api/v1/charging/rates/list/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rate-rules'] }),
   });
   const { data: vehicles } = useQuery({
     queryKey: ['vehicles'],
@@ -216,7 +224,19 @@ export default function ChargingPage() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-medium">{r.name}</span>
-                    <Badge tone={r.enabled ? 'accent' : 'neutral'}>{r.type}</Badge>
+                    <span className="flex items-center gap-2">
+                      <Badge tone={r.enabled ? 'accent' : 'neutral'}>{r.type}</Badge>
+                      <Button
+                        variant="ghost"
+                        className="px-2 py-1 text-xs text-danger"
+                        aria-label={`Delete rule ${r.name}`}
+                        onClick={() => {
+                          if (confirm(`Delete rate rule ${r.name}?`)) removeRule.mutate(r.id);
+                        }}
+                      >
+                        <Trash2 size={12} />
+                      </Button>
+                    </span>
                   </div>
                   <p className="mt-0.5 text-xs text-subtle">
                     {fmtMoney(r.pricePerKwh, r.currency)}/kWh
@@ -241,6 +261,7 @@ export default function ChargingPage() {
 
       <RateRuleModal
         open={addRule}
+        places={places ?? []}
         onClose={() => setAddRule(false)}
         onSaved={() => {
           setAddRule(false);
@@ -286,15 +307,18 @@ function RateRuleModal({
   open,
   onClose,
   onSaved,
+  places,
 }: {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
+  places: { id: string; name: string }[];
 }) {
   const [name, setName] = useState('');
   const [type, setType] = useState('flat');
   const [price, setPrice] = useState('0.25');
   const [tou, setTou] = useState('0.09,0.16,0.28,0.16');
+  const [placeId, setPlaceId] = useState('');
   const save = useMutation({
     mutationFn: () =>
       api('/api/v1/charging/rates/list', {
@@ -303,6 +327,8 @@ function RateRuleModal({
           name,
           type,
           pricePerKwh: Number(price),
+          // F-NOUI: location-specific rules reference a real place.
+          ...(type === 'location' && placeId ? { placeId } : {}),
           periods:
             type === 'tou'
               ? tou.split(',').map((p, i) => ({
@@ -337,6 +363,18 @@ function RateRuleModal({
             onChange={(e) => setPrice(e.target.value)}
           />
         </Field>
+        {type === 'location' && (
+          <Field label="Place">
+            <Select aria-label="Place" value={placeId} onChange={(e) => setPlaceId(e.target.value)}>
+              <option value="">Choose a place…</option>
+              {places.map((pl) => (
+                <option key={pl.id} value={pl.id}>
+                  {pl.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
         {type === 'tou' && (
           <Field label="Period prices (6h blocks, comma-separated)" hint="e.g. 0.09,0.16,0.28,0.16">
             <Input value={tou} onChange={(e) => setTou(e.target.value)} />

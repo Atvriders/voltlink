@@ -371,6 +371,7 @@ function DriversTab() {
           Departments: {(departments ?? []).map((d) => d.name).join(', ') || 'none'} · Cost centers:{' '}
           {(costCenters ?? []).map((c) => c.name).join(', ') || 'none'}
         </p>
+        <DepartmentForms />
       </Card>
 
       <Card title="Assignments">
@@ -589,5 +590,74 @@ function MaintenanceTab() {
         </div>
       </Modal>
     </Card>
+  );
+}
+
+// F-NOUI: departments and cost centers can be created from the UI.
+function DepartmentForms() {
+  const qc = useQueryClient();
+  const [deptName, setDeptName] = useState('');
+  const [ccName, setCcName] = useState('');
+  const [showDept, setShowDept] = useState(false);
+  const [showCc, setShowCc] = useState(false);
+  const createDept = useMutation({
+    mutationFn: () => api('/api/v1/fleet/departments', { method: 'POST', body: { name: deptName } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['departments'] });
+      setDeptName('');
+      setShowDept(false);
+    },
+  });
+  const createCc = useMutation({
+    mutationFn: () => api('/api/v1/fleet/cost-centers', { method: 'POST', body: { name: ccName } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cost-centers'] });
+      setCcName('');
+      setShowCc(false);
+    },
+  });
+  return (
+    <div className="mt-3 space-y-2">
+      {showDept ? (
+        <div className="flex gap-2">
+          <Input
+            aria-label="Department name"
+            value={deptName}
+            onChange={(e) => setDeptName(e.target.value)}
+            placeholder="Department name"
+          />
+          <Button disabled={!deptName} onClick={() => createDept.mutate()}>
+            Create department
+          </Button>
+          <Button variant="ghost" onClick={() => setShowDept(false)}>
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <Button variant="outline" onClick={() => setShowDept(true)}>
+          <Plus size={14} /> Add department
+        </Button>
+      )}
+      {showCc ? (
+        <div className="flex gap-2">
+          <Input
+            aria-label="Cost center name"
+            value={ccName}
+            onChange={(e) => setCcName(e.target.value)}
+            placeholder="Cost center name"
+          />
+          <Button disabled={!ccName} onClick={() => createCc.mutate()}>
+            Create cost center
+          </Button>
+          <Button variant="ghost" onClick={() => setShowCc(false)}>
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <Button variant="outline" onClick={() => setShowCc(true)}>
+          <Plus size={14} /> Add cost center
+        </Button>
+      )}
+    </div>
   );
 }

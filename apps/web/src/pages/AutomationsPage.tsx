@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FlaskConical, Plus, Power, Trash2, Zap } from 'lucide-react';
+import { FlaskConical, Play, Plus, Power, Trash2, Zap } from 'lucide-react';
 import { api } from '../api/client';
 import {
   Badge,
@@ -86,6 +86,11 @@ export default function AutomationsPage() {
     mutationFn: (id: string) => api(`/api/v1/automations/${id}`, { method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['automations'] }),
   });
+  // F-NOUI: manual trigger reaches POST /automations/:id/trigger.
+  const triggerRun = useMutation({
+    mutationFn: (id: string) => api(`/api/v1/automations/${id}/trigger`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['automations'] }),
+  });
 
   return (
     <div className="space-y-4">
@@ -119,6 +124,18 @@ export default function AutomationsPage() {
                   <Power size={14} className={a.enabled ? 'text-ok' : 'text-faint'} />
                   {a.name}
                 </span>
+              }
+              actions={
+                a.enabled ? (
+                  <Button
+                    variant="secondary"
+                    className="px-2 py-1 text-xs"
+                    loading={triggerRun.isPending && triggerRun.variables === a.id}
+                    onClick={() => triggerRun.mutate(a.id)}
+                  >
+                    <Play size={12} /> Run now
+                  </Button>
+                ) : undefined
               }
             >
               <p className="text-xs text-subtle">{a.description ?? summarizeRule(a)}</p>
