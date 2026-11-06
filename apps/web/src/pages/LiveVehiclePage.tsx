@@ -321,7 +321,8 @@ function CommandIcon({ type }: { type: CommandType }) {
 }
 
 const CONTROL_GROUPS: { title: string; commands: CommandType[] }[] = [
-  { title: 'Access', commands: ['wake', 'lock', 'unlock'] },
+  // F-PARAMS: HomeLink and Remote start are reachable behind their step-up.
+  { title: 'Access', commands: ['wake', 'lock', 'unlock', 'homelink', 'remote_start'] },
   {
     title: 'Climate',
     commands: [
@@ -482,14 +483,30 @@ function ParamModal({
   const [values, setValues] = useState<Record<string, string>>({});
   if (!type || controls.length === 0) return null;
   const state = (vehicle.state ?? {}) as Record<string, unknown>;
+  // F-PARAMS: toggles seed from the actual vehicle-state fields (sentryOn ⇄
+  // sentryMode, valetOn ⇄ valetMode, steeringOn ⇄ steeringHeaterOn).
+  const STATE_FIELD: Record<string, string> = {
+    sentryOn: 'sentryMode',
+    valetOn: 'valetMode',
+    steeringOn: 'steeringHeaterOn',
+    defrostOn: 'defrostOn',
+  };
   const defaults: Record<string, string> = {};
   for (const c of controls) {
     if (c.kind === 'range') {
-      const current = (state as Record<string, unknown>)[c.param];
+      const current = c.param === 'speedLimitKmh'
+        ? (state.speedLimitMode as { limitKmh?: number } | undefined)?.limitKmh
+        : (state as Record<string, unknown>)[c.param];
       defaults[c.param] =
         typeof current === 'number' ? String(current) : String((c.min + c.max) / 2);
     } else if (c.kind === 'toggle') {
-      const current = (state as Record<string, unknown>)[c.param];
+      if (c.param === 'speedLimitOn') {
+        defaults[c.param] = (state.speedLimitMode as { active?: boolean } | undefined)?.active
+          ? 'on'
+          : 'off';
+        continue;
+      }
+      const current = (state as Record<string, unknown>)[STATE_FIELD[c.param] ?? c.param];
       defaults[c.param] = current === true ? 'on' : 'off';
     }
   }
