@@ -1,4 +1,6 @@
 // Admin routes: users, roles, settings, retention, health, and demo controls.
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { policyRouter, sessionActor } from '../authz/policy';
 import { prisma } from '../core/db';
@@ -226,6 +228,20 @@ adminRouter.get(
     let migrationsCurrent = true;
     try {
       await prisma.$queryRaw`SELECT 1`;
+      // NEW-10: migrationsCurrent compares the applied set against the
+      // bundled migration list, not just SELECT 1.
+      const bundled = readdirSync(
+        join(__dirname, '..', '..', 'prisma', 'migrations'),
+        { withFileTypes: true },
+      )
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name)
+        .sort();
+      const applied = await prisma.$queryRaw<{ migration_name: string }[]>`
+        SELECT migration_name FROM _prisma_migrations`;
+      const appliedSet = new Set(applied.map((r) => r.migration_name));
+      migrationsCurrent =
+        applied.length === bundled.length && bundled.every((name) => appliedSet.has(name));
     } catch {
       database = 'error';
       migrationsCurrent = false;

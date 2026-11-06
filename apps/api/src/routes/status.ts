@@ -11,6 +11,7 @@ import {
   ensureComponents,
 } from '../status/service';
 import { randomToken } from '../core/crypto';
+import { renderBadgeSvg, renderRssXml } from '../status/format';
 import { ssePublish } from '../core/sse';
 import { sendMail } from '../auth/service';
 
@@ -36,34 +37,15 @@ statusRouter.get('/rss', { auth: 'public', target: { kind: 'none' } }, async (_r
     }[];
     updatedAt: string;
   };
-  const items = bundle.incidents
-    .slice(0, 20)
-    .map((i) => {
-      const latest = i.updates[0]?.createdAt ?? bundle.updatedAt;
-      return `<item><title>${escapeXml(i.title)}</title><link>${statusPublicUrl}#incident-${i.id}</link><guid>${i.id}</guid><pubDate>${new Date(latest).toUTCString()}</pubDate><description>${escapeXml(i.updates[0]?.message ?? i.status)}</description></item>`;
-    })
-    .join('');
-  const xml = `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>VoltLink Status</title><link>${statusPublicUrl}</link><description>VoltLink platform status updates</description>${items}</channel></rss>`;
   res.setHeader('Content-Type', 'application/rss+xml; charset=utf-8');
-  res.send(xml);
+  res.send(renderRssXml(bundle, statusPublicUrl));
 });
 
 statusRouter.get('/badge.svg', { auth: 'public', target: { kind: 'none' } }, async (_req, res) => {
   const bundle = (await publicStatusBundle()) as { overall: string };
-  const labels: Record<string, [string, string]> = {
-    operational: ['Operational', '#2e7d32'],
-    degraded: ['Degraded', '#f9a825'],
-    partial_outage: ['Partial outage', '#ef6c00'],
-    major_outage: ['Major outage', '#c62828'],
-    maintenance: ['Maintenance', '#1565c0'],
-    unknown: ['Unknown', '#607d8b'],
-  };
-  const [label, color] = (labels[bundle.overall] ?? labels.unknown) as [string, string];
-  const width = 24 + label.length * 7 + 10;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="20"><rect width="${width}" height="20" rx="4" fill="#424242"/><rect x="${width / 2}" width="${width / 2}" height="20" rx="0" fill="${color}"/><text x="6" y="14" font-family="Arial" font-size="11" fill="#fff">VoltLink</text><text x="${width / 2 + 6}" y="14" font-family="Arial" font-size="11" fill="#fff">${label}</text></svg>`;
   res.setHeader('Content-Type', 'image/svg+xml');
   res.setHeader('Cache-Control', 'public, max-age=60');
-  res.send(svg);
+  res.send(renderBadgeSvg(bundle.overall));
 });
 
 statusRouter.post('/subscribe', { auth: 'public', target: { kind: 'none' } }, async (req, res) => {

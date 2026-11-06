@@ -321,7 +321,13 @@ export async function publicStatusBundle(): Promise<unknown> {
     prisma.statusComponent.aggregate({ _max: { updatedAt: true } }),
   ]);
   const statuses = components.map((c) => c.status as ComponentStatus);
-  const uptime = await uptimePct(30);
+  // N-STATUSMISC: the 90-day field is really 90 days; the 30-day rollup is
+  // its own figure; a per-day series feeds the public page.
+  const [uptime90, uptime30, series] = await Promise.all([
+    uptimePct(90),
+    uptimePct(30),
+    uptimeSeries(90),
+  ]);
   return {
     overall: overallStatus(statuses),
     components: components.map((c) => ({
@@ -333,7 +339,7 @@ export async function publicStatusBundle(): Promise<unknown> {
       status: c.status,
       manualOverride: c.manualOverride,
       updatedAt: c.updatedAt.toISOString(),
-      uptime90dPct: uptime.get(c.key) ?? 100,
+      uptime90dPct: uptime90.get(c.key) ?? 100,
     })),
     incidents: incidents.map(toIncidentDto),
     maintenance: maintenance.map((m) => ({
@@ -347,9 +353,30 @@ export async function publicStatusBundle(): Promise<unknown> {
     })),
     updatedAt: (updated._max.updatedAt ?? new Date()).toISOString(),
     uptime30dPct: Math.round(
-      [...uptime.values()].reduce((a, b) => a + b, 0) / Math.max(1, uptime.size),
+      [...uptime30.values()].reduce((a, b) => a + b, 0) / Math.max(1, uptime30.size),
     ),
+    uptime: series,
   };
+}
+
+/** Per-day uptime percentages over the last `days` days (N-STATUSMISC). */
+async function uptimeSeries(days: number): Promise<{ date: string; pct: number }[]> {
+  const from = new Date(Date.now() - days * 86400000);
+  const rows = await prisma.statusCheck.findMany({
+    where: { at: { gte: from } },
+    select: { at: true, ok: true },
+  });
+  const byDay = new Map<string, { total: number; ok: number }>();
+  for (const r of rows) {
+    const day = r.at.toISOString().slice(0, 10);
+    const b = byDay.get(day) ?? { total: 0, ok: 0 };
+    b.total += 1;
+    if (r.ok) b.ok += 1;
+    byDay.set(day, b);
+  }
+  return [...byDay.entries()]
+    .map(([date, b]) => ({ date, pct: Math.round((b.ok / Math.max(1, b.total)) * 1000) / 10 }))
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 async function uptimePct(days: number): Promise<Map<string, number>> {
