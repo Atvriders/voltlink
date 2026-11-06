@@ -10,7 +10,18 @@ const db = `voltlink_test_w${process.env.VITEST_POOL_ID ?? '1'}`;
 const admin = new pg.Client({ connectionString: adminUrl });
 await admin.connect();
 await admin.query('SELECT pg_advisory_lock(73470815)'); // serialize template clones
-await admin.query(`DROP DATABASE IF EXISTS ${db} WITH (FORCE)`);
+// A fork that just exited can still hold a backend on this DB for a moment;
+// FORCE-drops then fail with "permission denied to terminate process".
+// Retry briefly instead of failing the whole file.
+for (let attempt = 0; ; attempt++) {
+  try {
+    await admin.query(`DROP DATABASE IF EXISTS ${db} WITH (FORCE)`);
+    break;
+  } catch (err) {
+    if (attempt >= 10) throw err;
+    await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+  }
+}
 await admin.query(`CREATE DATABASE ${db} TEMPLATE ${inject('dbTemplate')}`);
 await admin.query('SELECT pg_advisory_unlock(73470815)');
 await admin.end();
