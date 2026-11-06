@@ -283,6 +283,7 @@ export default function LiveVehiclePage() {
         command={activeCommand}
         onClose={() => setActiveCommandId(null)}
         units={units}
+        tz={user?.timezone}
       />
     </div>
   );
@@ -602,10 +603,12 @@ function CommandModal({
   command,
   onClose,
   units: _units,
+  tz,
 }: {
   command?: CommandWithEvents;
   onClose: () => void;
   units: 'metric' | 'imperial';
+  tz?: string;
 }) {
   const qc = useQueryClient();
   const cancelMutation = useMutation({
@@ -716,7 +719,7 @@ function CommandModal({
             <ul className="space-y-1 text-xs text-subtle">
               {command.events.map((e) => (
                 <li key={e.id}>
-                  [{fmtClock(e.createdAt)}] {e.event} — {e.detail}
+                  [{fmtClock(e.createdAt, tz)}] {e.event} — {e.detail}
                 </li>
               ))}
             </ul>

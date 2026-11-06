@@ -22,6 +22,7 @@ vi.mock('../api/client', () => ({
   fetchCsrf: () => Promise.resolve('csrf-token'),
   resetCsrf: () => undefined,
 }));
+const { tzState } = vi.hoisted(() => ({ tzState: { value: 'UTC' } }));
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({
     user: {
@@ -29,7 +30,7 @@ vi.mock('../auth/AuthContext', () => ({
       email: 'a@test.dev',
       name: 'A',
       units: 'metric',
-      timezone: 'UTC',
+      timezone: tzState.value,
       theme: 'voltlink-dark',
       totpEnabled: false,
       demoEnabled: true,
@@ -151,5 +152,41 @@ describe('lifecycle modal (F-LIFECYCLEUI)', () => {
         expect.objectContaining({ method: 'POST' }),
       ),
     );
+  });
+
+  it('prints audit-trail times in the user time zone (R2-59)', async () => {
+    tzState.value = 'America/New_York';
+    errorMsg = undefined;
+    apiMock.mockImplementation(async (path: string) => {
+      if (path === '/api/v1/vehicles') return [vehicle];
+      if (path === `/api/v1/vehicles/${vehicle.id}`) return vehicle;
+      if (path.startsWith('/api/v1/commands?'))
+        return { items: [{ ...baseCommand, status: 'failed' }], total: 1 };
+      if (path.startsWith('/api/v1/commands/'))
+        return {
+          command: { ...baseCommand, status: 'failed' },
+          events: [
+            { id: 'e1', event: 'queued', detail: 'in queue', createdAt: '2024-01-01T05:00:00.000Z' },
+          ],
+        };
+      return {};
+    });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={[`/vehicles/${vehicle.id}`]}>
+          <Routes>
+            <Route path="/vehicles/:id" element={<LiveVehiclePage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByText('Aurora')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Failed').closest('button')).toBeTruthy());
+    screen.getByText('Failed').closest('button')!.click();
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
+    // 05:00Z is 00:00 in New York, never 05:00.
+    await waitFor(() => expect(screen.getByText(/12:00 AM/)).toBeTruthy());
+    tzState.value = 'UTC';
   });
 });
