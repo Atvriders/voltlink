@@ -124,7 +124,10 @@ describe('SEC-REVIEW-1: passkey step-up is bound to the user and session', () =>
     });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('PASSKEY_MISMATCH');
-    const throttle = await prisma.authThrottle.findUnique({ where: { key: `user:${a.user.id}` } });
+    // R2-55: throttle keys are scoped per user AND client IP.
+    const throttle = await prisma.authThrottle.findFirst({
+      where: { key: { startsWith: `user:${a.user.id}:ip:` } },
+    });
     expect(throttle?.failures ?? 0).toBeGreaterThanOrEqual(1);
     await prisma.user.delete({ where: { id: a.user.id } });
     await prisma.user.delete({ where: { id: b.user.id } });
@@ -351,7 +354,8 @@ describe('SEC-REVIEW-4: POST /passkeys/:id/delete requires possession step-up', 
     const denied = await postJson(agent, `/api/v1/auth/passkeys/${key.id}/delete`);
     expect(denied.status).toBe(403);
     expect(denied.body.error.code).toBe('STEP_UP_REQUIRED');
-    expect(denied.body.error.details.methods).toEqual(['totp', 'recovery_code', 'passkey']);
+    // R2-60: only methods this account has (a passkey, no TOTP).
+    expect(denied.body.error.details.methods).toEqual(['passkey']);
 
     await prisma.userSession.update({
       where: { id: sessionId },

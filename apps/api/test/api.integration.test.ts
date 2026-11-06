@@ -178,7 +178,8 @@ describe('auth', () => {
       data: { user: { email: string }; memberships: { role: string }[] };
     };
     expect(body.data.user.email).toBe(email);
-    expect(body.data.memberships[0]!.role).toBe('OWNER');
+    // Z-ROLERANK: an OWNER invitation is clamped to ADMIN on accept.
+    expect(body.data.memberships[0]!.role).toBe('ADMIN');
   });
 
   it('rejects duplicate registration', async () => {

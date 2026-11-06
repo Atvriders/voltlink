@@ -677,7 +677,7 @@ const SKIP_EXPECT: Record<string, (persona: Persona) => number | null> = {
   'POST /api/v1/auth/reset-password': () => 400, // empty body
   'POST /api/v1/auth/step-up': (p) => (p.startsWith('apiKey') ? 403 : null),
   'POST /api/v1/auth/passkey/login/options': () => 400,
-  'POST /api/v1/auth/passkey/login/verify': () => 401,
+  'POST /api/v1/auth/passkey/login/verify': () => 400, // NEW-04: missing body is a client error
   'POST /api/v1/auth/passkeys/options': (p) => (p.startsWith('apiKey') ? 403 : null),
   'POST /api/v1/auth/passkeys': (p) => (p.startsWith('apiKey') ? 403 : null),
   'POST /api/v1/auth/mfa/totp/setup': (p) => (p.startsWith('apiKey') ? 403 : null),
@@ -695,7 +695,12 @@ const SKIP_EXPECT: Record<string, (persona: Persona) => number | null> = {
   // Routes whose own semantics (no membership, demo fleet) refine the policy
   // answer; asserted exactly here.
   'POST /api/v1/providers/demo/connect': (p) =>
-    p.startsWith('apiKey') ? 403 : p === 'outsider' ? 403 : 200,
+    p.startsWith('apiKey') ||
+    p === 'outsider' ||
+    p === 'viewerA' ||
+    p === 'driverA'
+      ? 403
+      : 200,
   'POST /api/v1/users/demo-mode': (p) => (p.startsWith('apiKey') ? 403 : null),
 };
 
@@ -1038,9 +1043,14 @@ describe('authorization matrix', () => {
       ];
       it.each(personas)('%s', async (persona) => {
         const key = `${route.method} ${route.path}`;
-        const expected = OWNER_ONLY.has(key)
-          ? persona === 'ownerA'
-          : personaHas(route.policy, persona);
+        // Z-AUTOXTENANT: the demo webhook accepts ACTIVE members of the
+        // vehicle's org (any role); everyone else gets 404.
+        const expected =
+          key === 'POST /api/v1/providers/:provider/webhook'
+            ? ['ownerA', 'viewerA', 'driverA', 'adminA'].includes(persona)
+            : OWNER_ONLY.has(key)
+              ? persona === 'ownerA'
+              : personaHas(route.policy, persona);
         const method = route.method.toLowerCase() as 'get' | 'post' | 'put' | 'patch' | 'delete';
         const body = (() => {
           switch (key) {

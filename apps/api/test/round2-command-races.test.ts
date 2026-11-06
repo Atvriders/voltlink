@@ -115,7 +115,8 @@ describe('R2-57 idempotency race', () => {
         ),
       ),
     );
-    for (const r of results) expect([200, 201]).toContain(r.status);
+    for (const r of results)
+      expect([200, 201], `body=${JSON.stringify(r.body)}`).toContain(r.status);
 
     const ids = results.map((r) => r.body?.data?.id as string);
     expect(new Set(ids).size).toBe(1);

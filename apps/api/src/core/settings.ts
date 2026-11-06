@@ -50,12 +50,19 @@ export async function getSetting(key: string): Promise<string> {
   if (!row) {
     const fallback = DEFAULT_SETTINGS[key];
     if (fallback !== undefined) {
-      await prisma.appSetting.upsert({
-        where: { key },
-        update: {},
-        create: { key, value: fallback },
-      });
-      return fallback;
+      try {
+        await prisma.appSetting.upsert({
+          where: { key },
+          update: {},
+          create: { key, value: fallback },
+        });
+      } catch (e) {
+        // Concurrent requests may insert the default first; the unique
+        // violation is harmless.
+        if ((e as { code?: string }).code !== 'P2002') throw e;
+      }
+      const inserted = await prisma.appSetting.findUnique({ where: { key } });
+      return inserted?.value ?? fallback;
     }
     return '';
   }

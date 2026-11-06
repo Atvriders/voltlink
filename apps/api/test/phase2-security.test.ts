@@ -505,7 +505,7 @@ describe('scoped API keys (NEW-01)', () => {
         memberships: { create: { userId: user.id, role: 'OWNER' } },
       },
     });
-    const { token } = await sessionFor(user.id);
+    const { token } = await sessionFor(user.id, true); // R2-30: step-up for key minting
     const a = agentFor(token);
     const created = await withCsrf(a, (csrf) =>
       a
