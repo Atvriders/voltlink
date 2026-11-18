@@ -10,11 +10,9 @@ import { prisma } from '../src/core/db';
 import { initRedis } from '../src/core/redis';
 import { randomId } from '../src/core/crypto';
 import { sealJson } from '../src/core/crypto';
-import {
-  saveCredentials,
-  loadCredentials,
-  buildContext,
-} from '../src/providers/registry';
+import { saveCredentials, loadCredentials, buildContext } from '../src/providers/registry';
+import { rewrap, resetRingForTests, KeyMissingError } from '../src/core/keyring';
+import { createHash } from 'node:crypto';
 
 beforeAll(async () => {
   await initRedis();
@@ -102,5 +100,124 @@ describe('A-KEYROT credential envelopes', () => {
 
     await prisma.organization.delete({ where: { id: w.org.id } });
     await prisma.user.delete({ where: { id: w.user.id } });
+  });
+
+  // TI-25: a real rotation — K1 active → restart with K2 active + K1 in the
+  // ring → reseal → consumers still work → retire K1 → K1 rows refuse to open.
+  it('rotates the active key and reseals existing envelopes (TI-25)', async () => {
+    const savedEnv = {
+      key: process.env.VL_MASTER_KEY,
+      keys: process.env.VL_MASTER_KEYS,
+      version: process.env.VL_MASTER_KEY_VERSION,
+    };
+    const k1 = createHash('sha256').update('rotation-key-1').digest('base64');
+    const k2 = createHash('sha256').update('rotation-key-2').digest('base64');
+    try {
+      process.env.VL_MASTER_KEY = k1;
+      process.env.VL_MASTER_KEYS = '';
+      process.env.VL_MASTER_KEY_VERSION = '1';
+      resetRingForTests();
+      const w = await mkAccount();
+      await saveCredentials(w.account.id, { accessToken: 'rot-tok', region: 'eu' });
+      const before = await prisma.providerCredential.findUniqueOrThrow({
+        where: { providerAccountId: w.account.id },
+      });
+      expect(JSON.parse(before.ciphertext).kid).toBe(1);
+
+      // "Restart": K2 active, K1 still in the ring.
+      process.env.VL_MASTER_KEY = k2;
+      process.env.VL_MASTER_KEYS = `v1:${k1}`;
+      process.env.VL_MASTER_KEY_VERSION = '2';
+      resetRingForTests();
+
+      const resealed = rewrap(before.ciphertext, `provider-credential:${w.account.id}`);
+      expect(resealed.keyVersion).toBe(2);
+      expect((JSON.parse(resealed.ciphertext) as { kid: number }).kid).toBe(2);
+      // Persist the resealed envelope exactly like the reseal CLI does.
+      await prisma.providerCredential.update({
+        where: { providerAccountId: w.account.id },
+        data: {
+          keyVersion: resealed.keyVersion,
+          ciphertext: resealed.ciphertext,
+          algorithm: resealed.algorithm,
+        },
+      });
+
+      // Consumers still work through the re-wrapped row.
+      const back = await loadCredentials(w.account.id);
+      expect(back.accessToken).toBe('rot-tok');
+      expect(back.region).toBe('eu');
+
+      // Retire K1: the old envelope is now unopenable by design.
+      process.env.VL_MASTER_KEYS = '';
+      resetRingForTests();
+      const stillK1 = await prisma.providerCredential.findUniqueOrThrow({
+        where: { providerAccountId: w.account.id },
+      });
+      expect((JSON.parse(stillK1.ciphertext) as { kid: number }).kid).toBe(2);
+      const oldCipher = before.ciphertext;
+      await expect(
+        (async () => {
+          const { open } = await import('../src/core/keyring');
+          return open(oldCipher, `provider-credential:${w.account.id}`);
+        })(),
+      ).rejects.toBeInstanceOf(KeyMissingError);
+      // The resealed (v2) row still opens under K2.
+      const { open } = await import('../src/core/keyring');
+      expect(open(stillK1.ciphertext, `provider-credential:${w.account.id}`)).toBe(
+        '{"accessToken":"rot-tok","region":"eu"}',
+      );
+
+      await prisma.organization.delete({ where: { id: w.org.id } });
+      await prisma.user.delete({ where: { id: w.user.id } });
+    } finally {
+      if (savedEnv.key === undefined) delete process.env.VL_MASTER_KEY;
+      else process.env.VL_MASTER_KEY = savedEnv.key;
+      if (savedEnv.keys === undefined) delete process.env.VL_MASTER_KEYS;
+      else process.env.VL_MASTER_KEYS = savedEnv.keys;
+      if (savedEnv.version === undefined) delete process.env.VL_MASTER_KEY_VERSION;
+      else process.env.VL_MASTER_KEY_VERSION = savedEnv.version;
+      resetRingForTests();
+    }
+  });
+
+  // TI-25: the AAD binds the envelope to its account — a row copied from
+  // account B must never open as account A (the original A-KEYROT repro).
+  it('refuses to open a credential row copied from another account (TI-25 AAD)', async () => {
+    const a = await mkAccount();
+    const b = await mkAccount();
+    await saveCredentials(b.account.id, { accessToken: 'b-tok', region: 'na' });
+    const bRow = await prisma.providerCredential.findUniqueOrThrow({
+      where: { providerAccountId: b.account.id },
+    });
+    await prisma.providerCredential.create({
+      data: {
+        providerAccountId: a.account.id,
+        keyVersion: bRow.keyVersion,
+        algorithm: bRow.algorithm,
+        ciphertext: bRow.ciphertext,
+      },
+    });
+    await expect(loadCredentials(a.account.id)).rejects.toThrow();
+    await prisma.organization.deleteMany({
+      where: { id: { in: [a.org.id, b.org.id] } },
+    });
+    await prisma.user.deleteMany({ where: { id: { in: [a.user.id, b.user.id] } } });
+  });
+
+  // TI-25: a blank VL_MASTER_KEY_VERSION must refuse to boot, not silently
+  // fall back to v1 (the round-1 defect made rotation a no-op).
+  it('rejects a blank VL_MASTER_KEY_VERSION (TI-25 boot)', async () => {
+    const saved = process.env.VL_MASTER_KEY_VERSION;
+    try {
+      process.env.VL_MASTER_KEY_VERSION = '';
+      resetRingForTests();
+      const { seal } = await import('../src/core/keyring');
+      expect(() => seal('x', 'ctx')).toThrow(/positive integer/);
+    } finally {
+      if (saved === undefined) delete process.env.VL_MASTER_KEY_VERSION;
+      else process.env.VL_MASTER_KEY_VERSION = saved;
+      resetRingForTests();
+    }
   });
 });

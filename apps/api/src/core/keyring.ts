@@ -50,6 +50,12 @@ function ring() {
   return ringCache;
 }
 
+/** Test/ops hook: force the next ring() call to re-read the environment so a
+ * rotation test can simulate a process restart with a new active key. */
+export function resetRingForTests(): void {
+  ringCache = null;
+}
+
 const contextAad = (context: string) => Buffer.from(`voltlink:v2:${context}`);
 
 /** Encrypt `plaintext` into an envelope v2 with bound AAD context. */
