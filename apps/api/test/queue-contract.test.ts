@@ -14,10 +14,9 @@ import type { AddressInfo } from 'node:net';
 import { buildApp } from '../src/app';
 import { prisma } from '../src/core/db';
 import { initRedis } from '../src/core/redis';
-import { Queue, Worker } from 'bullmq';
-import { enqueue, PREFIX, QUEUE_DEFAULTS } from '../src/jobs/queues';
+import { enqueue, QUEUE_DEFAULTS } from '../src/jobs/queues';
 import { queue } from '../src/jobs/queues';
-import { producerConnection, workerConnection } from '../src/core/redis';
+import { startWorker } from '../src/jobs/runtime';
 import { randomId } from '../src/core/crypto';
 import { createSession } from '../src/auth/service';
 import { setSetting } from '../src/core/settings';
@@ -50,13 +49,17 @@ describe('queue contract', () => {
     }
   });
 
-  it('deduplicates on dedupeKey and rejects colon job ids', async () => {
+  it('TI-45 deduplicates on dedupeKey and rejects colon job ids', async () => {
     const name = 'demo';
-    const a = await enqueue(name, { x: 1 }, { dedupeKey: `contract:${Date.now()}` });
-    const b = await enqueue(name, { x: 1 }, { dedupeKey: `contract:${Date.now()}` });
-    expect(a).not.toBe(b); // same dedupe id collapses into one job id… two calls: second returns same job id
-    const again = await enqueue(name, { x: 2 }, { dedupeKey: `contract:${Date.now()}` });
-    expect(again).toBeTruthy();
+    // TI-45: the SAME dedupe key must collapse into the SAME job id (the old
+    // test used three different keys and could not detect a dedupeKey being
+    // ignored — mutant M11).
+    const key = `contract:${Date.now()}`;
+    const a = await enqueue(name, { x: 1 }, { dedupeKey: key });
+    const b = await enqueue(name, { x: 1 }, { dedupeKey: key });
+    expect(b).toBe(a);
+    const again = await enqueue(name, { x: 2 }, { dedupeKey: `other:${Date.now()}` });
+    expect(again).not.toBe(a);
     await expect(enqueue(name, { x: 1 }, { jobId: 'bad:id' })).rejects.toThrow();
     await queue(name)
       .obliterate({ force: true })
@@ -304,40 +307,32 @@ describe('kill switches (P-KILLSW)', () => {
 });
 
 describe('retries and dead-lettering', () => {
-  it('retries with backoff and dead-letters once attempts are exhausted', async () => {
-    const name = 'reports';
-    const q = new Queue(name, {
-      connection: producerConnection(),
-      prefix: PREFIX,
-      defaultJobOptions: {
-        attempts: 2,
-        backoff: { type: 'fixed', delay: 50 },
-        removeOnComplete: { age: 1, count: 1 },
-        removeOnFail: { age: 1 },
-      },
-    });
+  // TI-37: the old test built its OWN Queue with hard-coded options, bypassing
+  // enqueue() and QUEUE_DEFAULTS. This version drives the real enqueue() +
+  // QUEUE_DEFAULTS (telemetry: attempts 3, exponential backoff 5 s) and a
+  // failing processor through startWorker, then observes the dead-letter.
+  it('TI-37 retries and dead-letters through enqueue() and QUEUE_DEFAULTS', async () => {
+    const name = 'telemetry' as const;
     const processor = vi.fn().mockRejectedValue(new Error('boom'));
-    const w = new Worker(name, processor, {
-      connection: workerConnection(),
-      prefix: PREFIX,
-    });
+    const w = startWorker(name, processor);
+    const id = await enqueue(name, { accountId: 'a1', vehicleId: 'v1' });
     try {
-      const job = await q.add(name, { userId: 'u1', kind: 'fleet' });
-      const deadline = Date.now() + 20_000;
+      const deadline = Date.now() + 60_000;
       let state: { attemptsMade?: number; failedReason?: string | null } | null = null;
       while (Date.now() < deadline) {
-        const raw = await q.getJob(job.id!);
+        const raw = await queue(name).getJob(id);
         state = raw ? { attemptsMade: raw.attemptsMade, failedReason: raw.failedReason } : null;
-        if (state && (state.attemptsMade ?? 0) >= 2 && state.failedReason) break;
-        await new Promise((r) => setTimeout(r, 100));
+        if (state && (state.attemptsMade ?? 0) >= 3 && state.failedReason) break;
+        await new Promise((r) => setTimeout(r, 250));
       }
-      expect(state?.attemptsMade).toBe(2);
+      expect(state?.attemptsMade, 'QUEUE_DEFAULTS gives telemetry 3 attempts').toBe(3);
       expect(state?.failedReason).toContain('boom');
-      expect(processor).toHaveBeenCalledTimes(2);
+      expect(processor.mock.calls.length).toBeGreaterThanOrEqual(3);
     } finally {
       await w.close();
-      await q.obliterate({ force: true }).catch(() => undefined);
-      await q.close();
+      await queue(name)
+        .obliterate({ force: true })
+        .catch(() => undefined);
     }
   });
 });
