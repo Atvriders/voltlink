@@ -474,6 +474,7 @@ export default function VehicleViewer({
       style={{ height }}
       data-testid="vehicle-viewer"
       data-asset={useGlb && glbLoaded ? 'glb' : 'fallback'}
+      data-asset-url={useGlb && glbLoaded ? asset : undefined}
     >
       <Canvas
         dpr={cfg.pxRatio}

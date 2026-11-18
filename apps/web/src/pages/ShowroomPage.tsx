@@ -108,7 +108,12 @@ export default function ShowroomPage() {
                 </Link>
               }
             >
-              <VehicleViewer vehicle={selected} state={selected.state} height={460} />
+              <VehicleViewer
+                key={selected.id}
+                vehicle={selected}
+                state={selected.state}
+                height={460}
+              />
               <p className="mt-2 text-xs text-faint">
                 The 3D model reflects real state: doors and trunk animate open, the charge port
                 shows the connector while charging, and the lights follow climate and security

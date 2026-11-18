@@ -4,10 +4,23 @@
 import { expect, test } from '@playwright/test';
 import { enableDemo, register } from './helpers';
 
-test('showroom renders GLB assets for all demo vehicle classes', async ({ page }) => {
+const CLASS_BY_NAME: Record<string, string> = {
+  Aurora: 'suv',
+  Comet: 'sport_sedan',
+  Terra: 'compact_crossover',
+  Atlas: 'compact_sedan',
+  Bison: 'pickup',
+};
+
+test('showroom renders the right GLB per vehicle class, with zero page errors', async ({
+  page,
+}) => {
   const email = `e2e-glb-${Date.now()}@voltlink.test`;
   await register(page, email);
   await enableDemo(page);
+
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
 
   await page.goto('/showroom');
   await page.waitForURL(/showroom/);
@@ -18,14 +31,26 @@ test('showroom renders GLB assets for all demo vehicle classes', async ({ page }
   await expect(page.getByText('Aurora').first()).toBeVisible({ timeout: 30000 });
 
   for (const name of demoVehicles) {
+    const cls = CLASS_BY_NAME[name];
+    expect(cls, `class known for ${name}`).toBeTruthy();
     await page
       .getByRole('button', { name: new RegExp(name) })
       .first()
       .click();
-    await expect(page.locator('[data-testid="vehicle-viewer"]')).toBeVisible({ timeout: 20000 });
-    await expect(page.locator('[data-testid="vehicle-viewer"][data-asset="glb"]')).toBeVisible({
+    const viewer = page.locator('[data-testid="vehicle-viewer"]');
+    await expect(viewer).toBeVisible({ timeout: 20000 });
+    // C-WEBGLTEST: the loaded asset is the REAL GLB and its URL is the one
+    // for THIS class (the old suite passed with any other class's GLB, even
+    // while the requested asset was held unanswered).
+    await expect
+      .poll(async () => viewer.first().getAttribute('data-asset-url'), {
+        timeout: 30000,
+      })
+      .toContain(`/assets/models/${cls}`);
+    await expect(viewer.first()).toHaveAttribute('data-asset', 'glb', {
       timeout: 30000,
     });
-    console.log(`glb asset rendered for ${name}`);
+    console.log(`glb asset ${cls} rendered for ${name}`);
   }
+  expect(errors, 'no page errors during the whole sweep').toEqual([]);
 });
