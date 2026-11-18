@@ -81,6 +81,29 @@ export async function enableDemo(page: Page): Promise<void> {
   // The button appears once the accounts query resolves. Demo mode is a hard
   // requirement of every downstream assertion: fail if it never shows up.
   await demoBtn.waitFor({ state: 'visible', timeout: 15000 });
+  // R2-16 / C-E2EHOLLOW: wait for the CONNECT RESPONSE, never static page
+  // text ('All demo vehicles are fictional…' was satisfying the old wait with
+  // zero vehicles on the server).
+  const connectDone = page.waitForResponse(
+    (r) => r.url().includes('/providers/demo/connect') && r.request().method() === 'POST',
+    { timeout: 30000 },
+  );
   await demoBtn.click();
-  await expect(page.getByText(/demo vehicles/)).toBeVisible({ timeout: 30000 });
+  const connectRes = await connectDone;
+  if (!connectRes.ok()) throw new Error(`demo connect failed: ${connectRes.status()}`);
+  // Exact-count badge (strict match) — the marketing sentence never matches.
+  await expect(page.getByText(/^\d+ demo vehicles$/)).toBeVisible({ timeout: 30000 });
+  // The user's OWN fleet must be fully provisioned before any navigation:
+  // poll GET /api/v1/vehicles until 5 vehicles exist.
+  await expect
+    .poll(
+      async () => {
+        const r = await page.request.get('/api/v1/vehicles');
+        if (!r.ok()) return 0;
+        const body = (await r.json()) as { data?: unknown[] };
+        return Array.isArray(body.data) ? body.data.length : 0;
+      },
+      { timeout: 30000 },
+    )
+    .toBeGreaterThanOrEqual(5);
 }
