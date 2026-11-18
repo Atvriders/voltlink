@@ -89,6 +89,9 @@ export default defineConfig({
         functions: 75,
         branches: 65,
         '**/auth/**/*.ts': { lines: 90, statements: 90, functions: 85, branches: 85 },
+        // TI-56: the web auth module is a .tsx file, so the glob above never
+        // applied to AuthContext.tsx (login()/loginMfa() were never executed).
+        '**/auth/**/*.tsx': { lines: 90, statements: 90, functions: 85, branches: 85 },
         '**/commands/**/*.ts': { lines: 90, statements: 90, functions: 85, branches: 85 },
         '**/authz/access.ts': { lines: 95, statements: 95, functions: 90, branches: 90 },
       },
