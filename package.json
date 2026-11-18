@@ -36,6 +36,7 @@
     "prisma:generate": "prisma generate --schema apps/api/prisma/schema.prisma",
     "check:compose": "tsx scripts/check-compose.ts",
     "check:bundle": "tsx scripts/check-bundle.ts",
+    "check:stack-safety": "tsx scripts/check-stack-safety.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test:unit": "vitest run --project shared --project api-unit --project web",

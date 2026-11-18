@@ -95,6 +95,8 @@ jobs:
         run: npm run legacy:scan
       - name: Naming scan
         run: npm run naming:scan
+      - name: Stack-safety gate (R2-24)
+        run: npm run check:stack-safety
       - name: GLB / manifest validation (guide 06)
         run: npx tsx scripts/assets/validate.mts
       - name: Dependency audit

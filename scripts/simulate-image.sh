@@ -49,13 +49,14 @@ echo "[simulate-image] 4/6 self-test"
 
 echo "[simulate-image] 5/6 temporary database + migrate role"
 PGPASSWORD="$DB_PW" "$PSQL" -h 127.0.0.1 -p 5433 -U voltlink -d postgres -c "CREATE DATABASE $SIM_DB" >/dev/null
-export DATABASE_URL="postgresql://voltlink:${DB_PW}@127.0.0.1:5433/${SIM_DB}"
+export DATABASE_URL="postgresql://voltlink:${DB_PW}@127.0.0.1:5433/${SIM_DB}?connection_limit=5"
 export REDIS_URL="redis://127.0.0.1:6379"
 export JWT_SECRET="$(openssl rand -hex 32)"
 export VL_MASTER_KEY="$(openssl rand -base64 32)"
 export PUBLIC_URL="http://localhost:3111"
 export VL_ALLOW_INSECURE_HTTP=true
 export NODE_ENV=production
+export HOST=127.0.0.1
 export PORT=3111
 export STATUS_PORT=3112
 export VL_SETUP_TOKEN="simulate-image-setup-token-$(openssl rand -hex 8)"

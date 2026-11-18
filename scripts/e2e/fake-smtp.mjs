@@ -4,6 +4,12 @@
 import net from 'node:net';
 import http from 'node:http';
 
+// R2-24: ports come from the environment (start-stack.sh sets them) so two
+// stacks on one shared machine never fight over 1025/1026.
+const SMTP_PORT = Number(process.env.SMTP_PORT ?? 1025);
+const HTTP_PORT = Number(process.env.VL_SMTP_HTTP_PORT ?? 1026);
+const HOST = process.env.HOST ?? '127.0.0.1';
+
 const messages = []; // { to, text, textDecoded }
 
 // Minimal quoted-printable decoder (the node stdlib has none): un-fold soft
@@ -62,7 +68,7 @@ const smtp = net.createServer((socket) => {
     }
   });
 });
-smtp.listen(1025, '127.0.0.1', () => console.log('fake smtp listening on 127.0.0.1:1025'));
+smtp.listen(SMTP_PORT, HOST, () => console.log(`fake smtp listening on ${HOST}:${SMTP_PORT}`));
 
 http
   .createServer((req, res) => {
@@ -86,4 +92,4 @@ http
     }
     res.writeHead(404).end();
   })
-  .listen(1026, '127.0.0.1', () => console.log('fake smtp http on 127.0.0.1:1026'));
+  .listen(HTTP_PORT, HOST, () => console.log(`fake smtp http on ${HOST}:${HTTP_PORT}`));

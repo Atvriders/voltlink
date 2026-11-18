@@ -59,27 +59,46 @@ record_pid() {
 : "${VL_MASTER_KEY:?VL_MASTER_KEY is required}"
 : "${PUBLIC_URL:?PUBLIC_URL is required (e.g. http://127.0.0.1:3110)}"
 export NODE_ENV="${NODE_ENV:-production}"
+# R2-24: the shared machine — bind loopback unless the caller explicitly opts out.
+export HOST="${HOST:-127.0.0.1}"
 export PORT="${PORT:-3111}"
-export SMTP_URL="${SMTP_URL:-smtp://127.0.0.1:1025}"
+export SMTP_PORT="${SMTP_PORT:-1025}"
+export VL_SMTP_HTTP_PORT="${VL_SMTP_HTTP_PORT:-1026}"
+export SMTP_URL="${SMTP_URL:-smtp://127.0.0.1:$SMTP_PORT}"
 export MAIL_TO_CONSOLE="${MAIL_TO_CONSOLE:-false}"
 # A local default keeps `bash scripts/e2e/start-stack.sh` working from a fresh
-# shell; CI and the image pass their own.
-export VL_SETUP_TOKEN="${VL_SETUP_TOKEN:-e2e-local-setup-token-0123456789abcdef}"
+# shell; CI and the image pass their own. The single-hyphen default keeps an
+# EXPLICITLY EMPTY value empty (R2-01/R2-24): the fresh-install path must be
+# able to exercise the unset-token boot.
+export VL_SETUP_TOKEN="${VL_SETUP_TOKEN-e2e-local-setup-token-0123456789abcdef}"
 # Local stacks listen on plain HTTP; CI keeps this flag as-is.
 export VL_ALLOW_INSECURE_HTTP="${VL_ALLOW_INSECURE_HTTP:-true}"
-export VL_E2E_SMTP_HTTP="${VL_E2E_SMTP_HTTP:-http://127.0.0.1:1026}"
+export VL_E2E_SMTP_HTTP="${VL_E2E_SMTP_HTTP:-http://127.0.0.1:$VL_SMTP_HTTP_PORT}"
+# R2-24: cap the Prisma pool for the shared server (100 connections total).
+case "$DATABASE_URL" in
+  *connection_limit=*) ;;
+  *\?*) export DATABASE_URL="$DATABASE_URL&connection_limit=5" ;;
+  *) export DATABASE_URL="$DATABASE_URL?connection_limit=5" ;;
+esac
 
 cd "$REPO_ROOT/apps/api"
 
 node "$SCRIPT_DIR/fake-smtp.mjs" >"$LOG_DIR/smtp.log" 2>&1 &
-record_pid smtp $!
-for _ in $(seq 1 20); do curl -sf "$VL_E2E_SMTP_HTTP/health" >/dev/null 2>&1 && break; sleep 0.2; done
-curl -sf "$VL_E2E_SMTP_HTTP/health" >/dev/null || { echo "fake smtp did not come up" >&2; tail -20 "$LOG_DIR/smtp.log"; exit 1; }
+SMTP_PID=$!
+record_pid smtp $SMTP_PID
+smtp_ready=0
+for _ in $(seq 1 20); do
+  if kill -0 "$SMTP_PID" 2>/dev/null && curl -sf "$VL_E2E_SMTP_HTTP/health" >/dev/null 2>&1; then smtp_ready=1; break; fi
+  kill -0 "$SMTP_PID" 2>/dev/null || break  # our sink died; never accept a foreign one
+  sleep 0.2
+done
+[ "$smtp_ready" = "1" ] || { echo "fake smtp did not come up" >&2; tail -20 "$LOG_DIR/smtp.log"; exit 1; }
 
 node dist/cli/migrate.cjs >"$LOG_DIR/migrate.log" 2>&1 || { tail -40 "$LOG_DIR/migrate.log"; exit 1; }
 
 node dist/index.cjs >"$LOG_DIR/api.log" 2>&1 &
-record_pid api $!
+API_PID=$!
+record_pid api $API_PID
 node dist/worker.cjs >"$LOG_DIR/worker.log" 2>&1 &
 record_pid worker $!
 node dist/scheduler.cjs >"$LOG_DIR/scheduler.log" 2>&1 &
@@ -87,7 +106,11 @@ record_pid scheduler $!
 
 ready=0
 for i in $(seq 1 60); do
-  if curl -sf "http://127.0.0.1:$PORT/healthz" >/dev/null; then ready=1; break; fi
+  if kill -0 "$API_PID" 2>/dev/null && curl -sf "http://127.0.0.1:$PORT/healthz" >/dev/null; then
+    ready=1
+    break
+  fi
+  kill -0 "$API_PID" 2>/dev/null || break  # our web died; never log into a foreign stack on this port
   sleep 1
 done
 if [ "$ready" != "1" ]; then
