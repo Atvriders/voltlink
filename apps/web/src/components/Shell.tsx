@@ -166,7 +166,9 @@ function VehicleSwitcher() {
             e.preventDefault();
             setOpen(true);
             requestAnimationFrame(() =>
-              ref.current?.querySelector<HTMLButtonElement>('[role="menuitem"], button[data-veh]')?.focus(),
+              ref.current
+                ?.querySelector<HTMLButtonElement>('[role="menuitem"], button[data-veh]')
+                ?.focus(),
             );
           }
         }}
@@ -370,7 +372,10 @@ function ThemeMenu() {
               ref.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [],
             );
             const i = items.indexOf(document.activeElement as HTMLButtonElement);
-            const next = e.key === 'ArrowDown' ? (i + 1) % items.length : (i - 1 + items.length) % items.length;
+            const next =
+              e.key === 'ArrowDown'
+                ? (i + 1) % items.length
+                : (i - 1 + items.length) % items.length;
             items[next]?.focus();
           }}
           className="absolute right-0 top-full z-40 mt-1 w-52 rounded-xl border border-line bg-panel p-1 shadow-2xl"
@@ -439,6 +444,26 @@ function AccountMenu({ align = 'left', email }: { align?: 'left' | 'right'; emai
           >
             <Settings size={15} /> Settings
           </Link>
+          {/* TI-27/R2-36: below lg the Theme menu is hidden with no other
+           * entry point — keep a theme control reachable on phones. */}
+          {THEMES.map((t) => (
+            <button
+              key={t.id}
+              role="menuitem"
+              onClick={() => {
+                setTheme(t.id);
+                setOpen(false);
+                void api('/api/v1/users/settings', {
+                  method: 'PATCH',
+                  body: { theme: t.id },
+                }).catch(() => undefined);
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-panel2"
+            >
+              {t.id.includes('light') ? <Sun size={15} /> : <Moon size={15} />}
+              Theme: {t.name}
+            </button>
+          ))}
           <button
             role="menuitem"
             onClick={() => {

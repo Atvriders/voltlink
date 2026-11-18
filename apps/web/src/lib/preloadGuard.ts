@@ -9,14 +9,15 @@ export interface PreloadGuardDeps {
 }
 
 const KEY = 'voltlink-preload-retry';
-const WINDOW_MS = 30_000;
 
 export function installPreloadReloadGuard(deps: PreloadGuardDeps): { emit: () => void } {
   return {
     emit: () => {
-      const raw = deps.get(KEY);
-      const last = raw ? Number(raw) : NaN;
-      if (!Number.isFinite(last) || deps.now() - last > WINDOW_MS) {
+      // TI-28/R2-37: at most ONE reload per session (the sessionStorage
+      // marker survives reloads). The old 30 s window reloaded again after
+      // the window expired, so a chunk failing after 30 s looped forever and
+      // the error card never showed.
+      if (deps.get(KEY) === null) {
         deps.set(KEY, String(deps.now()));
         deps.reload();
       }

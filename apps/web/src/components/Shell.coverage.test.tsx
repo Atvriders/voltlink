@@ -106,21 +106,6 @@ beforeEach(() => {
   });
 });
 
-function renderPage(path: string, ui: React.ReactNode) {
-  const qc = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route path="*" element={ui as React.ReactElement} />
-        </Routes>
-      </MemoryRouter>
-    </QueryClientProvider>,
-  );
-}
-
 afterEach(cleanup);
 
 import userEvent from '@testing-library/user-event';
@@ -139,7 +124,13 @@ vi.mock('../lib/realtime', () => ({
 
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => authState,
-  setTheme: vi.fn(),
+  setTheme: vi.fn((theme: string) => {
+    localStorage.setItem('voltlink-theme', theme);
+    document.documentElement.setAttribute(
+      'data-theme',
+      theme.includes('light') ? 'voltlink-light' : 'voltlink-dark',
+    );
+  }),
   THEMES: [
     { id: 'voltlink-dark', name: 'VoltLink Dark' },
     { id: 'voltlink-light', name: 'VoltLink Light' },
@@ -177,9 +168,7 @@ describe('Shell page', () => {
   const renderShell = () =>
     render(
       <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
       >
         <MemoryRouter initialEntries={['/']}>
           <SelectedVehicleProvider userId={shellUser!.id}>
@@ -203,9 +192,7 @@ describe('Shell page', () => {
 
     expect(screen.getByRole('navigation', { name: 'Main navigation' })).toBeTruthy();
     expect(screen.getAllByRole('link', { name: 'Overview' }).length).toBeGreaterThan(0);
-    expect(
-      await screen.findByRole('link', { name: 'Notifications (4 unread)' }),
-    ).toBeTruthy();
+    expect(await screen.findByRole('link', { name: 'Notifications (4 unread)' })).toBeTruthy();
     expect(
       await screen.findByRole('button', { name: /Choose vehicle|Vehicle: Aurora/ }),
     ).toBeTruthy();
@@ -235,9 +222,7 @@ describe('Shell page', () => {
     const user = userEvent.setup();
     renderShell();
 
-    await user.click(
-      await screen.findByRole('button', { name: /Choose vehicle|Vehicle: Aurora/ }),
-    );
+    await user.click(await screen.findByRole('button', { name: /Choose vehicle|Vehicle: Aurora/ }));
 
     const menu = await screen.findByRole('menu');
     expect(within(menu).getByPlaceholderText('Search vehicles')).toBeTruthy();
@@ -249,33 +234,30 @@ describe('Shell page', () => {
     expect(screen.getByText('Page body')).toBeTruthy();
   });
 
-  it('keeps mobile header controls inside the viewport (R2-36)', async () => {
+  it('keeps a theme control reachable below lg via the account menu (R2-36/TI-27)', async () => {
+    const user = userEvent.setup();
     renderShell();
     await screen.findByRole('button', { name: /Choose vehicle|Vehicle: Aurora/ });
-    // The standalone Settings link and Theme menu collapse into the account
-    // menu below lg, so the phone header never overflows.
-    const settingsLink = screen
-      .getAllByRole('link', { name: 'Settings' })
-      .find((a) => a.getAttribute('aria-label') === 'Settings')!;
-    expect(settingsLink.closest('div.hidden.lg\\:block')).toBeTruthy();
-    const themeButton = screen.getByRole('button', { name: 'Theme' });
-    expect(themeButton.closest('div.hidden.lg\\:block')).toBeTruthy();
-    // The logo subtitle is hidden below sm.
-    const subtitles = screen.getAllByText('Connected Vehicle Platform');
-    expect(subtitles.length).toBeGreaterThan(0);
-    for (const subtitle of subtitles) {
-      expect(subtitle.className).toContain('hidden');
-      expect(subtitle.className).toContain('sm:block');
-    }
+    // The account menu (the below-lg entry point) carries Settings AND a
+    // theme control — jsdom has no layout, so the viewport proof lives in
+    // theme-mobile.spec.ts.
+    await user.click(screen.getAllByRole('button', { name: 'Account menu' })[0]!);
+    const menuitems = await screen.findAllByRole('menuitem');
+    const labels = menuitems.map((m) => m.textContent ?? '');
+    expect(labels.some((l) => l.includes('Settings'))).toBe(true);
+    expect(labels.some((l) => l.startsWith('Theme:'))).toBe(true);
+    // Selecting a theme applies it.
+    const themeItem = menuitems.find((m) => (m.textContent ?? '').startsWith('Theme:'))!;
+    fireEvent.click(themeItem);
+    expect(document.documentElement.getAttribute('data-theme')).toBeTruthy();
+    expect(localStorage.getItem('voltlink-theme')).toBeTruthy();
   });
 
   it('keeps the switcher and shows a no-match message for an empty search (R2-38)', async () => {
     const user = userEvent.setup();
     renderShell();
 
-    await user.click(
-      await screen.findByRole('button', { name: /Choose vehicle|Vehicle: Aurora/ }),
-    );
+    await user.click(await screen.findByRole('button', { name: /Choose vehicle|Vehicle: Aurora/ }));
 
     const menu = await screen.findByRole('menu');
     const search = within(menu).getByPlaceholderText('Search vehicles');
@@ -290,9 +272,7 @@ describe('Shell page', () => {
     const user = userEvent.setup();
     renderShell();
 
-    await user.click(
-      await screen.findByRole('button', { name: /Choose vehicle|Vehicle: Aurora/ }),
-    );
+    await user.click(await screen.findByRole('button', { name: /Choose vehicle|Vehicle: Aurora/ }));
 
     const menu = await screen.findByRole('menu');
     const favoriteButtons = await within(menu).findAllByRole('button', {
@@ -360,8 +340,6 @@ describe('Shell page', () => {
 
     await user.click(screen.getByRole('button', { name: 'Close menu' }));
 
-    await waitFor(() =>
-      expect(screen.queryByRole('button', { name: 'Close menu' })).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Close menu' })).toBeNull());
   });
 });
