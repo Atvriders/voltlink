@@ -12,13 +12,15 @@ const TERMINAL = ['accepted', 'not_observable', 'rejected', 'failed', 'timed_out
 
 type Cmd = { id: string; status?: string; createdAt?: string; events?: { event: string }[] };
 
-async function newestCommand(page: Page, vehicleId: string): Promise<Cmd> {
+async function newestCommand(page: Page, vehicleId: string, afterMs: number): Promise<Cmd> {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
     const res = await page.request.get(`/api/v1/commands?vehicleId=${vehicleId}&pageSize=100`);
     expect(res.status(), 'command list must be reachable').toBe(200);
     const body = (await res.json()) as { data?: { items?: Cmd[] } };
-    const items = body.data?.items ?? [];
+    const items = (body.data?.items ?? []).filter(
+      (c) => new Date(c.createdAt ?? 0).getTime() >= afterMs,
+    );
     if (items.length > 0) {
       return items.reduce((a, b) =>
         new Date(b.createdAt ?? 0).getTime() > new Date(a.createdAt ?? 0).getTime() ? b : a,
@@ -63,10 +65,11 @@ test('R2-17: honk reaches accepted/not_observable with the full event chain (API
   const vehicleId = page.url().match(/\/vehicles\/([^/]+)/)?.[1];
   expect(vehicleId, 'vehicle id from the URL').toBeTruthy();
 
+  const clickTime = Date.now();
   await page.getByRole('button', { name: /^Honk horn/ }).click();
 
   // The ISSUED command's id (not just any vehicle command).
-  const issued = await newestCommand(page, vehicleId!);
+  const issued = await newestCommand(page, vehicleId!, clickTime);
   expect(issued.id).toBeTruthy();
 
   // API: terminal + event chain queued -> submitted -> accepted.
@@ -119,9 +122,10 @@ test('R2-17: rejected lifecycle — Bison open_trunk is refused end to end', asy
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
   const vehicleId = bison!.id;
 
+  const clickTime = Date.now();
   await page.getByRole('button', { name: 'Open trunk', exact: true }).click();
 
-  const issued = await newestCommand(page, vehicleId);
+  const issued = await newestCommand(page, vehicleId, clickTime);
   const final = await waitTerminal(page, issued.id);
   expect(final.status, 'offline Bison open_trunk must be rejected').toBe('rejected');
   await expect
@@ -151,9 +155,10 @@ test('R2-17: timed_out lifecycle — Bison window_vent times out end to end', as
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
   const vehicleId = bison!.id;
 
+  const clickTime = Date.now();
   await page.getByRole('button', { name: 'Vent windows', exact: true }).click();
 
-  const issued = await newestCommand(page, vehicleId);
+  const issued = await newestCommand(page, vehicleId, clickTime);
   const final = await waitTerminal(page, issued.id);
   expect(final.status, 'Bison window_vent must reach timed_out').toBe('timed_out');
   await expect
