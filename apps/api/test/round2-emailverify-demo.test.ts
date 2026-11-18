@@ -111,26 +111,6 @@ describe('Z-DEMOSCOPE demo incidents stay private', () => {
         memberships: { create: { userId: owner.id, role: 'OWNER' } },
       },
     });
-    const provider = await prisma.providerAccount.create({
-      data: {
-        organizationId: org.id,
-        provider: 'demo',
-        label: 'demo',
-        status: 'connected',
-        demo: true,
-      },
-    });
-    const vehicle = await prisma.vehicle.create({
-      data: {
-        organizationId: org.id,
-        providerAccountId: provider.id,
-        provider: 'demo',
-        providerVehicleId: 'demo-aurora',
-        displayName: 'Aurora',
-        demo: true,
-        capabilities: JSON.parse(JSON.stringify(['honk_horn', 'wake'])),
-      },
-    });
     // TI-58: create the two demo incidents DIRECTLY (the test must not
     // depend on the seed's side effects into the real incident table).
     await prisma.incident.deleteMany({});
