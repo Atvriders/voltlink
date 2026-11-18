@@ -5,10 +5,10 @@ import { expect, test } from '@playwright/test';
 import { enableDemo, register } from './helpers';
 
 const CLASS_BY_NAME: Record<string, string> = {
-  Aurora: 'suv',
+  Aurora: 'compact_sedan',
   Comet: 'sport_sedan',
   Terra: 'compact_crossover',
-  Atlas: 'compact_sedan',
+  Atlas: 'suv',
   Bison: 'pickup',
 };
 
