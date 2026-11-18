@@ -82,7 +82,7 @@ describe('push subscription endpoint allow-list (N-PUSH)', () => {
     expect(res.body.error.code).toBe('INVALID_ENDPOINT');
   });
 
-  it('accepts a well-known https push service', async () => {
+  it('accepts the exact body the SPA enable() sends (TI-10)', async () => {
     const user = await prisma.user.create({
       data: {
         email: `push2-${Date.now()}-${randomId()}@test.dev`,

@@ -69,8 +69,15 @@ export async function enable(): Promise<void> {
     userVisibleOnly: true,
     applicationServerKey: b64uToBytes(cfg.publicKey),
   });
+  // TI-10 / N-PUSH: the route accepts { endpoint, keys: { p256dh, auth } };
+  // the old { subscription, keyId } body was answered with 400, so live
+  // enables never persisted.
+  const json = sub.toJSON();
   await api('/api/v1/notifications/push/subscriptions', {
     method: 'PUT',
-    body: { subscription: sub.toJSON(), keyId: cfg.keyId },
+    body: {
+      endpoint: json.endpoint,
+      keys: { p256dh: json.keys?.p256dh, auth: json.keys?.auth },
+    },
   });
 }

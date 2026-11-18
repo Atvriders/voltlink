@@ -12,7 +12,12 @@ function mockRegistration() {
   return {
     pushManager: {
       getSubscription: vi.fn().mockResolvedValue(null),
-      subscribe: vi.fn().mockResolvedValue({ toJSON: () => ({ endpoint: 'e1' }) }),
+      subscribe: vi.fn().mockResolvedValue({
+        toJSON: () => ({
+          endpoint: 'e1',
+          keys: { p256dh: 'p256dh-test', auth: 'auth-test' },
+        }),
+      }),
     },
   };
 }
@@ -59,9 +64,14 @@ describe('push prepare/enable/unsubscribe', () => {
     });
     await push.enable();
     expect(registration.pushManager.subscribe).toHaveBeenCalled();
+    // TI-10: the API accepts { endpoint, keys: { p256dh, auth } } — the old
+    // { subscription, keyId } body is answered with 400.
     expect(apiMock).toHaveBeenCalledWith('/api/v1/notifications/push/subscriptions', {
       method: 'PUT',
-      body: { subscription: { endpoint: 'e1' }, keyId: 'k1' },
+      body: {
+        endpoint: 'e1',
+        keys: { p256dh: 'p256dh-test', auth: 'auth-test' },
+      },
     });
 
     registration.pushManager.getSubscription = vi
