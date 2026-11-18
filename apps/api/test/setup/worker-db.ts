@@ -5,9 +5,10 @@ import { randomBytes } from 'node:crypto';
 import { afterAll, inject } from 'vitest';
 import pg from 'pg';
 
-// R2-24: per-run prefix from the same env as global-db; teardown there drops
-// only prefix% databases, so unrelated runs on the shared server are untouched.
-const prefix = process.env.VL_TEST_DB_PREFIX ?? 'voltlink_test_';
+// R2-24: the per-run prefix is created once in global-db setup (unique default
+// pid+random) and injected here; teardown drops only prefix% databases, so a
+// run without VL_TEST_DB_PREFIX still never touches another run's databases.
+const prefix = inject('dbPrefix');
 const adminUrl = inject('dbAdminUrl');
 const db = `${prefix}w${process.env.VITEST_POOL_ID ?? '1'}`;
 

@@ -47,6 +47,11 @@ const CHECKS: Record<string, Assertion[]> = {
   'apps/api/test/setup/global-db.ts': [
     requireMatch(/VL_TEST_DB_PREFIX/, 'must read the per-run prefix VL_TEST_DB_PREFIX'),
     requireMatch(
+      /VL_TEST_DB_PREFIX \?\?[\s\S]{0,120}process\.pid/,
+      'the DEFAULT prefix must be unique per run (pid + random)',
+    ),
+    requireMatch(/randomBytes/, 'the default prefix must include randomness'),
+    requireMatch(
       /`\$\{PREFIX\}template`|PREFIX\}template/,
       'template name must come from the prefix',
     ),
@@ -58,7 +63,14 @@ const CHECKS: Record<string, Assertion[]> = {
     requireMatch(/PREFIX\.replace\(\//, 'teardown LIKE must escape the prefix wildcards'),
   ],
   'apps/api/test/setup/worker-db.ts': [
-    requireMatch(/VL_TEST_DB_PREFIX/, 'worker DB name must come from VL_TEST_DB_PREFIX'),
+    requireMatch(
+      /inject\('dbPrefix'\)/,
+      'worker DB name must come from the injected per-run prefix',
+    ),
+    forbidMatch(
+      /VL_TEST_DB_PREFIX \?\? 'voltlink_test_'/,
+      'must not fall back to the shared voltlink_test_ default',
+    ),
     forbidMatch(/% 16/, 'must not rewrite the Redis index to POOL_ID % 16'),
     requireMatch(/VL_REDIS_INDEX/, 'Redis index override must be opt-in via VL_REDIS_INDEX'),
     requireMatch(/VL_QUEUE_PREFIX/, 'must set a per-fork queue prefix'),

@@ -1,14 +1,20 @@
 // apps/api/test/setup/global-db.ts — once per run (guide 08 §6): build the
 // shared migration template the per-worker databases are cloned from.
+import { randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import type { TestProject } from 'vitest/node';
 
-// R2-24: a per-run prefix (safe default voltlink_test_) so teardown drops only
-// what this run created — never every voltlink_test_% database on the shared
-// server. Postgres connection pool is capped for the shared machine.
-const PREFIX = process.env.VL_TEST_DB_PREFIX ?? 'voltlink_test_';
+// R2-24: a per-run prefix so teardown drops only what THIS run created — never
+// every voltlink_test_% database on the shared server. The default is unique
+// per run (pid + random, computed once here in global setup and passed to the
+// workers via provide), so `npm run test:int` and CI without VL_TEST_DB_PREFIX
+// can never touch another run's databases. Postgres pool is capped for the
+// shared machine.
+const PREFIX =
+  process.env.VL_TEST_DB_PREFIX ??
+  `voltlink_test_${process.pid}_${randomBytes(8).toString('hex')}_`;
 const TEMPLATE = `${PREFIX}template`;
 const CONNECTION_LIMIT = '5';
 
