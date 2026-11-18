@@ -4,7 +4,7 @@ import express from 'express';
 import request from 'supertest';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -28,6 +28,8 @@ describe('spa fallback (G-13)', () => {
       expect(route.status).toBe(200);
       expect(route.text).toContain('index');
     } finally {
+      // TI-51: the temp spa-fallback dir leaked on every run.
+      rmSync(dir, { recursive: true, force: true });
       server.close();
     }
   });
