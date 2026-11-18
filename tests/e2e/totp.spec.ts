@@ -25,7 +25,7 @@ test.describe('TOTP enrolment and MFA sign-in (R2-07/TI-36)', () => {
         .textContent()
     )?.trim();
     expect(secret).toBeTruthy();
-    const code = generate({ secret: secret! });
+    const code = await generate({ secret: secret! });
     await page.getByLabel('Verification code').fill(code);
     await page.getByRole('button', { name: /Verify & enable/ }).click();
     await expect(page.getByText('TOTP enabled!')).toBeVisible();
