@@ -15,8 +15,6 @@ import { renderBadgeSvg, renderRssXml } from '../status/format';
 import { ssePublish } from '../core/sse';
 import { sendMail } from '../auth/service';
 
-const statusPublicUrl = `${env.PUBLIC_URL}/status`;
-
 export const statusRouter = policyRouter('/api/v1/status');
 
 // ---- Public endpoints (no auth) ----
@@ -38,7 +36,7 @@ statusRouter.get('/rss', { auth: 'public', target: { kind: 'none' } }, async (_r
     updatedAt: string;
   };
   res.setHeader('Content-Type', 'application/rss+xml; charset=utf-8');
-  res.send(renderRssXml(bundle, statusPublicUrl));
+  res.send(renderRssXml(bundle, env.PUBLIC_URL));
 });
 
 statusRouter.get('/badge.svg', { auth: 'public', target: { kind: 'none' } }, async (_req, res) => {
@@ -72,8 +70,8 @@ statusRouter.post('/subscribe', { auth: 'public', target: { kind: 'none' } }, as
     to: lower,
     subject: 'Confirm your VoltLink status subscription',
     text: `Confirm your VoltLink status subscription:
-${statusPublicUrl}/status/subscriptions/confirm/${finalToken}`,
-    html: `<p><a href="${statusPublicUrl}/status/subscriptions/confirm/${finalToken}">Confirm your subscription</a></p>`,
+${env.PUBLIC_URL}/status/subscriptions/confirm/${finalToken}`,
+    html: `<p><a href="${env.PUBLIC_URL}/status/subscriptions/confirm/${finalToken}">Confirm your subscription</a></p>`,
   }).catch(() => undefined);
   res.json({
     data: {
@@ -491,8 +489,8 @@ export async function notifyStatusSubscribers(subject: string, text: string): Pr
       sendMail({
         to: sub.email,
         subject: `VoltLink Status: ${subject}`,
-        text: `${text}\n\nUnsubscribe: ${statusPublicUrl}/subscriptions/unsubscribe/${sub.token}`,
-        html: `<p>${escapeXml(text)}</p><p><a href="${statusPublicUrl}/subscriptions/unsubscribe/${sub.token}">Unsubscribe</a></p>`,
+        text: `${text}\n\nUnsubscribe: ${env.PUBLIC_URL}/status/subscriptions/unsubscribe/${sub.token}`,
+        html: `<p>${escapeXml(text)}</p><p><a href="${env.PUBLIC_URL}/status/subscriptions/unsubscribe/${sub.token}">Unsubscribe</a></p>`,
       }),
     ),
   );

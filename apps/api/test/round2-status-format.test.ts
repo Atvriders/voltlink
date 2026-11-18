@@ -66,7 +66,7 @@ describe('badge + rss fidelity (N-STATUSMISC)', () => {
     expect(body).toContain('<channel><title>');
     // TI-30: the channel link must be the real public URL, not just any <link>.
     const publicUrl = process.env.PUBLIC_URL ?? 'http://localhost:3000';
-    expect(body).toContain(`<link>${publicUrl}</link>`);
+    expect(body).toContain(`<link>${publicUrl}/status</link>`);
     expect(body).toContain(`<link>${publicUrl}/status#incident-${inc.id}</link>`);
     expect(body).toContain(`isPermaLink="false">${inc.id}</guid>`);
     expect(body).not.toContain('<html');

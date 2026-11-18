@@ -65,7 +65,12 @@ function escapeXml(s: string): string {
 /** Renders the status RSS feed with a channel link and stable guids. */
 export function renderRssXml(
   bundle: {
-    incidents: { id: string; title: string; status: string; updates: { message: string; createdAt: string }[] }[];
+    incidents: {
+      id: string;
+      title: string;
+      status: string;
+      updates: { message: string; createdAt: string }[];
+    }[];
     updatedAt: string;
   },
   publicUrl: string,
@@ -85,7 +90,7 @@ export function renderRssXml(
     .join('');
   return (
     `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0">` +
-    `<channel><title>VoltLink Status</title><link>${escapeXml(publicUrl)}</link>` +
+    `<channel><title>VoltLink Status</title><link>${escapeXml(`${publicUrl}/status`)}</link>` +
     `<description>VoltLink platform status updates</description>${items}</channel></rss>`
   );
 }
