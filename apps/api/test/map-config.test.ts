@@ -1,6 +1,6 @@
 // F-MAPGRID: operator basemap configuration — boot parsing, /api/v1/config/client,
 // CSP origins and the /tiles static mount (404, never index.html).
-import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -12,9 +12,11 @@ import { buildApp } from '../src/app';
 
 let server: Server;
 let base = '';
+let tilesDir = '';
 
 beforeAll(async () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'voltlink-tiles-'));
+  tilesDir = dir;
   mkdirSync(path.join(dir, 'assets'), { recursive: true });
   writeFileSync(path.join(dir, 'region.pmtiles'), Buffer.from('PMTiles fixture'));
   process.env.VL_MAP_MODE = 'pmtiles';
@@ -34,6 +36,8 @@ afterAll(async () => {
   delete process.env.VL_MAP_TILES_DIR;
   delete process.env.VL_MAP_ASSETS_URL;
   delete process.env.VL_MAP_ATTRIBUTION;
+  // TI-51: the temp tile dir leaked on every run.
+  if (tilesDir) rmSync(tilesDir, { recursive: true, force: true });
 });
 
 describe('loadMapConfig', () => {

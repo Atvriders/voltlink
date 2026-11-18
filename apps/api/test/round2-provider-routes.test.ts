@@ -63,9 +63,13 @@ async function mkActor(member = true) {
     orgId = org.id;
   }
   const session = await createSession(user.id, '127.0.0.1');
-  return { user, orgId, session, agent: request.agent(base).set('Cookie', `vl_session=${session.token}`) };
+  return {
+    user,
+    orgId,
+    session,
+    agent: request.agent(base).set('Cookie', `vl_session=${session.token}`),
+  };
 }
-
 
 const csrfCache = new WeakMap<object, string>();
 async function postJson(
@@ -74,8 +78,10 @@ async function postJson(
   body: unknown,
 ): Promise<request.Response> {
   let csrf = csrfCache.get(agent);
-  let res = await agent.post(path).set('x-vl-csrf', csrf ?? '').send(body as object);
-  if (res.status === 403) console.error('CSRF PROBE', path, JSON.stringify(res.body), res.headers['set-cookie']);
+  let res = await agent
+    .post(path)
+    .set('x-vl-csrf', csrf ?? '')
+    .send(body as object);
   if (res.status === 403 && res.body?.error?.code === 'CSRF') {
     const cookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
     csrf =
@@ -84,7 +90,10 @@ async function postJson(
         .find((c) => c?.startsWith('vl_csrf='))
         ?.split('=')[1] ?? '';
     csrfCache.set(agent, csrf);
-    res = await agent.post(path).set('x-vl-csrf', csrf).send(body as object);
+    res = await agent
+      .post(path)
+      .set('x-vl-csrf', csrf)
+      .send(body as object);
   }
   return res;
 }
@@ -116,7 +125,9 @@ describe('provider routes coverage', () => {
 
   it('tessie connect requires an organization membership', async () => {
     const { agent } = await mkActor(false);
-    const res = await postJson(agent, '/api/v1/providers/tessie/connect', { token: 'long-enough-token' });
+    const res = await postJson(agent, '/api/v1/providers/tessie/connect', {
+      token: 'long-enough-token',
+    });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('FORBIDDEN');
   });
@@ -128,7 +139,9 @@ describe('provider routes coverage', () => {
     await new Promise<void>((resolve) => rejecting.once('listening', resolve));
     process.env.TESSIE_BASE_URL = `http://127.0.0.1:${(rejecting.address() as AddressInfo).port}`;
     const { agent } = await mkActor();
-    const res = await postJson(agent, '/api/v1/providers/tessie/connect', { token: 'long-enough-token' });
+    const res = await postJson(agent, '/api/v1/providers/tessie/connect', {
+      token: 'long-enough-token',
+    });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('INVALID_TOKEN');
     await new Promise<void>((resolve) => rejecting.close(() => resolve()));
@@ -137,7 +150,10 @@ describe('provider routes coverage', () => {
   it('tessie connect succeeds against the local fake and stores credentials', async () => {
     process.env.TESSIE_BASE_URL = tessieBase;
     const { agent, orgId } = await mkActor();
-    const res = await postJson(agent, '/api/v1/providers/tessie/connect', { token: 'long-enough-token', label: 'My Tessie' });
+    const res = await postJson(agent, '/api/v1/providers/tessie/connect', {
+      token: 'long-enough-token',
+      label: 'My Tessie',
+    });
     expect(res.status).toBe(201);
     const account = await prisma.providerAccount.findUniqueOrThrow({
       where: { id: res.body.data.accountId },
@@ -153,7 +169,9 @@ describe('provider routes coverage', () => {
   it('tessie connect reports UNREACHABLE when the upstream is down', async () => {
     process.env.TESSIE_BASE_URL = 'http://127.0.0.1:1';
     const { agent } = await mkActor();
-    const res = await postJson(agent, '/api/v1/providers/tessie/connect', { token: 'long-enough-token' });
+    const res = await postJson(agent, '/api/v1/providers/tessie/connect', {
+      token: 'long-enough-token',
+    });
     expect(res.status).toBe(502);
     expect(res.body.error.code).toBe('UNREACHABLE');
   });
@@ -168,7 +186,13 @@ describe('provider routes coverage', () => {
   it('demo webhook answers ok and rejects other-org vehicles', async () => {
     const { agent, user, orgId } = await mkActor();
     const pa = await prisma.providerAccount.create({
-      data: { organizationId: orgId!, provider: 'demo', label: 'Demo', status: 'connected', demo: true },
+      data: {
+        organizationId: orgId!,
+        provider: 'demo',
+        label: 'Demo',
+        status: 'connected',
+        demo: true,
+      },
     });
     const veh = await prisma.vehicle.create({
       data: {
@@ -180,7 +204,11 @@ describe('provider routes coverage', () => {
         demo: true,
       },
     });
-    const ok = await postJson(agent, '/api/v1/providers/demo/webhook', { vehicleId: veh.id, type: 'trigger', payload: { type: 'webhook' } });
+    const ok = await postJson(agent, '/api/v1/providers/demo/webhook', {
+      vehicleId: veh.id,
+      type: 'trigger',
+      payload: { type: 'webhook' },
+    });
     expect(ok.status).toBe(200);
     expect(ok.body.data.ok).toBe(true);
 
@@ -202,7 +230,13 @@ describe('provider routes coverage', () => {
       },
     });
     const pa2 = await prisma.providerAccount.create({
-      data: { organizationId: org2.id, provider: 'demo', label: 'Demo', status: 'connected', demo: true },
+      data: {
+        organizationId: org2.id,
+        provider: 'demo',
+        label: 'Demo',
+        status: 'connected',
+        demo: true,
+      },
     });
     const foreign = await prisma.vehicle.create({
       data: {
@@ -214,7 +248,11 @@ describe('provider routes coverage', () => {
         demo: true,
       },
     });
-    const denied = await postJson(agent, '/api/v1/providers/demo/webhook', { vehicleId: foreign.id, type: 'trigger', payload: {} });
+    const denied = await postJson(agent, '/api/v1/providers/demo/webhook', {
+      vehicleId: foreign.id,
+      type: 'trigger',
+      payload: {},
+    });
     expect(denied.status).toBe(404);
     void user;
   });
@@ -222,7 +260,13 @@ describe('provider routes coverage', () => {
   it('pairing link rejects non-Tesla vehicles', async () => {
     const { agent, orgId } = await mkActor();
     const pa = await prisma.providerAccount.create({
-      data: { organizationId: orgId!, provider: 'demo', label: 'Demo', status: 'connected', demo: false },
+      data: {
+        organizationId: orgId!,
+        provider: 'demo',
+        label: 'Demo',
+        status: 'connected',
+        demo: false,
+      },
     });
     const veh = await prisma.vehicle.create({
       data: {
@@ -241,7 +285,13 @@ describe('provider routes coverage', () => {
   it('imports demo vehicles into the account and enqueues telemetry', async () => {
     const { agent, orgId } = await mkActor();
     const pa = await prisma.providerAccount.create({
-      data: { organizationId: orgId!, provider: 'demo', label: 'Demo', status: 'connected', demo: false },
+      data: {
+        organizationId: orgId!,
+        provider: 'demo',
+        label: 'Demo',
+        status: 'connected',
+        demo: false,
+      },
     });
     const res = await postJson(agent, `/api/v1/providers/${pa.id}/import`, {});
     expect(res.status).toBe(200);
@@ -253,7 +303,13 @@ describe('provider routes coverage', () => {
   it('disconnects an account and removes its credentials', async () => {
     const { agent, orgId } = await mkActor();
     const pa = await prisma.providerAccount.create({
-      data: { organizationId: orgId!, provider: 'demo', label: 'Demo', status: 'connected', demo: false },
+      data: {
+        organizationId: orgId!,
+        provider: 'demo',
+        label: 'Demo',
+        status: 'connected',
+        demo: false,
+      },
     });
     const veh = await prisma.vehicle.create({
       data: {
@@ -277,12 +333,24 @@ describe('provider routes coverage', () => {
     const { agent, orgId } = await mkActor();
     const org = await prisma.organization.findUniqueOrThrow({ where: { id: orgId! } });
     const pa = await prisma.providerAccount.create({
-      data: { organizationId: orgId!, provider: 'demo', label: 'Demo', status: 'connected', demo: true },
+      data: {
+        organizationId: orgId!,
+        provider: 'demo',
+        label: 'Demo',
+        status: 'connected',
+        demo: true,
+      },
     });
-    const on = await postJson(agent, `/api/v1/providers/${pa.id}/demo-degraded`, { degraded: true });
+    const on = await postJson(agent, `/api/v1/providers/${pa.id}/demo-degraded`, {
+      degraded: true,
+    });
     expect(on.status).toBe(200);
-    expect((await prisma.organization.findUniqueOrThrow({ where: { id: org.id } })).demoDegraded).toBe(true);
-    const off = await postJson(agent, `/api/v1/providers/${pa.id}/demo-degraded`, { degraded: false });
+    expect(
+      (await prisma.organization.findUniqueOrThrow({ where: { id: org.id } })).demoDegraded,
+    ).toBe(true);
+    const off = await postJson(agent, `/api/v1/providers/${pa.id}/demo-degraded`, {
+      degraded: false,
+    });
     expect(off.status).toBe(200);
   });
 });
