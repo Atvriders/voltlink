@@ -46,6 +46,10 @@ describe('scheduler leader lock', () => {
         connectivity: 'online',
         activity: {},
         lastVehicleDataAt: new Date(),
+        // The planner plans a first-fetch IMMEDIATELY (nextAt = now) when
+        // lastActivityAt is missing; give the vehicle an idle history so the
+        // lease lands at least the idle interval in the future.
+        lastActivityAt: new Date(Date.now() - 60_000),
       },
     });
 
