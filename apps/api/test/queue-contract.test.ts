@@ -41,10 +41,10 @@ afterAll(async () => {
 }, 15_000);
 
 describe('queue contract', () => {
-  it('every QueueName has exactly one startWorker in worker.ts', () => {
+  it('every QueueName has exactly one startWorker in worker.ts (TI-57 source inventory)', () => {
     const workerSrc = readFileSync(path.join(__dirname, '..', 'src', 'worker.ts'), 'utf8');
     for (const name of Object.keys(QUEUE_DEFAULTS)) {
-      const count = (workerSrc.match(new RegExp(`startWorker\\('${name}'`, 'g')) ?? []).length;
+      const count = workerSrc.split(`startWorker('${name}'`).length - 1;
       expect(count, `${name} must have exactly one consumer`).toBe(1);
     }
   });
@@ -334,5 +334,22 @@ describe('retries and dead-lettering', () => {
         .obliterate({ force: true })
         .catch(() => undefined);
     }
+  });
+
+  // TI-57: the source grep cannot catch a consumer that never processes its
+  // jobs (mutant MW1 survived it). The end-to-end proof lives in
+  // round2-worker-consumer.test.ts (real worker main() -> processCommandJob).
+  // This test additionally verifies at RUNTIME that booting worker.ts main()
+  // registers a live consumer for every QueueName. Placed last so the booted
+  // consumers cannot race this suite's earlier enqueue assertions.
+  it('worker.ts main() registers a live consumer for every QueueName (TI-57)', async () => {
+    const runtime = await import('../src/jobs/runtime');
+    await import('../src/worker');
+    const names = Object.keys(QUEUE_DEFAULTS);
+    const deadline = Date.now() + 30_000;
+    while (runtime.activeWorkerCount() < names.length && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(runtime.activeWorkerCount()).toBeGreaterThanOrEqual(names.length);
   });
 });
