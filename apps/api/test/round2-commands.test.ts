@@ -203,7 +203,10 @@ describe('R2-09 dispatch lock reschedules instead of orphaning', () => {
     const delayed = await queue('vehicle-commands').getDelayed();
     // TI-54: the rescheduled job must be THIS command's job — the old test
     // accepted any delayed job in the queue.
-    expect(delayed.some((j) => j.id === cmd.id)).toBe(true);
+    expect(
+      delayed.some((j) => j.id?.startsWith(`vehicle-cmd-${cmd.id}-dispatch`)),
+      "the delayed job must be THIS command's dispatch job",
+    ).toBe(true);
     const after = await prisma.vehicleCommand.findUniqueOrThrow({ where: { id: cmd.id } });
     expect(after.status).toBe('queued'); // untouched, rescheduled instead
     await producerConnection().del(`voltlink:lock:vehicle-cmd:${vehicle.id}`);
