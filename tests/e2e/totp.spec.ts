@@ -1,7 +1,9 @@
 // R2-07 / TI-36: real TOTP enrolment through the UI, then a recovery-code
 // sign-in against the live MFA step.
 import { test, expect } from '@playwright/test';
-import { authenticator } from 'otplib';
+import otplib from 'otplib';
+
+const { authenticator } = otplib;
 import { register } from './helpers';
 
 test.describe('TOTP enrolment and MFA sign-in (R2-07/TI-36)', () => {
