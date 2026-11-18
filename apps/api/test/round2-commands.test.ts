@@ -37,10 +37,20 @@ describe('R2-10 automation vehicle commands', () => {
   it('an automation can dispatch a command on its own vehicle', async () => {
     const u = await mkUser(`mx-a10-${Date.now()}@example.test`);
     const org = await prisma.organization.create({
-      data: { kind: 'TEAM', name: 'Auto org', memberships: { create: { userId: u.id, role: 'OWNER' } } },
+      data: {
+        kind: 'TEAM',
+        name: 'Auto org',
+        memberships: { create: { userId: u.id, role: 'OWNER' } },
+      },
     });
     const prov = await prisma.providerAccount.create({
-      data: { organizationId: org.id, provider: 'demo', label: 'demo', status: 'connected', demo: true },
+      data: {
+        organizationId: org.id,
+        provider: 'demo',
+        label: 'demo',
+        status: 'connected',
+        demo: true,
+      },
     });
     const vehicle = await prisma.vehicle.create({
       data: {
@@ -86,10 +96,20 @@ describe('R2-08 sweeper spares accepted not_observable', () => {
   it('an accepted not_observable command is terminal and never swept', async () => {
     const u = await mkUser(`mx-a08-${Date.now()}@example.test`);
     const org = await prisma.organization.create({
-      data: { kind: 'TEAM', name: 'Sweep org', memberships: { create: { userId: u.id, role: 'OWNER' } } },
+      data: {
+        kind: 'TEAM',
+        name: 'Sweep org',
+        memberships: { create: { userId: u.id, role: 'OWNER' } },
+      },
     });
     const prov = await prisma.providerAccount.create({
-      data: { organizationId: org.id, provider: 'demo', label: 'demo', status: 'connected', demo: true },
+      data: {
+        organizationId: org.id,
+        provider: 'demo',
+        label: 'demo',
+        status: 'connected',
+        demo: true,
+      },
     });
     const vehicle = await prisma.vehicle.create({
       data: {
@@ -131,10 +151,20 @@ describe('R2-09 dispatch lock reschedules instead of orphaning', () => {
   it('a busy vehicle dispatch reschedules its job with a delay', async () => {
     const u = await mkUser(`mx-a09-${Date.now()}@example.test`);
     const org = await prisma.organization.create({
-      data: { kind: 'TEAM', name: 'Lock org', memberships: { create: { userId: u.id, role: 'OWNER' } } },
+      data: {
+        kind: 'TEAM',
+        name: 'Lock org',
+        memberships: { create: { userId: u.id, role: 'OWNER' } },
+      },
     });
     const prov = await prisma.providerAccount.create({
-      data: { organizationId: org.id, provider: 'demo', label: 'demo', status: 'connected', demo: true },
+      data: {
+        organizationId: org.id,
+        provider: 'demo',
+        label: 'demo',
+        status: 'connected',
+        demo: true,
+      },
     });
     const vehicle = await prisma.vehicle.create({
       data: {
@@ -162,10 +192,18 @@ describe('R2-09 dispatch lock reschedules instead of orphaning', () => {
       },
     });
     // Simulate an in-flight dispatch holding the per-vehicle lock.
-    await producerConnection().set(`voltlink:lock:vehicle-cmd:${vehicle.id}`, 'other-command', 'PX', 60_000, 'NX');
+    await producerConnection().set(
+      `voltlink:lock:vehicle-cmd:${vehicle.id}`,
+      'other-command',
+      'PX',
+      60_000,
+      'NX',
+    );
     await processCommandJob({ commandId: cmd.id, stage: 'dispatch' });
     const delayed = await queue('vehicle-commands').getDelayed();
-    expect(delayed.length).toBeGreaterThan(0);
+    // TI-54: the rescheduled job must be THIS command's job — the old test
+    // accepted any delayed job in the queue.
+    expect(delayed.some((j) => j.id === cmd.id)).toBe(true);
     const after = await prisma.vehicleCommand.findUniqueOrThrow({ where: { id: cmd.id } });
     expect(after.status).toBe('queued'); // untouched, rescheduled instead
     await producerConnection().del(`voltlink:lock:vehicle-cmd:${vehicle.id}`);

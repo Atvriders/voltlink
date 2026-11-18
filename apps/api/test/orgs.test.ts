@@ -269,7 +269,29 @@ describe('organizations', () => {
     expect(raised.status).toBe(200);
     const after = await prisma.organization.findUniqueOrThrow({ where: { id: org.id } });
     expect(after.telemetryRetentionDays).toBe(10);
+    // TI-41: a CONTROL org must be untouched — the old test had no other org,
+    // so a patch that wrote every org's retention passed.
+    const control = await prisma.organization.create({
+      data: {
+        kind: 'PERSONAL',
+        name: 'CTRL',
+        createdById: owner.id,
+        telemetryRetentionDays: 90,
+        memberships: { create: { userId: owner.id, role: 'OWNER' } },
+      },
+    });
+    const patchControl = await patchJson(agent, `/api/v1/orgs/${control.id}/settings/retention`, {
+      telemetryRetentionDays: 999,
+    });
+    expect(patchControl.status).toBe(200);
+    const controlAfter = await prisma.organization.findUniqueOrThrow({
+      where: { id: control.id },
+    });
+    expect(controlAfter.telemetryRetentionDays).toBe(10);
+    const untouched = await prisma.organization.findUniqueOrThrow({ where: { id: org.id } });
+    expect(untouched.telemetryRetentionDays, 'patching one org must not touch the other').toBe(10);
     await prisma.organization.delete({ where: { id: org.id } });
+    await prisma.organization.delete({ where: { id: control.id } });
     await prisma.user.delete({ where: { id: owner.id } });
     await setSetting('retention.telemetryMaxDays', '365');
   });
