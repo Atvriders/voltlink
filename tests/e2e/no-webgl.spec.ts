@@ -5,7 +5,9 @@
 import { expect, test } from '@playwright/test';
 import { enableDemo, register } from './helpers';
 
-test('showroom survives without WebGL and never blanks', async ({ page }) => {
+test('showroom degrades to the fallback marker without WebGL, with zero page errors', async ({
+  page,
+}) => {
   const email = `e2e-nogl-${Date.now()}@voltlink.test`;
   await register(page, email);
   await enableDemo(page);
@@ -20,12 +22,13 @@ test('showroom survives without WebGL and never blanks', async ({ page }) => {
   await page.goto('/showroom');
   await page.waitForURL(/showroom/);
 
-  // The showroom auto-selects the first demo vehicle; the picker click is
-  // optional (the list re-renders while telemetry refreshes, so clicking is
-  // avoided — the assertion below is about the viewer, not the picker).
   const viewer = page.locator('[data-testid="vehicle-viewer"]');
   await expect(viewer).toBeVisible({ timeout: 30000 });
-  const asset = await viewer.getAttribute('data-asset');
-  expect(['glb', 'fallback']).toContain(asset);
-  expect(errors.filter((e) => !/WebGL|three/i.test(e))).toEqual([]);
+  // R2-63: under --disable-webgl the ONLY acceptable render is the labeled
+  // procedural fallback marker — not 'glb', and not a silent blank.
+  await expect.poll(() => viewer.getAttribute('data-asset'), { timeout: 30000 }).toBe('fallback');
+  // The no-WebGL path mounts no canvas at all.
+  await expect(viewer.locator('canvas')).toHaveCount(0);
+  // Any page error fails the test (the old filter dropped /WebGL|three/i).
+  expect(errors).toEqual([]);
 });

@@ -543,7 +543,7 @@ describe('scoped API keys (NEW-01)', () => {
   });
 });
 
-describe('cross-organization isolation (Z-IDOR-DRIVES, Z-FLEETDEL, Z-AUTOXTENANT, Z-INCIDENTPUB, NEW-02, NEW-06, Z-IDEMP)', () => {
+describe('cross-organization isolation (Z-IDOR-DRIVES, Z-FLEETDEL, Z-AUTOXTENANT, Z-INCIDENTPUB, NEW-02, NEW-06)', () => {
   it('a stranger cannot see, edit, delete, share or automate another organization', async () => {
     const ownerA = await mkUser(`p2-iso-a-${Date.now()}@example.test`);
     const ownerB = await mkUser(`p2-iso-b-${Date.now()}@example.test`);
