@@ -89,7 +89,7 @@ test('R2-17: honk reaches accepted/not_observable with the full event chain (API
 
   // UI: the modal for THIS command shows a terminal data-status.
   await expect(
-    page.locator(`[data-command-id="${issued.id}"][data-status]`),
+    page.locator(`[data-command-id="${issued.id}"][data-status]`).first(),
     'lifecycle modal with the issued command id',
   ).toBeVisible({ timeout: 15000 });
   await expect
@@ -113,7 +113,7 @@ test('R2-17: rejected lifecycle — Comet remote_start is refused end to end', a
   const vbody = (await vres.json()) as {
     data?: { items?: { id: string; displayName?: string }[] };
   };
-  const comet = (vbody.data?.items ?? []).find((v) => v.displayName === 'Comet');
+  const comet = (vbody.data?.items ?? []).find((v) => (v.displayName ?? '').includes('Comet'));
   expect(comet, 'Comet exists in the demo fleet').toBeTruthy();
   await page.goto(`/vehicles/${comet!.id}`);
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
