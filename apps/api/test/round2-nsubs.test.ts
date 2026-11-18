@@ -89,11 +89,12 @@ describe('N-SUBS double opt-in', () => {
     const agent = request.agent(base);
     const csrfRes = await agent.get('/api/v1/auth/csrf');
     const csrf = csrfRes.body.data.token as string;
+    const subEmail = `subs.${Date.now()}@test.dev`;
     const res = await agent
       .post('/api/v1/status/subscribe')
       .set('Cookie', `vl_csrf=${csrf}`)
       .set('x-vl-csrf', csrf)
-      .send({ email: `subs.${Date.now()}@test.dev` });
+      .send({ email: subEmail });
     expect(res.status).toBe(200);
     expect(JSON.stringify(res.body)).not.toContain('unsubscribeUrl');
     expect(JSON.stringify(res.body)).not.toContain('token');
@@ -102,7 +103,13 @@ describe('N-SUBS double opt-in', () => {
       String((c[0] as { subject?: string } | undefined)?.subject).includes('Confirm'),
     );
     expect(sent).toBeTruthy();
-    expect(String(sent?.[0]?.text)).toContain('/status/subscriptions/confirm/');
+    // TI-30: the link must carry THIS subscription's token — a link that
+    // ends at '/confirm/' (broken token) used to pass the substring check.
+    const sub = await prisma.statusSubscription.findUniqueOrThrow({
+      where: { email: subEmail },
+    });
+    const text = String((sent?.[0] as { text?: string } | undefined)?.text ?? '');
+    expect(text).toContain(`/status/subscriptions/confirm/${sub.token}`);
   });
 
   it('private incident updates are not emailed; public ones are', async () => {
