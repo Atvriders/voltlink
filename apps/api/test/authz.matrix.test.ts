@@ -612,7 +612,9 @@ function fill(route: { path: string }, persona: Persona): string | null {
     '/admin/users': ids.userOwnerA,
     '/orgs': b ? ids.orgB : ids.orgA,
     '/providers': b ? ids.providerB : ids.providerA,
-    '/inbound': ids.webhookEndpointA,
+    // TI-50: the inbound-webhook cell must be judged against the AUTOMATION
+    // (the route's resource), never an arbitrary webhook endpoint or vehicle.
+    '/inbound': b ? ids.automationB : ids.automationA,
   };
   path = path.replaceAll(':userId', b ? ids.userOwnerB : ids.userViewerA);
   path = path.replaceAll(':queueName', 'demo');
@@ -695,12 +697,7 @@ const SKIP_EXPECT: Record<string, (persona: Persona) => number | null> = {
   // Routes whose own semantics (no membership, demo fleet) refine the policy
   // answer; asserted exactly here.
   'POST /api/v1/providers/demo/connect': (p) =>
-    p.startsWith('apiKey') ||
-    p === 'outsider' ||
-    p === 'viewerA' ||
-    p === 'driverA'
-      ? 403
-      : 200,
+    p.startsWith('apiKey') || p === 'outsider' || p === 'viewerA' || p === 'driverA' ? 403 : 200,
   'POST /api/v1/users/demo-mode': (p) => (p.startsWith('apiKey') ? 403 : null),
 };
 
