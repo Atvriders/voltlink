@@ -292,9 +292,10 @@ describe('token refresh rotation (P-TESLAREFRESH)', () => {
       where: { providerAccountId: account.id },
     });
     const { open } = await import('../src/core/keyring');
-    const stored = JSON.parse(
-      open(creds.ciphertext, `provider-credential:${account.id}`),
-    ) as { refreshToken: string; expiresAt: number };
+    const stored = JSON.parse(open(creds.ciphertext, `provider-credential:${account.id}`)) as {
+      refreshToken: string;
+      expiresAt: number;
+    };
     expect(stored.refreshToken).not.toBe('old-refresh');
     expect(stored.expiresAt).toBeGreaterThan(Date.now());
     await prisma.providerCredential.deleteMany({ where: { providerAccountId: account.id } });
@@ -305,18 +306,25 @@ describe('token refresh rotation (P-TESLAREFRESH)', () => {
 });
 
 describe('Tesla provider-level flows', () => {
-  it('parseClass maps VIN digit 8 and falls back', () => {
-    expect(parseClass('5YJ30000000000001')).toBe('fallback');
-    expect(parseClass('5YJ30003000000001')).toBe('compact_sedan');
-    expect(parseClass('5YJ3000S000000001')).toBe('sport_sedan');
-    expect(parseClass('5YJ3000X000000001')).toBe('suv');
-    expect(parseClass('5YJ3000Y000000001')).toBe('compact_crossover');
+  it('TI-60 parseClass maps VIN position 4 and falls back', () => {
+    expect(parseClass('5YJ30000000000001')).toBe('compact_sedan'); // 5YJ3 = Model 3
+    expect(parseClass('5YJS0000000000001')).toBe('sport_sedan');
+    expect(parseClass('5YJX0000000000001')).toBe('suv');
+    expect(parseClass('5YJY0000000000001')).toBe('compact_crossover');
+    expect(parseClass('7SAY0000000000001')).toBe('compact_crossover'); // 7SAY = Model Y
+    expect(parseClass('ZZZZ0000000000001')).toBe('fallback');
   });
 
   it('readiness reports per-vehicle key pairing from fleet_status', async () => {
     const org = await prisma.organization.create({ data: { name: 'Tesla Org' } });
     const pa = await prisma.providerAccount.create({
-      data: { organizationId: org.id, provider: 'tesla', label: 'Tesla', status: 'connected', demo: false },
+      data: {
+        organizationId: org.id,
+        provider: 'tesla',
+        label: 'Tesla',
+        status: 'connected',
+        demo: false,
+      },
     });
     await prisma.vehicle.create({
       data: {
@@ -341,9 +349,23 @@ describe('Tesla provider-level flows', () => {
     await prisma.providerCredential.create({
       data: {
         providerAccountId: pa.id,
-        keyVersion: seal(JSON.stringify({ accessToken: jwt, refreshToken: 'rt', expiresAt: Date.now() + 3600_000 }), `provider-credential:${pa.id}`).keyVersion,
+        keyVersion: seal(
+          JSON.stringify({
+            accessToken: jwt,
+            refreshToken: 'rt',
+            expiresAt: Date.now() + 3600_000,
+          }),
+          `provider-credential:${pa.id}`,
+        ).keyVersion,
         algorithm: 'v1',
-        ciphertext: seal(JSON.stringify({ accessToken: jwt, refreshToken: 'rt', expiresAt: Date.now() + 3600_000 }), `provider-credential:${pa.id}`).ciphertext,
+        ciphertext: seal(
+          JSON.stringify({
+            accessToken: jwt,
+            refreshToken: 'rt',
+            expiresAt: Date.now() + 3600_000,
+          }),
+          `provider-credential:${pa.id}`,
+        ).ciphertext,
       },
     });
     const p = new TeslaProviderImpl();
@@ -358,7 +380,13 @@ describe('Tesla provider-level flows', () => {
   it('fetchState online maps vehicle_data and reports live', async () => {
     const org = await prisma.organization.create({ data: { name: 'Tesla Org 2' } });
     const pa = await prisma.providerAccount.create({
-      data: { organizationId: org.id, provider: 'tesla', label: 'Tesla', status: 'connected', demo: false },
+      data: {
+        organizationId: org.id,
+        provider: 'tesla',
+        label: 'Tesla',
+        status: 'connected',
+        demo: false,
+      },
     });
     await prisma.vehicle.create({
       data: {
@@ -376,15 +404,34 @@ describe('Tesla provider-level flows', () => {
     await prisma.providerCredential.create({
       data: {
         providerAccountId: pa.id,
-        keyVersion: seal(JSON.stringify({ accessToken: jwt, refreshToken: 'rt', expiresAt: Date.now() + 3600_000 }), `provider-credential:${pa.id}`).keyVersion,
+        keyVersion: seal(
+          JSON.stringify({
+            accessToken: jwt,
+            refreshToken: 'rt',
+            expiresAt: Date.now() + 3600_000,
+          }),
+          `provider-credential:${pa.id}`,
+        ).keyVersion,
         algorithm: 'v1',
-        ciphertext: seal(JSON.stringify({ accessToken: jwt, refreshToken: 'rt', expiresAt: Date.now() + 3600_000 }), `provider-credential:${pa.id}`).ciphertext,
+        ciphertext: seal(
+          JSON.stringify({
+            accessToken: jwt,
+            refreshToken: 'rt',
+            expiresAt: Date.now() + 3600_000,
+          }),
+          `provider-credential:${pa.id}`,
+        ).ciphertext,
       },
     });
     fake.setConnectivity('5YJ3000000NEXUS01', 'online');
     const p = new TeslaProviderImpl();
     const out = await p.fetchState(
-      { accountId: pa.id, userId: 'u1', credentials: {}, meta: { provider: 'tesla', label: 'T', demo: false, scopes: [] } },
+      {
+        accountId: pa.id,
+        userId: 'u1',
+        credentials: {},
+        meta: { provider: 'tesla', label: 'T', demo: false, scopes: [] },
+      },
       '5YJ3000000NEXUS01',
     );
     expect(out.live).toBe(true);
@@ -394,22 +441,47 @@ describe('Tesla provider-level flows', () => {
   it('fetchState asleep falls back to cached data or throws vehicle_asleep', async () => {
     const org = await prisma.organization.create({ data: { name: 'Tesla Org 3' } });
     const pa = await prisma.providerAccount.create({
-      data: { organizationId: org.id, provider: 'tesla', label: 'Tesla', status: 'connected', demo: false },
+      data: {
+        organizationId: org.id,
+        provider: 'tesla',
+        label: 'Tesla',
+        status: 'connected',
+        demo: false,
+      },
     });
     const jwt = `eyJhbGciOiJub25lIn0.${Buffer.from(JSON.stringify({ scp: [] })).toString('base64url')}.sig`;
     await prisma.providerCredential.create({
       data: {
         providerAccountId: pa.id,
-        keyVersion: seal(JSON.stringify({ accessToken: jwt, refreshToken: 'rt', expiresAt: Date.now() + 3600_000 }), `provider-credential:${pa.id}`).keyVersion,
+        keyVersion: seal(
+          JSON.stringify({
+            accessToken: jwt,
+            refreshToken: 'rt',
+            expiresAt: Date.now() + 3600_000,
+          }),
+          `provider-credential:${pa.id}`,
+        ).keyVersion,
         algorithm: 'v1',
-        ciphertext: seal(JSON.stringify({ accessToken: jwt, refreshToken: 'rt', expiresAt: Date.now() + 3600_000 }), `provider-credential:${pa.id}`).ciphertext,
+        ciphertext: seal(
+          JSON.stringify({
+            accessToken: jwt,
+            refreshToken: 'rt',
+            expiresAt: Date.now() + 3600_000,
+          }),
+          `provider-credential:${pa.id}`,
+        ).ciphertext,
       },
     });
     fake.setConnectivity('5YJ3000000NEXUS01', 'asleep');
     const p = new TeslaProviderImpl();
     await expect(
       p.fetchState(
-        { accountId: pa.id, userId: 'u1', credentials: {}, meta: { provider: 'tesla', label: 'T', demo: false, scopes: [] } },
+        {
+          accountId: pa.id,
+          userId: 'u1',
+          credentials: {},
+          meta: { provider: 'tesla', label: 'T', demo: false, scopes: [] },
+        },
         '5YJ3000000NEXUS01',
       ),
     ).rejects.toThrow('vehicle_asleep');
@@ -418,24 +490,54 @@ describe('Tesla provider-level flows', () => {
   it('sendCommand wake goes to the fleet host and health reports reachability', async () => {
     const org = await prisma.organization.create({ data: { name: 'Tesla Org 4' } });
     const pa = await prisma.providerAccount.create({
-      data: { organizationId: org.id, provider: 'tesla', label: 'Tesla', status: 'connected', demo: false },
+      data: {
+        organizationId: org.id,
+        provider: 'tesla',
+        label: 'Tesla',
+        status: 'connected',
+        demo: false,
+      },
     });
     const jwt = `eyJhbGciOiJub25lIn0.${Buffer.from(JSON.stringify({ scp: ['vehicle_cmds'] })).toString('base64url')}.sig`;
     await prisma.providerCredential.create({
       data: {
         providerAccountId: pa.id,
-        keyVersion: seal(JSON.stringify({ accessToken: jwt, refreshToken: 'rt', expiresAt: Date.now() + 3600_000 }), `provider-credential:${pa.id}`).keyVersion,
+        keyVersion: seal(
+          JSON.stringify({
+            accessToken: jwt,
+            refreshToken: 'rt',
+            expiresAt: Date.now() + 3600_000,
+          }),
+          `provider-credential:${pa.id}`,
+        ).keyVersion,
         algorithm: 'v1',
-        ciphertext: seal(JSON.stringify({ accessToken: jwt, refreshToken: 'rt', expiresAt: Date.now() + 3600_000 }), `provider-credential:${pa.id}`).ciphertext,
+        ciphertext: seal(
+          JSON.stringify({
+            accessToken: jwt,
+            refreshToken: 'rt',
+            expiresAt: Date.now() + 3600_000,
+          }),
+          `provider-credential:${pa.id}`,
+        ).ciphertext,
       },
     });
     fake.pairKey('5YJ3000000NEXUS01');
     fake.setConnectivity('5YJ3000000NEXUS01', 'online');
-    const ctx = { accountId: pa.id, userId: 'u1', credentials: {}, meta: { provider: 'tesla', label: 'T', demo: false, scopes: [] } };
+    const ctx = {
+      accountId: pa.id,
+      userId: 'u1',
+      credentials: {},
+      meta: { provider: 'tesla', label: 'T', demo: false, scopes: [] },
+    };
     const p = new TeslaProviderImpl();
     const wake = await p.sendCommand(ctx, '5YJ3000000NEXUS01', 'wake', {});
     expect(wake.kind).toBe('accepted');
-    const unsupported = await p.sendCommand(ctx, '5YJ3000000NEXUS01', 'definitely_not_mapped' as never, {});
+    const unsupported = await p.sendCommand(
+      ctx,
+      '5YJ3000000NEXUS01',
+      'definitely_not_mapped' as never,
+      {},
+    );
     expect(unsupported.kind).toBe('unsupported');
     const h = await p.health(ctx);
     expect(h.ok).toBe(true);
