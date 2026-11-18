@@ -119,7 +119,7 @@ test('R2-17: rejected lifecycle — Bison open_trunk is refused end to end', asy
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
   const vehicleId = bison!.id;
 
-  await page.getByRole('button', { name: /Open trunk/ }).click();
+  await page.getByRole('button', { name: 'Open trunk', exact: true }).click();
 
   const issued = await newestCommand(page, vehicleId);
   const final = await waitTerminal(page, issued.id);
@@ -151,7 +151,7 @@ test('R2-17: timed_out lifecycle — Bison window_vent times out end to end', as
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
   const vehicleId = bison!.id;
 
-  await page.getByRole('button', { name: /Vent windows/ }).click();
+  await page.getByRole('button', { name: 'Vent windows', exact: true }).click();
 
   const issued = await newestCommand(page, vehicleId);
   const final = await waitTerminal(page, issued.id);
