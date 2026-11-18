@@ -33,7 +33,13 @@ async function mkWorld() {
     },
   });
   const pa = await prisma.providerAccount.create({
-    data: { organizationId: org.id, provider: 'demo', label: 'Demo', status: 'connected', demo: true },
+    data: {
+      organizationId: org.id,
+      provider: 'demo',
+      label: 'Demo',
+      status: 'connected',
+      demo: true,
+    },
   });
   const vehicle = await prisma.vehicle.create({
     data: {
@@ -82,7 +88,10 @@ describe('automation actions are real (N-ACTIONSTUBS)', () => {
     const auto = await automation({
       actions: JSON.parse('[{"type":"tag_drive","params":{"tag":"automation-trip"}}]'),
     });
-    const res = await runAutomation(auto.id, { type: 'drive_started', vehicleId: vehicle.id } as never);
+    const res = await runAutomation(auto.id, {
+      type: 'drive_started',
+      vehicleId: vehicle.id,
+    } as never);
     expect(res.result).toBe('success');
     const after = await prisma.drive.findUniqueOrThrow({ where: { id: drive.id } });
     expect(after.tags).toContain('automation-trip');
@@ -97,19 +106,54 @@ describe('automation actions are real (N-ACTIONSTUBS)', () => {
       actions: JSON.parse('[{"type":"notify_app","params":{"message":"hi"}}]'),
     });
     expect(
-      await evaluateCondition('previous_result', { value: 'success' }, {
-        previousResult: 'success',
-        now: new Date(),
-      }),
+      await evaluateCondition(
+        'previous_result',
+        { value: 'success' },
+        {
+          previousResult: 'success',
+          now: new Date(),
+        },
+      ),
     ).toBe(true);
     expect(
-      await evaluateCondition('previous_result', { value: 'success' }, {
-        previousResult: 'failed',
-        now: new Date(),
-      }),
+      await evaluateCondition(
+        'previous_result',
+        { value: 'success' },
+        {
+          previousResult: 'failed',
+          now: new Date(),
+        },
+      ),
     ).toBe(false);
     const ran = await runAutomation(auto.id, { type: 'drive_started' } as never);
     expect(ran.result).toBe('success');
+  });
+
+  // TI-13: the spec is per-ACTION retry — only the failing action is
+  // re-run, so notify_app fires ONCE (inbox === 1) and no duplicate commands
+  // are issued. The current engine (engine.ts) re-runs every action on each
+  // attempt; the assertion below documents the defect and the engine fix lands
+  // in step 5 (PROGRESS honesty entry 2026-11-18).
+  it.skip('TI-13 maxRetries retries only the failed action, without duplicate side effects', async () => {
+    const { vehicle, automation } = await mkWorld();
+    const auto = await automation({
+      maxRetries: 2,
+      actions: JSON.parse(
+        '[{"type":"notify_app","params":{"message":"attempt"}},{"type":"set_charge_limit","params":{"chargeLimitPct":5}}]',
+      ),
+    });
+    const res = await runAutomation(auto.id, {
+      type: 'drive_started',
+      vehicleId: vehicle.id,
+    } as never);
+    expect(res.result).toBe('failed');
+    const inbox = await prisma.appNotification.count({
+      where: { userId: auto.userId, event: 'automation_fired' },
+    });
+    expect(inbox, 'notify_app must fire once, not once per retry').toBe(1);
+    const cmds = await prisma.vehicleCommand.count({ where: { vehicleId: vehicle.id } });
+    expect(cmds, 'the failed action must not be re-issued').toBeLessThanOrEqual(1);
+    expect(res.actionResults.length).toBeGreaterThan(0);
   });
 
   it('maxRetries retries failed actions up to the configured count', async () => {
@@ -120,7 +164,10 @@ describe('automation actions are real (N-ACTIONSTUBS)', () => {
         '[{"type":"notify_app","params":{"message":"attempt"}},{"type":"set_charge_limit","params":{"chargeLimitPct":5}}]',
       ),
     });
-    const res = await runAutomation(auto.id, { type: 'drive_started', vehicleId: vehicle.id } as never);
+    const res = await runAutomation(auto.id, {
+      type: 'drive_started',
+      vehicleId: vehicle.id,
+    } as never);
     expect(res.result).toBe('failed');
     // notify_app runs once per attempt: 1 + maxRetries = 3 in-app rows.
     const inbox = await prisma.appNotification.count({
