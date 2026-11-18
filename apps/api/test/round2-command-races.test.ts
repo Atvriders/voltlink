@@ -132,8 +132,12 @@ describe('R2-57 idempotency race', () => {
 });
 
 describe('R2-56 confirm timeout', () => {
-  it('accepted commands past the window are swept to timed_out', async () => {
+  it('TI-35 accepted OBSERVABLE commands past the window are swept to timed_out', async () => {
     const w = await world();
+    // TI-35: the old test drove a not_observable honk_horn through the confirm
+    // stage — a state not_observable commands never reach (they complete at
+    // accepted), so it locked in the R2-08 restart defect. An OBSERVABLE
+    // command with a never-matching snapshot is the real confirm path.
     const command = await prisma.vehicleCommand.create({
       data: {
         vehicleId: w.vehicle.id,
@@ -142,12 +146,23 @@ describe('R2-56 confirm timeout', () => {
         organizationId: w.org.id,
         userId: w.owner.id,
         actorKind: 'session',
-        type: 'honk_horn',
+        type: 'unlock',
         params: JSON.parse(JSON.stringify({})),
         status: 'accepted',
         risk: 'low',
         submittedAt: new Date(Date.now() - 120_000),
       },
+    });
+    // Snapshot says locked: the unlock predicate (locked === false) can never
+    // match, so the only way out of accepted is the timeout.
+    await prisma.vehicleSnapshot.upsert({
+      where: { vehicleId: w.vehicle.id },
+      create: {
+        vehicleId: w.vehicle.id,
+        state: { locked: true, status: 'online' },
+        fetchedAt: new Date(),
+      },
+      update: { state: { locked: true, status: 'online' }, fetchedAt: new Date() },
     });
 
     await processCommandJob({ commandId: command.id, stage: 'confirm', n: 1 });
