@@ -243,7 +243,7 @@ export default function LiveVehiclePage() {
             {commands && commands.length > 0 ? (
               <ul className="divide-y divide-line">
                 {commands.slice(0, 6).map((c) => (
-                  <li key={c.id}>
+                  <li key={c.id} data-command-id={c.id} data-status={c.status}>
                     <button
                       className="flex w-full items-center gap-3 py-2 text-left text-sm hover:text-accent"
                       onClick={() => setActiveCommandId(c.id)}
@@ -497,9 +497,10 @@ function ParamModal({
   const defaults: Record<string, string> = {};
   for (const c of controls) {
     if (c.kind === 'range') {
-      const current = c.param === 'speedLimitKmh'
-        ? (state.speedLimitMode as { limitKmh?: number } | undefined)?.limitKmh
-        : (state as Record<string, unknown>)[c.param];
+      const current =
+        c.param === 'speedLimitKmh'
+          ? (state.speedLimitMode as { limitKmh?: number } | undefined)?.limitKmh
+          : (state as Record<string, unknown>)[c.param];
       defaults[c.param] =
         typeof current === 'number' ? String(current) : String((c.min + c.max) / 2);
     } else if (c.kind === 'toggle') {
@@ -629,7 +630,8 @@ function CommandModal({
     const inEvents = (statuses as readonly string[]).filter((st) =>
       command.events?.some((e) => e.event === st),
     );
-    if (inEvents.length > 0) return statuses.indexOf(inEvents[inEvents.length - 1] as (typeof statuses)[number]);
+    if (inEvents.length > 0)
+      return statuses.indexOf(inEvents[inEvents.length - 1] as (typeof statuses)[number]);
     const idx = statuses.indexOf(command.status as (typeof statuses)[number]);
     return idx === -1 ? 0 : idx;
   })();
@@ -664,7 +666,7 @@ function CommandModal({
         )
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-4" data-command-id={command.id} data-status={command.status}>
         <ol className="space-y-2">
           {steps.map((label, i) => {
             const done = lastStage >= i;
@@ -848,7 +850,6 @@ function Row({ k, v, span }: { k: string; v: string; span?: boolean }) {
   );
 }
 
-
 // F-NOUI: per-vehicle sharing — invite by email, revoke grants.
 function SharingCard({ vehicleId }: { vehicleId: string }) {
   const qc = useQueryClient();
@@ -870,7 +871,8 @@ function SharingCard({ vehicleId }: { vehicleId: string }) {
     },
   });
   const revoke = useMutation({
-    mutationFn: (id: string) => api(`/api/v1/vehicles/${vehicleId}/shares/${id}`, { method: 'DELETE' }),
+    mutationFn: (id: string) =>
+      api(`/api/v1/vehicles/${vehicleId}/shares/${id}`, { method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['shares', vehicleId] }),
   });
   return (
