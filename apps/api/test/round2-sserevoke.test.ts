@@ -132,6 +132,13 @@ describe('A-SSEREVOKE immediate stream termination', () => {
       await new Promise((r) => setTimeout(r, 50));
     }
     expect(saw).toBe(true);
+    // TI-29: receiving the event is not enough — the stream must actually END.
+    // (The old suite never checked this; a hub that keeps the socket open
+    // passes it.)
+    for (let i = 0; i < 40 && !stream.ended(); i++) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(stream.ended(), 'revoked stream must close').toBe(true);
 
     stream.close();
     await prisma.organization.delete({ where: { id: org.id } });
