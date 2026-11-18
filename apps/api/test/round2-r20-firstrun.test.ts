@@ -113,6 +113,18 @@ describe('R2-20 first-run setup over HTTP on an unseeded database', () => {
     expect(membership.role).toBe('OWNER');
   });
 
+  it('TI-53: after bootstrap the setup token no longer registers anyone', async () => {
+    const res = await csrfAndPost('/api/v1/auth/register', {
+      email: `r20-post-${uniq()}@test.dev`,
+      name: 'Second Admin',
+      password: 'r20-password-123',
+      setupToken: process.env.VL_SETUP_TOKEN,
+    });
+    const bodyText = await res.text();
+    expect(res.status, bodyText).toBe(403);
+    expect(bodyText).not.toContain('SETUP_REQUIRED');
+  });
+
   it('invite mode: a valid invitation token is required over HTTP', async () => {
     await setRegistrationMode('invite');
     const noToken = await csrfAndPost('/api/v1/auth/register', {
