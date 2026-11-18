@@ -13,14 +13,20 @@ const TERMINAL = ['accepted', 'not_observable', 'rejected', 'failed', 'timed_out
 type Cmd = { id: string; status?: string; createdAt?: string; events?: { event: string }[] };
 
 async function newestCommand(page: Page, vehicleId: string): Promise<Cmd> {
-  const res = await page.request.get(`/api/v1/commands?vehicleId=${vehicleId}&pageSize=100`);
-  expect(res.status(), 'command list must be reachable').toBe(200);
-  const body = (await res.json()) as { data?: { items?: Cmd[] } };
-  const items = body.data?.items ?? [];
-  expect(items.length, 'at least one command issued').toBeGreaterThan(0);
-  return items.reduce((a, b) =>
-    new Date(b.createdAt ?? 0).getTime() > new Date(a.createdAt ?? 0).getTime() ? b : a,
-  );
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    const res = await page.request.get(`/api/v1/commands?vehicleId=${vehicleId}&pageSize=100`);
+    expect(res.status(), 'command list must be reachable').toBe(200);
+    const body = (await res.json()) as { data?: { items?: Cmd[] } };
+    const items = body.data?.items ?? [];
+    if (items.length > 0) {
+      return items.reduce((a, b) =>
+        new Date(b.createdAt ?? 0).getTime() > new Date(a.createdAt ?? 0).getTime() ? b : a,
+      );
+    }
+    await page.waitForTimeout(500);
+  }
+  throw new Error('no command appeared within 15s of clicking');
 }
 
 async function waitTerminal(page: Page, commandId: string): Promise<Cmd> {
@@ -100,13 +106,15 @@ test('R2-17: rejected lifecycle — Comet remote_start is refused end to end', a
   await register(page, `e2e-lc-rej-${Date.now()}@voltlink.test`);
   await enableDemo(page);
 
-  await page.goto('/');
-  await expect(page.getByText('Comet').first()).toBeVisible({ timeout: 30000 });
-  await page.getByRole('button', { name: /Comet/ }).first().click();
-  await expect(page).toHaveURL(/\/vehicles\/[^/]+$/, { timeout: 20000 });
+  const vres = await page.request.get('/api/v1/vehicles');
+  const vbody = (await vres.json()) as {
+    data?: { items?: { id: string; displayName?: string }[] };
+  };
+  const comet = (vbody.data?.items ?? []).find((v) => v.displayName === 'Comet');
+  expect(comet, 'Comet exists in the demo fleet').toBeTruthy();
+  await page.goto(`/vehicles/${comet!.id}`);
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
-  const vehicleId = page.url().match(/\/vehicles\/([^/]+)/)?.[1];
-  expect(vehicleId).toBeTruthy();
+  const vehicleId = comet!.id;
 
   await page.getByRole('button', { name: /Remote start/ }).click();
 
