@@ -35,10 +35,13 @@ async function waitTerminal(page: Page, commandId: string): Promise<Cmd> {
     const res = await page.request.get(`/api/v1/commands/${commandId}`);
     expect(res.status(), 'command detail must be reachable').toBe(200);
     const body = (await res.json()) as {
-      data?: { command?: Cmd } & Cmd;
+      data?: { command?: Cmd; events?: { event: string }[] } & Cmd;
     };
-    const cmd = (body.data?.command ?? body.data ?? {}) as Cmd;
-    if (cmd.status && TERMINAL.includes(cmd.status)) return cmd;
+    const detail = (body.data ?? {}) as { command?: Cmd; events?: { event: string }[] };
+    const cmd = (detail.command ?? detail) as Cmd;
+    if (cmd.status && TERMINAL.includes(cmd.status)) {
+      return { ...cmd, events: detail.events ?? cmd.events };
+    }
     await page.waitForTimeout(500);
   }
   throw new Error('command did not reach a terminal state within 90s');
