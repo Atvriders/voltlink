@@ -1,5 +1,11 @@
 // R6: F-LIFECYCLEUI — the lifecycle modal must read {command, events}, name
 // terminal states, and offer Cancel for queued/submitted commands.
+// TI-55: pin the runner time zone so a fallback to the LOCAL zone (instead of
+// the user's) is always detectable, on every machine.
+const pinnedTz = vi.hoisted(() => {
+  process.env.TZ = 'UTC';
+});
+void pinnedTz;
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -98,7 +104,11 @@ beforeEach(() => {
     if (path.startsWith('/api/v1/commands/')) {
       // The REAL API shape: { command, events }.
       return {
-        command: { ...baseCommand, status: currentStatus, ...(errorMsg ? { errorMessage: errorMsg } : {}) },
+        command: {
+          ...baseCommand,
+          status: currentStatus,
+          ...(errorMsg ? { errorMessage: errorMsg } : {}),
+        },
         events: [
           { id: 'e1', event: 'queued', detail: 'in queue', createdAt: new Date().toISOString() },
         ],
@@ -166,7 +176,12 @@ describe('lifecycle modal (F-LIFECYCLEUI)', () => {
         return {
           command: { ...baseCommand, status: 'failed' },
           events: [
-            { id: 'e1', event: 'queued', detail: 'in queue', createdAt: '2024-01-01T05:00:00.000Z' },
+            {
+              id: 'e1',
+              event: 'queued',
+              detail: 'in queue',
+              createdAt: '2024-01-01T05:00:00.000Z',
+            },
           ],
         };
       return {};
