@@ -7,7 +7,6 @@ import { initRedis } from '../src/core/redis';
 import { randomId, hashPassword } from '../src/core/crypto';
 import { ingestVehicleState, resetIngestTrackers } from '../src/telemetry/ingest';
 import * as engine from '../src/automations/engine';
-import { vi } from 'vitest';
 import type { VehicleState } from '@voltlink/shared';
 
 beforeAll(async () => {
