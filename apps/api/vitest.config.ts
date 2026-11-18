@@ -7,22 +7,19 @@ import { defineConfig } from 'vitest/config';
 // defaults from DATABASE_URL via test/lib/admin-url.ts).
 config({ path: resolve(__dirname, '.env') });
 
-// API tests are integration-style: each makeTestApp() runs `prisma migrate
-// deploy` against a fresh SQLite file and argon2-hashes passwords. On slower
-// CI runners (e.g. the self-hosted Gitea act_runner) the default 5s timeout
-// is too tight — a single test that does several awaited API round-trips can
-// legitimately take longer. Raise the per-test and per-hook ceilings.
+// API tests are integration-style: each file gets its own cloned Postgres
+// database (test/setup/worker-db.ts) migrated from a shared template
+// (test/setup/global-db.ts, guide 08 §6). The integration recipe exports
+// TEST_DATABASE_ADMIN_URL (role with CREATEDB) and REDIS_URL; see
+// verification/recipe2 for the verifiers' run procedure.
 //
-// Serialize file-level execution (maxWorkers:1 + fileParallelism:false) so
-// the better-sqlite3 / Prisma native-handle teardown races don't pile up
-// across parallel workers — that race produced a SIGABRT (exit 134) on
-// Node 22 in CI run 347 AFTER all assertions had already passed.
-// teardownTimeout gives each file's afterAll() room to $disconnect() Prisma
-// cleanly. (vitest 4 removed poolOptions; `forks + singleFork:true` is now
-// expressed as `pool:'forks' + maxWorkers:1`. Default isolation is kept
-// deliberately — do NOT set isolate:false.)
-// Per-worker databases (test/setup/worker-db.ts) make parallel files safe,
-// so the serial single-fork settings from the SQLite era are gone (guide 08 §5).
+// Per-worker databases make parallel files safe: pool 'forks' with
+// maxWorkers from the runner keeps fork teardown races (native-handle
+// release after assertions) out of the equation, and teardownTimeout gives
+// each file's afterAll() room to $disconnect() Prisma cleanly.
+// (vitest 4 removed poolOptions; `forks + singleFork:true` is now expressed
+// as `pool:'forks' + maxWorkers:1`.) Default isolation is kept deliberately
+// — do NOT set isolate:false.
 export default defineConfig({
   test: {
     pool: 'forks',

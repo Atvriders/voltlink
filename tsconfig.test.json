@@ -11,6 +11,9 @@
     "apps/api/test/**/*.ts",
     "scripts/**/*.ts",
     "scripts/**/*.mts",
-    "scripts/**/*.cts"
+    "scripts/**/*.cts",
+    "playwright.config.ts",
+    "vitest.config.mts",
+    "apps/api/vitest.config.ts"
   ]
 }
