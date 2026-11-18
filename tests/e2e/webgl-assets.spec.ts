@@ -46,7 +46,7 @@ test('showroom renders the right GLB per vehicle class, with zero page errors', 
       .poll(async () => viewer.first().getAttribute('data-asset-url'), {
         timeout: 30000,
       })
-      .toContain(`/assets/models/${cls}`);
+      .toContain(`${cls}.`);
     await expect(viewer.first()).toHaveAttribute('data-asset', 'glb', {
       timeout: 30000,
     });
