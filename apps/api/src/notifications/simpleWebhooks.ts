@@ -57,7 +57,9 @@ export async function pushSimpleWebhook(
   if (!url) return;
 
   if (channel === 'ntfy') {
-    await safeFetch(getOutboundPolicy(), url, {
+    // N-DROPPED: a non-2xx answer means the channel did not accept the
+    // delivery — throw so the outbox retries and never marks the row sent.
+    const res = await safeFetch(getOutboundPolicy(), url, {
       method: 'POST',
       body: msg.body,
       headers: {
@@ -66,6 +68,7 @@ export async function pushSimpleWebhook(
         Tags: 'voltlink',
       },
     });
+    if (res.status < 200 || res.status >= 300) throw new Error(`ntfy ${res.status}`);
     return;
   }
   if (channel === 'gotify') {
