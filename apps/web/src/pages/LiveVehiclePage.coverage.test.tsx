@@ -158,7 +158,10 @@ const postedCommand = {
   id: 'cmd-posted',
   vehicleId: 'v1',
   type: 'honk_horn',
-  status: 'confirmed',
+  // TI-26: a honk is never observable — the real outcome is accepted with
+  // confirmation 'not_observable', not 'confirmed'.
+  status: 'accepted',
+  confirmation: 'not_observable',
   createdAt: '2024-01-01T00:00:00.000Z',
   params: {},
   idempotencyKey: 'key-posted',
@@ -221,7 +224,15 @@ beforeEach(() => {
       if (commandPostError) throw commandPostError;
       const body = init.body as { type?: string } | undefined;
       const type = body?.type ?? 'honk_horn';
-      return { ...postedCommand, id: `cmd-${type}`, type, status: 'confirmed' };
+      return type === 'honk_horn'
+        ? { ...postedCommand, id: `cmd-${type}`, type }
+        : {
+            ...postedCommand,
+            id: `cmd-${type}`,
+            type,
+            status: 'confirmed',
+            confirmation: 'state_match',
+          };
     }
 
     if (path.startsWith('/api/v1/commands/')) {
@@ -229,7 +240,16 @@ beforeEach(() => {
       const known = commandItems.find((c) => c.id === id);
       const type = known?.type ?? (id.startsWith('cmd-') ? id.slice(4) : 'honk_horn');
       // Real API shape: { command, events }.
-      return { command: { ...postedCommand, id, type, status: 'confirmed' }, events: auditEvents };
+      return {
+        command: {
+          ...postedCommand,
+          id,
+          type,
+          status: type === 'honk_horn' ? 'accepted' : 'confirmed',
+          confirmation: type === 'honk_horn' ? 'not_observable' : 'state_match',
+        },
+        events: auditEvents,
+      };
     }
 
     if (path === `/api/v1/vehicles/${vehicle.id}/refresh`) return { ok: true };
@@ -289,7 +309,10 @@ describe('LiveVehiclePage', () => {
       ),
     );
 
-    expect(await screen.findByText(/Vehicle state confirms the command completed/)).toBeTruthy();
+    // TI-26: the real honk outcome is 'Provider accepted' + the
+    // not-observable note, never 'Vehicle state confirms…'.
+    expect(await screen.findByText(/Provider accepted/)).toBeTruthy();
+    expect(await screen.findByText(/cannot confirm/)).toBeTruthy();
   });
 
   it('issues a lock command and shows confirmation', async () => {

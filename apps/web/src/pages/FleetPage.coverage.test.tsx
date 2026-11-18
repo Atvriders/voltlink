@@ -273,9 +273,7 @@ describe('FleetPage', () => {
     expect(await screen.findByText('Aurora')).toBeTruthy();
     expect(screen.getByText('Borealis')).toBeTruthy();
     expect(screen.getByText('Tesla Model 3')).toBeTruthy();
-    expect(
-      screen.getByText(/2 vehicles · 1 charging · 1 offline · 1 need attention/),
-    ).toBeTruthy();
+    expect(screen.getByText(/2 vehicles · 1 charging · 1 offline · 1 need attention/)).toBeTruthy();
     expect(screen.getByText('72%')).toBeTruthy();
     expect(screen.getByText('pickup truck')).toBeTruthy();
     expect(screen.getByText('demo')).toBeTruthy();
@@ -390,9 +388,7 @@ describe('FleetPage', () => {
       );
     });
 
-    const assignmentEl = screen.getAllByText(
-      (_, el) => el?.textContent === 'Aurora → Sam',
-    )[0]!;
+    const assignmentEl = screen.getAllByText((_, el) => el?.textContent === 'Aurora → Sam')[0]!;
     const assignmentRow = assignmentEl.closest('li') ?? assignmentEl.parentElement!;
     await user.click(within(assignmentRow as HTMLElement).getAllByRole('button')[0]!);
 
@@ -493,6 +489,10 @@ describe('FleetPage', () => {
     fireEvent.change(combos[0]!, { target: { value: 'v1' } });
 
     await user.type(screen.getByRole('textbox'), 'Oil change');
+    // TI-26: the route rejects a POST without dueAt/dueOdometerKm — fill the
+    // due date so the recorded request is one the live API accepts.
+    const dueInput = screen.getByLabelText('Due date');
+    fireEvent.change(dueInput, { target: { value: '2026-12-01' } });
 
     await user.click(submit!);
 
@@ -501,7 +501,12 @@ describe('FleetPage', () => {
         '/api/v1/fleet/maintenance',
         expect.objectContaining({
           method: 'POST',
-          body: expect.objectContaining({ vehicleId: 'v1', title: 'Oil change' }),
+          body: expect.objectContaining({
+            vehicleId: 'v1',
+            title: 'Oil change',
+            kind: 'service',
+            dueAt: expect.stringMatching(/^2026-12-01/),
+          }),
         }),
       );
     });
