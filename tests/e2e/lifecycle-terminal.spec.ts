@@ -111,9 +111,9 @@ test('R2-17: rejected lifecycle — Comet remote_start is refused end to end', a
 
   const vres = await page.request.get('/api/v1/vehicles');
   const vbody = (await vres.json()) as {
-    data?: { items?: { id: string; displayName?: string }[] };
+    data?: { id: string; displayName?: string }[];
   };
-  const comet = (vbody.data?.items ?? []).find((v) => (v.displayName ?? '').includes('Comet'));
+  const comet = (vbody.data ?? []).find((v) => (v.displayName ?? '').includes('Comet'));
   expect(comet, 'Comet exists in the demo fleet').toBeTruthy();
   await page.goto(`/vehicles/${comet!.id}`);
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
