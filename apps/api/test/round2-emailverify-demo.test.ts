@@ -13,7 +13,6 @@ import { prisma } from '../src/core/db';
 import { initRedis } from '../src/core/redis';
 import { randomId } from '../src/core/crypto';
 import { createSession } from '../src/auth/service';
-import { seedDemoWorld } from '../src/telemetry/seed';
 
 let server: Server;
 let base: string;
@@ -132,9 +131,27 @@ describe('Z-DEMOSCOPE demo incidents stay private', () => {
         capabilities: JSON.parse(JSON.stringify(['honk_horn', 'wake'])),
       },
     });
-    // The seed only writes incidents when the table is empty; make it run.
+    // TI-58: create the two demo incidents DIRECTLY (the test must not
+    // depend on the seed's side effects into the real incident table).
     await prisma.incident.deleteMany({});
-    await seedDemoWorld(org.id, owner.id, [{ id: vehicle.id, providerVehicleId: 'demo-aurora' }]);
+    await prisma.incident.create({
+      data: {
+        title: 'Demo provider sync delays',
+        severity: 'minor',
+        status: 'identified',
+        public: false,
+        createdById: owner.id,
+      },
+    });
+    await prisma.incident.create({
+      data: {
+        title: 'Notification delivery delays',
+        severity: 'minor',
+        status: 'identified',
+        public: false,
+        createdById: owner.id,
+      },
+    });
 
     const demoIncidents = await prisma.incident.findMany({
       where: {
