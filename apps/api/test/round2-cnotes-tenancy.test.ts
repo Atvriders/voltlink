@@ -1,0 +1,207 @@
+// round2-cnotes-tenancy.test.ts — C-NOTESTS / TI-08 / TI-15 / TI-42:
+// the mutants that still survived the full api-int suite:
+//   M1c: an open registrant also becomes OWNER of the operator org
+//   M2b: anonymous {email, code} at /login/mfa signs the user in (no ceremony)
+//   M3b: another org's drives leak into a user's drive list
+// nodemailer is mocked (TI-14 pattern) so no live SMTP sink is needed.
+const envs = vi.hoisted(() => {
+  process.env.NODE_ENV = 'test';
+  process.env.SMTP_URL = 'smtp://fake.invalid:1025';
+  process.env.VL_SETUP_TOKEN = 'cnotes-setup-token-0123456789abcdef01234567';
+});
+void envs;
+
+const mailer = vi.hoisted(() => ({ sends: [] as unknown[], sendMail: vi.fn() }));
+vi.mock('nodemailer', () => {
+  const createTransport = () => ({
+    sendMail: (...args: unknown[]) => {
+      mailer.sends.push(args);
+      return Promise.resolve({ messageId: 'mock' });
+    },
+  });
+  return { default: { createTransport }, createTransport };
+});
+
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import type { AddressInfo } from 'node:net';
+import type { Server } from 'node:http';
+import { buildApp } from '../src/app';
+import { initRedis } from '../src/core/redis';
+import { prisma } from '../src/core/db';
+import { randomId } from '../src/core/crypto';
+import {
+  bootstrapInstanceAdmin,
+  registerUser,
+  setRegistrationMode,
+  createSession,
+} from '../src/auth/service';
+
+let server: Server;
+let base = '';
+const uniq = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+beforeAll(async () => {
+  await initRedis();
+  const app = await buildApp();
+  server = await new Promise<Server>((resolve) => {
+    const s = app.listen(0, '127.0.0.1', () => resolve(s));
+  });
+  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  // The shared template seeds a bootstrapped marker; clear it so the real
+  // first-run path runs (same pattern as round2-auth-service).
+  await prisma.appSetting.deleteMany({
+    where: { key: { in: ['instance.bootstrappedAt', 'instance.operatorOrgId'] } },
+  });
+  // Bootstrap the instance admin: this creates the OPERATOR org (M1c target).
+  await bootstrapInstanceAdmin({
+    email: `cnotes-admin-${uniq()}@test.dev`,
+    name: 'CN Admin',
+    password: 'cnotes-admin-pass-123',
+    setupToken: process.env.VL_SETUP_TOKEN!,
+  });
+}, 30_000);
+
+afterAll(async () => {
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  const { prisma: p } = await import('../src/core/db');
+  await p.$disconnect();
+});
+
+describe('C-NOTESTS M1c: open registrant stays out of the operator org', () => {
+  it('a fresh open registration owns ONLY its own personal org', async () => {
+    await setRegistrationMode('open');
+    const email = `cnotes-open-${uniq()}@test.dev`;
+    const res = await registerUser({
+      email,
+      name: 'Open Registrant',
+      password: 'cnotes-open-pass-123',
+    });
+    expect(res.kind).toBe('check_email');
+    const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+    const operatorOrgId = (
+      await prisma.appSetting.findUniqueOrThrow({
+        where: { key: 'instance.operatorOrgId' },
+      })
+    ).value;
+    const memberships = await prisma.membership.findMany({ where: { userId: user.id } });
+    // M1c adds an OWNER membership in the operator org: exactly one membership
+    // in a PERSONAL org (never the operator org) is the spec.
+    expect(memberships).toHaveLength(1);
+    expect(memberships[0]!.organizationId).not.toBe(operatorOrgId);
+    const org = await prisma.organization.findUniqueOrThrow({
+      where: { id: memberships[0]!.organizationId },
+    });
+    expect(org.kind).toBe('PERSONAL');
+    expect(org.createdById).toBe(user.id);
+  });
+});
+
+describe('C-NOTESTS M2b: anonymous MFA completion cannot sign anyone in', () => {
+  async function csrf(): Promise<{ header: string; cookie: string }> {
+    const res = await fetch(`${base}/api/v1/auth/csrf`);
+    const setCookies = res.headers.getSetCookie?.() ?? [];
+    const token = setCookies.join(';').match(/vl_csrf=([^;]+)/)?.[1] ?? '';
+    const cookie = setCookies.find((c) => c.startsWith('vl_csrf='))?.split(';')[0] ?? '';
+    return { header: token, cookie };
+  }
+
+  it('anonymous {email, code} at /login/mfa is refused with no session cookie', async () => {
+    const c = await csrf();
+    const res = await fetch(`${base}/api/v1/auth/login/mfa`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-vl-csrf': c.header, cookie: c.cookie },
+      body: JSON.stringify({ email: 'victim@test.dev', code: '123456' }),
+    });
+    const bodyText = await res.text();
+    expect(res.status, bodyText).toBe(401);
+    expect(res.headers.getSetCookie?.() ?? []).toEqual([]);
+    expect(bodyText).not.toContain('vl_session');
+  });
+
+  it('anonymous {email, recoveryCode} at /login/mfa is refused', async () => {
+    const c = await csrf();
+    const res = await fetch(`${base}/api/v1/auth/login/mfa`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-vl-csrf': c.header, cookie: c.cookie },
+      body: JSON.stringify({ email: 'victim@test.dev', recoveryCode: 'ABCD-EFGH-IJKL-MNOP' }),
+    });
+    const bodyText = await res.text();
+    expect(res.status, bodyText).toBe(401);
+    expect(res.headers.getSetCookie?.() ?? []).toEqual([]);
+  });
+});
+
+describe("C-NOTESTS M3b: drive lists never leak another org's drives", () => {
+  it("GET /drives returns only the session user's org drives", async () => {
+    // Org A: the instance admin (already exists, operator org).
+    const admin = await prisma.user.findFirstOrThrow({
+      where: { email: { startsWith: 'cnotes-admin-' } },
+    });
+    const orgA = await prisma.membership.findFirstOrThrow({ where: { userId: admin.id } });
+    // Org B: a second user with its own org and a drive.
+    const userB = await prisma.user.create({
+      data: {
+        email: `cnotes-b-${uniq()}@test.dev`,
+        name: 'Org B user',
+        passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
+        webauthnUserId: randomId(),
+        emailVerifiedAt: new Date(),
+      },
+    });
+    const orgB = await prisma.organization.create({
+      data: {
+        kind: 'PERSONAL',
+        name: `CNB-${uniq()}`,
+        createdById: userB.id,
+        memberships: { create: { userId: userB.id, role: 'OWNER' } },
+      },
+    });
+    const mk = async (orgId: string, tag: string) => {
+      const provider = await prisma.providerAccount.create({
+        data: {
+          organizationId: orgId,
+          provider: 'mock',
+          label: tag,
+          status: 'connected',
+          connectedById: admin.id,
+          demo: false,
+        },
+      });
+      const vehicle = await prisma.vehicle.create({
+        data: {
+          organizationId: orgId,
+          providerAccountId: provider.id,
+          provider: 'mock',
+          providerVehicleId: `${tag}-${uniq()}`,
+          displayName: tag,
+          demo: false,
+        },
+      });
+      const drive = await prisma.drive.create({
+        data: {
+          vehicleId: vehicle.id,
+          startAt: new Date(),
+          endAt: new Date(Date.now() + 1000),
+          distanceKm: 1,
+          durationSec: 60,
+          avgSpeedKmh: 60,
+          maxSpeedKmh: 60,
+          energyKwh: 0.2,
+          efficiencyWhPerKm: 200,
+        },
+      });
+      return drive.id;
+    };
+    const driveA = await mk(orgA.organizationId, 'orgA');
+    const driveB = await mk(orgB.id, 'orgB');
+    const { token } = await createSession(admin.id, '127.0.0.1');
+    const res = await fetch(`${base}/api/v1/drives`, {
+      headers: { cookie: `vl_session=${token}` },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { items?: { id: string }[] } };
+    const ids = (body.data.items ?? []).map((d) => d.id);
+    expect(ids).toContain(driveA);
+    expect(ids).not.toContain(driveB); // M3b leaks driveB here
+  });
+});
