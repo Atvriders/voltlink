@@ -195,12 +195,12 @@ function timeOfDay(now = new Date()): {
   dayIndex: number;
   epoch: number;
 } {
-  const hour = now.getUTCHours() + 7; // fictional "Rivermark Time" (UTC-7)
+  const hour = now.getUTCHours() - 7; // fictional "Rivermark Time" (UTC-7)
   const wrapped = ((hour % 24) + 24) % 24;
   const minute = now.getUTCMinutes();
   const dayIndex = Math.floor(now.getTime() / 86400000);
   return {
-    hour: Math.floor(wrapped + minute / 60),
+    hour: wrapped + minute / 60,
     minute,
     dayIndex,
     epoch: Math.floor(now.getTime() / 1000),
@@ -498,6 +498,12 @@ class DemoProviderImpl implements VehicleProvider {
   ): Promise<CommandDispatchResult> {
     const spec = DEMO_VEHICLES.find((v) => v.id === providerVehicleId);
     if (!spec) return { kind: 'rejected', errorMessage: 'Unknown vehicle.' };
+    // TI-46: the scripted Comet remote_start rejection must be reachable,
+    // so it is judged before the capability filter (the UI still hides the
+    // button via the capabilities list).
+    if (type === 'remote_start' && spec.id === 'demo-comet') {
+      return { kind: 'rejected', errorMessage: 'This vehicle does not support remote start.' };
+    }
     if (!spec.capabilities.includes(type as Capability) && type !== 'wake') {
       return {
         kind: 'unsupported',
@@ -513,9 +519,6 @@ class DemoProviderImpl implements VehicleProvider {
     }
     if (type === 'open_trunk' && spec.role === 'offline') {
       return { kind: 'rejected', errorMessage: 'Vehicle is offline.' };
-    }
-    if (type === 'remote_start' && spec.id === 'demo-comet') {
-      return { kind: 'rejected', errorMessage: 'This vehicle does not support remote start.' };
     }
     // Deterministic provider timeouts for realistic demo behaviour.
     if (type === 'window_vent' && spec.id === 'demo-bison') {
