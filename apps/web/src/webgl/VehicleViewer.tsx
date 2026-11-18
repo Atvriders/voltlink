@@ -286,8 +286,11 @@ function VehicleScene({
       conn.visible = s.plugConnected || s.chargingState === 'charging';
       if (s.chargingState === 'charging') {
         const m = conn as THREE.Mesh;
-        const mat = m.material as THREE.MeshStandardMaterial | THREE.MeshStandardMaterial[];
-        const mats = Array.isArray(mat) ? mat : [mat];
+        const mat = m.material as
+          THREE.MeshStandardMaterial | THREE.MeshStandardMaterial[] | undefined;
+        const mats = (Array.isArray(mat) ? mat : [mat]).filter(
+          (x): x is THREE.MeshStandardMaterial => !!x && 'emissive' in x,
+        );
         const intensity = 0.5 + Math.sin(t * 3) * 0.5;
         for (const mm of mats) mm.emissive = new THREE.Color('#22d3ee').multiplyScalar(intensity);
       }
@@ -297,8 +300,11 @@ function VehicleScene({
     if (scene && s.alarmState === 'triggered') {
       const body = findPart(scene, 'body');
       if (body && (body as THREE.Mesh).isMesh) {
-        const m = (body as THREE.Mesh).material as THREE.MeshStandardMaterial;
-        m.emissive = new THREE.Color('#ff4444').multiplyScalar(Math.sin(t * 8) > 0 ? 0.25 : 0.05);
+        const m = (body as THREE.Mesh).material as
+          THREE.MeshStandardMaterial | THREE.MeshStandardMaterial[] | undefined;
+        if (m && !Array.isArray(m) && 'emissive' in m) {
+          m.emissive = new THREE.Color('#ff4444').multiplyScalar(Math.sin(t * 8) > 0 ? 0.25 : 0.05);
+        }
       }
     }
     // Offline: dim the whole vehicle slightly.
@@ -306,7 +312,9 @@ function VehicleScene({
       const target = s.status === 'offline' ? 0.55 : 1;
       scene.traverse((o) => {
         if ((o as THREE.Mesh).isMesh) {
-          const mat = (o as THREE.Mesh).material as THREE.MeshStandardMaterial;
+          const mat = (o as THREE.Mesh).material as
+            THREE.MeshStandardMaterial | THREE.MeshStandardMaterial[] | undefined;
+          if (!mat || Array.isArray(mat) || !('userData' in mat)) return;
           const base = mat.userData.baseOpacity ?? 1;
           mat.userData.baseOpacity = base;
           mat.transparent = target < 1;
@@ -336,11 +344,13 @@ function FallbackVehicle({
     const s = stateRef.current;
     g.rotation.y = clock.elapsedTime * 0.12;
     const body = g.children[0] as THREE.Mesh | undefined;
-    if (body && (body.material as THREE.MeshStandardMaterial).emissive) {
+    const bmat = body?.material as
+      THREE.MeshStandardMaterial | THREE.MeshStandardMaterial[] | undefined;
+    if (body && bmat && !Array.isArray(bmat) && 'emissive' in bmat && bmat.emissive) {
       const charging = s?.chargingState === 'charging';
-      (body.material as THREE.MeshStandardMaterial).emissive = new THREE.Color(
-        '#22d3ee',
-      ).multiplyScalar(charging ? 0.35 + Math.sin(clock.elapsedTime * 4) * 0.2 : 0.08);
+      bmat.emissive = new THREE.Color('#22d3ee').multiplyScalar(
+        charging ? 0.35 + Math.sin(clock.elapsedTime * 4) * 0.2 : 0.08,
+      );
     }
   });
   const color = vehicle.exteriorColor ?? '#8b9bb4';
