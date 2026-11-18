@@ -101,7 +101,10 @@ adminRouter.patch(
       } catch (err) {
         const code = err instanceof AuthError ? err.code : 'VALIDATION';
         res.status(err instanceof AuthError ? err.status : 400).json({
-          error: { code, message: err instanceof Error ? err.message : 'invalid registration mode' },
+          error: {
+            code,
+            message: err instanceof Error ? err.message : 'invalid registration mode',
+          },
         });
         return;
       }
@@ -194,6 +197,16 @@ adminRouter.patch(
       });
       return;
     }
+    // TI-48 / R2-78: never demote the last remaining instance admin.
+    if (role === 'member' && target.isInstanceAdmin) {
+      const adminCount = await prisma.user.count({ where: { isInstanceAdmin: true } });
+      if (adminCount <= 1) {
+        res.status(409).json({
+          error: { code: 'LAST_ADMIN', message: 'The last instance admin cannot be demoted.' },
+        });
+        return;
+      }
+    }
     await prisma.user.update({
       where: { id: target.id },
       data: { isInstanceAdmin: role === 'admin' },
@@ -256,15 +269,14 @@ adminRouter.get(
   { auth: 'session', target: { kind: 'instanceAdmin' } },
   async (req, res) => {
     let database = 'ok';
-    let migrationsCurrent = true;
+    let migrationsCurrent: boolean;
     try {
       await prisma.$queryRaw`SELECT 1`;
       // NEW-10: migrationsCurrent compares the applied set against the
       // bundled migration list, not just SELECT 1.
-      const bundled = readdirSync(
-        join(__dirname, '..', '..', 'prisma', 'migrations'),
-        { withFileTypes: true },
-      )
+      const bundled = readdirSync(join(__dirname, '..', '..', 'prisma', 'migrations'), {
+        withFileTypes: true,
+      })
         .filter((d) => d.isDirectory())
         .map((d) => d.name)
         .sort();

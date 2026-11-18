@@ -11,6 +11,8 @@ import type { ProviderContext } from '../src/providers/types';
 
 let server: Server;
 let base = '';
+// TI-48: module-scoped log of /:vin/wake calls for the preWake assertions.
+let wakeCalls: string[] = [];
 
 beforeAll(async () => {
   const app = express();
@@ -74,7 +76,11 @@ beforeAll(async () => {
     return res.json(state);
   });
   app.get('/vins', (_req, res) => res.json({ results: ['5YJ3000000NEXUS02'] }));
+  // TI-48: record wake calls so the preWake test can assert the actual
+  // wake behavior instead of only the command outcome.
+  wakeCalls = [];
   app.post('/:vin/wake', (req, res) => {
+    wakeCalls.push(String(req.params.vin));
     if (req.params.vin === '5YJ3WAKEFAIL01') return res.json({ result: false });
     return res.json({ result: true });
   });
@@ -262,19 +268,43 @@ describe('Tessie provider deeper contract paths', () => {
   });
 
   it('preWake: wakes the vehicle when asleep, skips wake when awake', async () => {
+    const before = wakeCalls.length;
     const asleep = await p.sendCommand(ctx, '5YJ3SLEEP0000001', 'climate_start', {});
     expect(asleep.kind).toBe('accepted');
+    // TI-48: the asleep vehicle must have received a real /wake call.
+    expect(wakeCalls.slice(before)).toContain('5YJ3SLEEP0000001');
+    const mid = wakeCalls.length;
     const awake = await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'climate_stop', {});
     expect(awake.kind).toBe('accepted');
+    // TI-48: the awake vehicle must NOT be woken again.
+    expect(wakeCalls.slice(mid)).not.toContain('5YJ3000000NEXUS02');
   });
 
   it('validates temperature, amps, sentry and speed-limit parameters', async () => {
-    expect((await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'set_temperature', { temperatureC: 50 })).kind).toBe('rejected');
-    expect((await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'set_temperature', { temperatureC: 20 })).kind).toBe('accepted');
-    expect((await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'set_charging_amps', { chargingAmps: 1.5 })).kind).toBe('rejected');
-    expect((await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'sentry_mode', {})).kind).toBe('rejected');
-    expect((await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'sentry_mode', { sentryOn: true })).kind).toBe('accepted');
-    expect((await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'speed_limit', { speedLimitOn: true, pin: '123' })).kind).toBe('rejected');
+    expect(
+      (await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'set_temperature', { temperatureC: 50 })).kind,
+    ).toBe('rejected');
+    expect(
+      (await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'set_temperature', { temperatureC: 20 })).kind,
+    ).toBe('accepted');
+    expect(
+      (await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'set_charging_amps', { chargingAmps: 1.5 }))
+        .kind,
+    ).toBe('rejected');
+    expect((await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'sentry_mode', {})).kind).toBe(
+      'rejected',
+    );
+    expect(
+      (await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'sentry_mode', { sentryOn: true })).kind,
+    ).toBe('accepted');
+    expect(
+      (
+        await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'speed_limit', {
+          speedLimitOn: true,
+          pin: '123',
+        })
+      ).kind,
+    ).toBe('rejected');
     const twoStep = await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'speed_limit', {
       speedLimitKmh: 80,
       speedLimitOn: true,
@@ -290,7 +320,9 @@ describe('Tessie provider deeper contract paths', () => {
   });
 
   it('maps "not supported" and non-idempotent upstream failures', async () => {
-    const unsupported = await p.sendCommand(ctx, '5YJ3NOTSUPP001', 'set_charge_limit', { chargeLimitPct: 80 });
+    const unsupported = await p.sendCommand(ctx, '5YJ3NOTSUPP001', 'set_charge_limit', {
+      chargeLimitPct: 80,
+    });
     expect(unsupported.kind).toBe('unsupported');
     const trunk = await p.sendCommand(ctx, '5YJ3TRUNKERR01', 'open_trunk', {});
     expect(trunk.kind).toBe('outcome_unknown');
@@ -300,7 +332,12 @@ describe('Tessie provider deeper contract paths', () => {
     const auth = await p.sendCommand(ctx, '5YJ3AUTH0000001', 'lock', {});
     expect(auth.kind).toBe('failed');
     expect(auth.providerCode).toBe('AUTH');
-    const demo = await p.sendCommand({ ...ctx, meta: { ...ctx.meta, demo: true } }, '5YJ3000000NEXUS02', 'lock', {});
+    const demo = await p.sendCommand(
+      { ...ctx, meta: { ...ctx.meta, demo: true } },
+      '5YJ3000000NEXUS02',
+      'lock',
+      {},
+    );
     expect(demo.kind).toBe('failed');
     expect(demo.providerCode).toBe('DEMO_GUARD');
   });

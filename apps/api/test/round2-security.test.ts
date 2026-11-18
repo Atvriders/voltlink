@@ -239,10 +239,15 @@ describe('R2-13 public incidents', () => {
     expect(res.status).toBe(200);
     const text = JSON.stringify(res.body);
     expect(text).not.toContain('PRIVATE-');
-    expect(text).toContain(`PUBLIC-${pub.id}`.slice(0, 6)); // title visible
+    // TI-48: assert the FULL public title, not a slice that is the constant
+    // 'PUBLIC' for every id.
     const publicDto = (
-      res.body as { data: { id: string; updates: { author: string }[] }[] }
+      res.body as {
+        data: { id: string; title: string; updates: { author: string }[] }[];
+      }
     ).data.find((i) => i.id === pub.id);
+    expect(publicDto).toBeDefined();
+    expect(publicDto?.title).toBe(pub.title);
     expect(publicDto?.updates[0]?.author).toBe('VoltLink');
     expect(text).not.toContain(u.id);
   }, 30_000);

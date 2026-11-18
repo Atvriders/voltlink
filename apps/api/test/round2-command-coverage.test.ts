@@ -268,10 +268,31 @@ describe('guarded transitions (P-TERMINAL)', () => {
         submittedAt: new Date(Date.now() - 10 * 60_000),
       },
     });
+    // TI-48: a terminal not_observable row (old submittedAt) must survive
+    // the sweep untouched.
+    const terminal = await prisma.vehicleCommand.create({
+      data: {
+        vehicleId: world.vehicle.id,
+        vehicleName: 'Cov car',
+        providerAccountId: world.provider.id,
+        organizationId: world.org.id,
+        userId: world.user.id,
+        actorKind: 'session',
+        type: 'honk_horn',
+        params: JSON.parse(JSON.stringify({})),
+        status: 'not_observable',
+        risk: 'low',
+        submittedAt: new Date(Date.now() - 10 * 60_000),
+      },
+    });
     const n = await sweepStuckCommands();
     expect(n).toBeGreaterThanOrEqual(1);
     const after = await prisma.vehicleCommand.findUniqueOrThrow({ where: { id: stuck.id } });
     expect(['timed_out', 'failed']).toContain(after.status);
+    const terminalAfter = await prisma.vehicleCommand.findUniqueOrThrow({
+      where: { id: terminal.id },
+    });
+    expect(terminalAfter.status).toBe('not_observable');
   });
 });
 
