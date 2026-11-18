@@ -476,20 +476,24 @@ describe('SSE revocation (A-SSEREVOKE)', () => {
     );
     expect(del.status).toBe(200);
     // The stream must terminate promptly now that the session is revoked.
+    // R2-31: the old race reported the TIMEOUT branch as {done:true}, so a
+    // stream that kept running for ~60 s still passed. The timeout branch is
+    // now distinct: only a real reader done closes the stream in this test.
     const reader = res.body!.getReader();
     const t0 = Date.now();
-    let done = false;
+    let closed = false;
     while (Date.now() - t0 < 3000) {
       const chunk = await Promise.race([
         reader.read(),
-        new Promise<{ done: true }>((r) => setTimeout(() => r({ done: true }), 2500)),
+        new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), 2500)),
       ]);
+      if (chunk === 'timeout') break; // still open: fail below
       if (chunk.done) {
-        done = true;
+        closed = true;
         break;
       }
     }
-    expect(done).toBe(true);
+    expect(closed).toBe(true);
     await prisma.user.delete({ where: { id: user.id } });
   });
 });
