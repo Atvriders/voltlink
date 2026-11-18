@@ -1,6 +1,7 @@
 // R6: F-A11Y — the dialog manages focus: initial focus inside, Tab trap,
 // focus restore on close, and aria-labelledby on the title.
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import React from 'react';
+import { afterEach, describe, expect, it } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Modal, Button } from './ui';
@@ -39,25 +40,37 @@ describe('modal focus management (F-A11Y)', () => {
     expect(document.activeElement).toBe(buttons[0]);
   });
 
-  it('restores focus when the dialog closes', () => {
-    const { rerender } = render(
-      <div>
-        <button data-testid="opener">open</button>
-        <Modal open onClose={() => undefined} title="Restore">
-          <span>body</span>
-        </Modal>
-      </div>,
-    );
+  it('restores focus to a focused opener after a real open-and-close (TI-40)', async () => {
+    const user = userEvent.setup();
+    let rendered = false;
+    function Harness() {
+      const [open, setOpen] = React.useState(false);
+      rendered = true;
+      void rendered;
+      return (
+        <div>
+          <button data-testid="opener" onClick={() => setOpen(true)}>
+            open
+          </button>
+          {open && (
+            <Modal open onClose={() => setOpen(false)} title="Restore">
+              <button>inside</button>
+            </Modal>
+          )}
+        </div>
+      );
+    }
+    render(<Harness />);
     const opener = screen.getByTestId('opener');
     opener.focus();
-    rerender(
-      <div>
-        <button data-testid="opener">open</button>
-        <Modal open={false} onClose={() => undefined} title="Restore">
-          <span>body</span>
-        </Modal>
-      </div>,
-    );
+    // Open from the focused opener: the dialog must take focus.
+    await user.click(opener);
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    // Close and require focus back on the opener (T1 mutation removes the
+    // restore and leaves focus nowhere).
+    await user.click(screen.getByRole('button', { name: 'Close dialog' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.activeElement).toBe(opener);
   });
 });

@@ -9,7 +9,7 @@ void pinnedTz;
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, within } from '@testing-library/react';
 import LiveVehiclePage from './LiveVehiclePage';
 
 const apiMock = vi.fn();
@@ -144,9 +144,13 @@ describe('lifecycle modal (F-LIFECYCLEUI)', () => {
     await waitFor(() => expect(screen.getByText('Aurora')).toBeTruthy());
     await waitFor(() => expect(screen.getByText('Failed').closest('button')).toBeTruthy());
     screen.getByText('Failed').closest('button')!.click();
-    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
-    await waitFor(() => expect(screen.getAllByText('Failed').length).toBeGreaterThan(0));
-    await waitFor(() => expect(screen.getByText('Provider refused the command')).toBeTruthy());
+    const dialog = await screen.findByRole('dialog');
+    // TI-40: scope the label assertions to the DIALOG — the activity badge
+    // outside also reads 'Failed'.
+    await waitFor(() => expect(within(dialog).getByText('Failed')).toBeTruthy());
+    await waitFor(() =>
+      expect(within(dialog).getByText('Provider refused the command')).toBeTruthy(),
+    );
   });
 
   it('offers Cancel for a queued command', async () => {

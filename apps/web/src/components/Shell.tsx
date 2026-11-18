@@ -104,13 +104,16 @@ function VehicleSwitcher() {
     queryFn: () => api<{ id: string; name: string }[]>('/api/v1/fleet/groups'),
   });
 
+  // R2-38: a stale search query must not outlive the menu — every close
+  // path clears it (outside click, trigger re-click, Escape, pick).
+  const closeMenu = () => {
+    setOpen(false);
+    setQuery('');
+  };
+
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-        // R2-38: a stale search query must not outlive the menu.
-        setQuery('');
-      }
+      if (ref.current && !ref.current.contains(e.target as Node)) closeMenu();
     };
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
@@ -159,9 +162,9 @@ function VehicleSwitcher() {
   return (
     <div className="relative" ref={ref}>
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => (open ? closeMenu() : setOpen(true))}
         onKeyDown={(e) => {
-          if (e.key === 'Escape') setOpen(false);
+          if (e.key === 'Escape') closeMenu();
           if (e.key === 'ArrowDown') {
             e.preventDefault();
             setOpen(true);
@@ -186,6 +189,9 @@ function VehicleSwitcher() {
       </button>
       {open && (
         <div
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') closeMenu();
+          }}
           className="absolute right-0 top-full z-40 mt-1 max-h-[70vh] w-64 overflow-auto rounded-xl border border-line bg-panel p-1 shadow-2xl"
           role="menu"
         >
@@ -304,6 +310,7 @@ function VehicleRow({
   return (
     <div className="flex items-center gap-1 rounded-lg px-1 py-0.5 hover:bg-panel2">
       <button
+        role="menuitem"
         onClick={() => onPick(v.id)}
         className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-sm"
       >
@@ -421,6 +428,16 @@ function AccountMenu({ align = 'left', email }: { align?: 'left' | 'right'; emai
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') setOpen(false);
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setOpen(true);
+            requestAnimationFrame(() =>
+              ref.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus(),
+            );
+          }
+        }}
         className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-subtle hover:bg-panel2 hover:text-ink"
         aria-label="Account menu"
         aria-expanded={open}
@@ -430,6 +447,23 @@ function AccountMenu({ align = 'left', email }: { align?: 'left' | 'right'; emai
       </button>
       {open && (
         <div
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              setOpen(false);
+              return;
+            }
+            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+            e.preventDefault();
+            const items = Array.from(
+              ref.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [],
+            );
+            const i = items.indexOf(document.activeElement as HTMLElement);
+            const next =
+              e.key === 'ArrowDown'
+                ? (i + 1) % items.length
+                : (i - 1 + items.length) % items.length;
+            items[next]?.focus();
+          }}
           className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} bottom-full z-40 mb-1 w-56 rounded-xl border border-line bg-panel p-1 shadow-2xl`}
           role="menu"
         >

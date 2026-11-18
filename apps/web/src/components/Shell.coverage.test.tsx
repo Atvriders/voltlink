@@ -329,6 +329,83 @@ describe('Shell page', () => {
     await waitFor(() => expect(authState.logout).toHaveBeenCalled());
   });
 
+  it('clears the search query on every switcher close path (R2-38/TI-40)', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    const trigger = await screen.findByRole('button', {
+      name: /Choose vehicle|Vehicle: Aurora/,
+    });
+
+    const openAndType = async (value: string) => {
+      await user.click(trigger);
+      const menu = await screen.findByRole('menu');
+      await user.type(within(menu).getByPlaceholderText('Search vehicles'), value);
+      await waitFor(() => expect(within(menu).queryByText(/No vehicles match/)).toBeTruthy());
+    };
+    const reopenAndExpectEmpty = async () => {
+      await user.click(trigger);
+      const menu = await screen.findByRole('menu');
+      expect((within(menu).getByPlaceholderText('Search vehicles') as HTMLInputElement).value).toBe(
+        '',
+      );
+      await user.click(trigger); // close again
+      await waitFor(() => expect(screen.queryByPlaceholderText('Search vehicles')).toBeNull());
+    };
+
+    // Close path 1: Escape.
+    await openAndType('zzz');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByPlaceholderText('Search vehicles')).toBeNull());
+    await reopenAndExpectEmpty();
+
+    // Close path 2: trigger re-click.
+    await openAndType('zzz');
+    await user.click(trigger);
+    await waitFor(() => expect(screen.queryByPlaceholderText('Search vehicles')).toBeNull());
+    await reopenAndExpectEmpty();
+
+    // Close path 3: outside click.
+    await openAndType('zzz');
+    fireEvent.mouseDown(document.body);
+    await waitFor(() => expect(screen.queryByPlaceholderText('Search vehicles')).toBeNull());
+    await reopenAndExpectEmpty();
+  });
+
+  it('supports ArrowDown/Escape on the switcher, theme and account menus (F-A11Y/TI-40)', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    const trigger = await screen.findByRole('button', {
+      name: /Choose vehicle|Vehicle: Aurora/,
+    });
+    // Switcher: ArrowDown opens and focuses an item; Escape closes.
+    trigger.focus();
+    await user.keyboard('{ArrowDown}');
+    const menu = await screen.findByRole('menu');
+    // The ArrowDown handler focuses the first item on the next frame.
+    await waitFor(() => expect(menu.contains(document.activeElement)).toBe(true));
+    // Escape closes even while the search input holds focus.
+    fireEvent.keyDown(within(menu).getByPlaceholderText('Search vehicles'), { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByPlaceholderText('Search vehicles')).toBeNull());
+
+    // Theme menu: ArrowDown opens; Escape closes.
+    const themeButton = screen.getByRole('button', { name: 'Theme' });
+    themeButton.focus();
+    await user.keyboard('{ArrowDown}');
+    await waitFor(() =>
+      expect(screen.getByRole('menuitem', { name: 'VoltLink Dark' })).toBeTruthy(),
+    );
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+
+    // Account menu: ArrowDown opens and focuses a menuitem; Escape closes.
+    const accountButton = screen.getAllByRole('button', { name: 'Account menu' })[0]!;
+    accountButton.focus();
+    await user.keyboard('{ArrowDown}');
+    await waitFor(() => expect(screen.getAllByRole('menuitem').length).toBeGreaterThan(0));
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  });
+
   it('opens and closes the mobile navigation drawer', async () => {
     const user = userEvent.setup();
     renderShell();

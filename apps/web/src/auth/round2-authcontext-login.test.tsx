@@ -68,6 +68,17 @@ const renderProbe = () =>
   );
 
 beforeEach(() => {
+  if (typeof window.matchMedia !== 'function') {
+    window.matchMedia = ((q: string) => ({
+      matches: q.includes('dark'),
+      media: q,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    })) as never;
+  }
   apiMock.mockReset();
   // Default: /auth/me answers 401 (no user) so the provider starts clean.
   apiMock.mockImplementation(async (path: string) => {
