@@ -288,6 +288,12 @@ describe('token refresh rotation (P-TESLAREFRESH)', () => {
     const after = fake.requests.filter((r) => r.path === '/oauth2/v3/token').length;
     expect(after - before).toBe(1); // exactly one refresh call
     expect(results.every((r) => r.status === 'fulfilled')).toBe(true);
+    // TI-52: the single token call must actually be a REFRESH grant (the old
+    // fake parsed JSON only, so the app's form-encoded grant silently got the
+    // code-exchange answer with fixed tokens).
+    const tokenCalls = fake.requests.filter((r) => r.path === '/oauth2/v3/token').slice(before);
+    expect(tokenCalls).toHaveLength(1);
+    expect((tokenCalls[0]!.body as { grant_type?: string }).grant_type).toBe('refresh_token');
     const creds = await prisma.providerCredential.findUniqueOrThrow({
       where: { providerAccountId: account.id },
     });

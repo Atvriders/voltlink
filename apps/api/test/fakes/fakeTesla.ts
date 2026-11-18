@@ -19,7 +19,10 @@ export interface FakeTesla {
 export function startFakeTesla(port = 0): Promise<FakeTesla> {
   return new Promise((resolve) => {
     const app = express();
+    // TI-52: the app also sends form-encoded refresh grants; the fake must
+    // parse urlencoded bodies or those grants get the code-exchange answer.
     app.use(express.json());
+    app.use(express.urlencoded({ extended: true }));
     const requests: FakeTesla['requests'] = [];
     const states = new Map<string, 'online' | 'asleep' | 'offline'>();
     const paired = new Set<string>();
@@ -75,8 +78,10 @@ export function startFakeTesla(port = 0): Promise<FakeTesla> {
         return;
       }
       res.json({
-        access_token: 'access-abc',
-        refresh_token: 'refresh-abc',
+        // TI-52: distinct tokens per code exchange, so a test can tell the
+        // rotated token apart from a stale one.
+        access_token: `at-${crypto.randomBytes(6).toString('hex')}`,
+        refresh_token: `rt-${crypto.randomBytes(6).toString('hex')}`,
         expires_in: 28800,
         scope:
           'openid offline_access vehicle_device_data vehicle_location vehicle_cmds vehicle_charging_cmds',
