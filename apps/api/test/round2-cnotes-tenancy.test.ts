@@ -38,6 +38,7 @@ import {
 
 let server: Server;
 let base = '';
+let adminEmail = '';
 const uniq = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 beforeAll(async () => {
@@ -53,8 +54,9 @@ beforeAll(async () => {
     where: { key: { in: ['instance.bootstrappedAt', 'instance.operatorOrgId'] } },
   });
   // Bootstrap the instance admin: this creates the OPERATOR org (M1c target).
+  adminEmail = `cnotes-admin-${uniq()}@test.dev`;
   await bootstrapInstanceAdmin({
-    email: `cnotes-admin-${uniq()}@test.dev`,
+    email: adminEmail,
     name: 'CN Admin',
     password: 'cnotes-admin-pass-123',
     setupToken: process.env.VL_SETUP_TOKEN!,
@@ -110,7 +112,7 @@ describe('C-NOTESTS M2b: anonymous MFA completion cannot sign anyone in', () => 
     const res = await fetch(`${base}/api/v1/auth/login/mfa`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-vl-csrf': c.header, cookie: c.cookie },
-      body: JSON.stringify({ email: 'victim@test.dev', code: '123456' }),
+      body: JSON.stringify({ email: adminEmail, code: '123456' }),
     });
     const bodyText = await res.text();
     expect(res.status, bodyText).toBe(401);
@@ -123,7 +125,7 @@ describe('C-NOTESTS M2b: anonymous MFA completion cannot sign anyone in', () => 
     const res = await fetch(`${base}/api/v1/auth/login/mfa`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-vl-csrf': c.header, cookie: c.cookie },
-      body: JSON.stringify({ email: 'victim@test.dev', recoveryCode: 'ABCD-EFGH-IJKL-MNOP' }),
+      body: JSON.stringify({ email: adminEmail, recoveryCode: 'ABCD-EFGH-IJKL-MNOP' }),
     });
     const bodyText = await res.text();
     expect(res.status, bodyText).toBe(401);
