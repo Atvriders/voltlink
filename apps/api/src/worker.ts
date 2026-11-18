@@ -12,7 +12,9 @@ import { setSetting } from './core/settings';
 import { runPrivacyRedaction } from './jobs/privacy-redaction';
 import { runAccountDeletion } from './jobs/account-deletion';
 
-async function main(): Promise<void> {
+// R2-18/MW1 testability hook: exported so round2-worker-consumer.test.ts can
+// start the REAL consumers (vehicle-commands -> processCommandJob) end to end.
+export async function main(): Promise<void> {
   validateEnv();
   await initRedis();
   await waitForMigrations();
