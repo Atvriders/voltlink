@@ -104,7 +104,7 @@ test('R2-17: honk reaches accepted/not_observable with the full event chain (API
     .toMatch(/^(accepted|not_observable)$/);
 });
 
-test('R2-17: rejected lifecycle — Comet remote_start is refused end to end', async ({ page }) => {
+test('R2-17: rejected lifecycle — Bison open_trunk is refused end to end', async ({ page }) => {
   test.setTimeout(240_000);
   await register(page, `e2e-lc-rej-${Date.now()}@voltlink.test`);
   await enableDemo(page);
@@ -113,17 +113,17 @@ test('R2-17: rejected lifecycle — Comet remote_start is refused end to end', a
   const vbody = (await vres.json()) as {
     data?: { id: string; displayName?: string }[];
   };
-  const comet = (vbody.data ?? []).find((v) => (v.displayName ?? '').includes('Comet'));
-  expect(comet, 'Comet exists in the demo fleet').toBeTruthy();
-  await page.goto(`/vehicles/${comet!.id}`);
+  const bison = (vbody.data ?? []).find((v) => (v.displayName ?? '').includes('Bison'));
+  expect(bison, 'Bison exists in the demo fleet').toBeTruthy();
+  await page.goto(`/vehicles/${bison!.id}`);
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
-  const vehicleId = comet!.id;
+  const vehicleId = bison!.id;
 
-  await page.getByRole('button', { name: /Remote start/ }).click();
+  await page.getByRole('button', { name: /Open trunk/ }).click();
 
-  const issued = await newestCommand(page, vehicleId!);
+  const issued = await newestCommand(page, vehicleId);
   const final = await waitTerminal(page, issued.id);
-  expect(final.status, 'Comet remote_start must be rejected').toBe('rejected');
+  expect(final.status, 'offline Bison open_trunk must be rejected').toBe('rejected');
   await expect
     .poll(
       async () =>
@@ -134,4 +134,36 @@ test('R2-17: rejected lifecycle — Comet remote_start is refused end to end', a
       { timeout: 15000 },
     )
     .toBe('rejected');
+});
+
+test('R2-17: timed_out lifecycle — Bison window_vent times out end to end', async ({ page }) => {
+  test.setTimeout(240_000);
+  await register(page, `e2e-lc-to-${Date.now()}@voltlink.test`);
+  await enableDemo(page);
+
+  const vres = await page.request.get('/api/v1/vehicles');
+  const vbody = (await vres.json()) as {
+    data?: { id: string; displayName?: string }[];
+  };
+  const bison = (vbody.data ?? []).find((v) => (v.displayName ?? '').includes('Bison'));
+  expect(bison, 'Bison exists in the demo fleet').toBeTruthy();
+  await page.goto(`/vehicles/${bison!.id}`);
+  await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
+  const vehicleId = bison!.id;
+
+  await page.getByRole('button', { name: /Vent windows/ }).click();
+
+  const issued = await newestCommand(page, vehicleId);
+  const final = await waitTerminal(page, issued.id);
+  expect(final.status, 'Bison window_vent must reach timed_out').toBe('timed_out');
+  await expect
+    .poll(
+      async () =>
+        (await page
+          .locator(`[data-command-id="${issued.id}"]`)
+          .first()
+          .getAttribute('data-status')) ?? '',
+      { timeout: 15000 },
+    )
+    .toBe('timed_out');
 });
