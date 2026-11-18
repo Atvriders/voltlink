@@ -211,8 +211,7 @@ function SecurityTab() {
   const deletePasskey = useMutation({
     mutationFn: (id: string) => api(`/api/v1/auth/passkeys/${id}`, { method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['passkeys'] }),
-    onError: (e) =>
-      setError(e instanceof ApiError ? e.message : 'Could not remove the passkey.'),
+    onError: (e) => setError(e instanceof ApiError ? e.message : 'Could not remove the passkey.'),
   });
 
   const registerPasskey = async () => {
@@ -378,7 +377,8 @@ function TotpModal({ open, onClose }: { open: boolean; onClose: () => void }) {
     onError: (e) => setError(e instanceof ApiError ? e.message : 'Invalid code'),
   });
   const disable = useMutation({
-    mutationFn: () => api('/api/v1/auth/mfa/totp/disable', { method: 'POST' }),
+    // R2-88: the current code is sent and verified server-side.
+    mutationFn: () => api('/api/v1/auth/mfa/totp/disable', { method: 'POST', body: { code } }),
     onSuccess: () => {
       refresh();
       onClose();
@@ -666,4 +666,3 @@ function PrivacyTab() {
     </div>
   );
 }
-

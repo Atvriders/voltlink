@@ -33,6 +33,7 @@ import {
   totpDisable,
   totpSetup,
   verifyEmail,
+  verifyTotpForUser,
   verifyPasskeyRegistration,
 } from '../auth/service';
 import { createApiKey, revokeApiKey } from '../auth/apikeys';
@@ -362,6 +363,20 @@ authRouter.post(
         'This endpoint requires an interactive session.',
         403,
       );
+    // R2-88: a current TOTP code must prove possession before disabling.
+    const { code } = (req.body ?? {}) as { code?: string };
+    if (!code || !/^\d{6}$/.test(code)) {
+      res.status(400).json({
+        error: { code: 'VALIDATION', message: 'A current 6-digit code is required.' },
+      });
+      return;
+    }
+    if (!(await verifyTotpForUser(actor.userId, code))) {
+      res.status(401).json({
+        error: { code: 'INVALID_CODE', message: 'That code is not valid.' },
+      });
+      return;
+    }
     await totpDisable(actor.userId);
     res.json({ data: { ok: true } });
   },

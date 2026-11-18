@@ -197,6 +197,43 @@ describe('page render coverage', () => {
     await waitFor(() => expect(authState.login).toHaveBeenCalled());
   });
 
+  it('drives the {mfaRequired} login path with a TOTP code (TI-36)', async () => {
+    authState.login.mockResolvedValueOnce({
+      mfaRequired: true,
+      methods: ['totp', 'recovery_code'],
+    });
+    const LoginPage = (await import('./LoginPage')).default;
+    renderPage('/login', <LoginPage />);
+    await waitFor(() => expect(apiMock).toHaveBeenCalledWith('/api/v1/auth/setup-status'));
+    await userEvent.type(screen.getByLabelText(/Email/), 'alice@example.test');
+    await userEvent.type(screen.getByLabelText(/Password/), 'password-12345');
+    await userEvent.click(screen.getAllByRole('button', { name: /^Sign in$/i })[0]!);
+    const codeField = await screen.findByPlaceholderText('6-digit code');
+    await userEvent.type(codeField, '123456');
+    await userEvent.click(screen.getByRole('button', { name: /Verify/ }));
+    await waitFor(() => expect(authState.loginMfa).toHaveBeenCalledWith({ code: '123456' }));
+  });
+
+  it('drives the {mfaRequired} login path with a recovery code (TI-36)', async () => {
+    authState.login.mockResolvedValueOnce({
+      mfaRequired: true,
+      methods: ['totp', 'recovery_code'],
+    });
+    const LoginPage = (await import('./LoginPage')).default;
+    renderPage('/login', <LoginPage />);
+    await waitFor(() => expect(apiMock).toHaveBeenCalledWith('/api/v1/auth/setup-status'));
+    await userEvent.type(screen.getByLabelText(/Email/), 'alice@example.test');
+    await userEvent.type(screen.getByLabelText(/Password/), 'password-12345');
+    await userEvent.click(screen.getAllByRole('button', { name: /^Sign in$/i })[0]!);
+    await userEvent.click(await screen.findByRole('checkbox', { name: /Use a recovery code/ }));
+    const codeField = await screen.findByPlaceholderText('Recovery code');
+    await userEvent.type(codeField, 'AAAA-BBBB-CCCC-DDDD');
+    await userEvent.click(screen.getByRole('button', { name: /Verify/ }));
+    await waitFor(() =>
+      expect(authState.loginMfa).toHaveBeenCalledWith({ recoveryCode: 'AAAA-BBBB-CCCC-DDDD' }),
+    );
+  });
+
   it('renders the step-up dialog with method buttons', async () => {
     const { StepUpDialogHost } = await import('../components/StepUpDialog');
     const { setStepUpHandler, requestStepUp } = await import('../lib/stepUpBus');
@@ -204,11 +241,13 @@ describe('page render coverage', () => {
     let resolveFn: (v: boolean) => void = () => undefined;
     const p = new Promise<boolean>((r) => (resolveFn = r));
     act(() => {
-      void requestStepUp(['password', 'totp']).then(resolveFn);
+      void requestStepUp(['password', 'totp', 'recovery_code']).then(resolveFn);
     });
     expect(await screen.findByText(/Step-up required/i)).toBeTruthy();
     expect(screen.getByRole('button', { name: /Password/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Authenticator/i })).toBeTruthy();
+    // TI-36: the recovery-code method is offered too.
+    expect(screen.getByRole('button', { name: /Recovery code/i })).toBeTruthy();
     setStepUpHandler(null);
     await act(async () => {
       resolveFn(false);

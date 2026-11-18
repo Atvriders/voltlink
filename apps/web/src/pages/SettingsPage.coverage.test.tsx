@@ -44,7 +44,13 @@ const authState = {
   login: vi.fn().mockResolvedValue({}),
   loginMfa: vi.fn().mockResolvedValue({ id: 'u1' }),
   logout: vi.fn().mockResolvedValue(undefined),
-  refresh: vi.fn().mockResolvedValue(undefined),
+  // TI-36: a faithful refresh — the API flips totpEnabled on confirm/disable.
+  refresh: vi.fn(async () => {
+    const me = (await apiMock('/api/v1/auth/me')) as {
+      totpEnabled?: boolean;
+    };
+    authState.user = { ...authState.user, ...me };
+  }),
 };
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => authState }));
 
@@ -67,7 +73,10 @@ const sessionFixture = [
   },
 ];
 
+const meState: { totpEnabled: boolean } = { totpEnabled: false };
+
 beforeEach(() => {
+  meState.totpEnabled = false;
   authState.user.totpEnabled = false;
   apiMock.mockImplementation(async (path: string, opts?: { method?: string }) => {
     if (path === '/api/v1/users/settings' && !opts?.method)
@@ -76,11 +85,17 @@ beforeEach(() => {
     if (path === '/api/v1/auth/passkeys') return [];
     if (path === '/api/v1/auth/passkeys/options')
       return { optionsJSON: { challenge: 'ch', rpId: 'localhost', user: { id: 'u1' } } };
+    if (path === '/api/v1/auth/me') return { totpEnabled: meState.totpEnabled };
     if (path === '/api/v1/auth/mfa/totp/setup')
       return { secret: 'JBSWY3DPEHPK3PXP', otpauthUrl: 'otpauth://totp/x' };
-    if (path === '/api/v1/auth/mfa/totp/confirm')
+    if (path === '/api/v1/auth/mfa/totp/confirm') {
+      meState.totpEnabled = true;
       return { recoveryCodes: ['AAAA-BBBB-CCCC-DDDD', 'EEEE-FFFF-GGGG-HHHH'] };
-    if (path === '/api/v1/auth/mfa/totp/disable') return {};
+    }
+    if (path === '/api/v1/auth/mfa/totp/disable') {
+      meState.totpEnabled = false;
+      return {};
+    }
     if (path === '/api/v1/users/change-password') return {};
     if (path === '/api/v1/auth/sessions') return sessionFixture;
     if (path === '/api/v1/auth/sessions/revoke-others') return {};
@@ -120,7 +135,8 @@ describe('SettingsPage', () => {
     await waitFor(() =>
       expect(
         apiMock.mock.calls.some(
-          (c) => c[0] === '/api/v1/users/settings' && (c[1] as { method?: string })?.method === 'PATCH',
+          (c) =>
+            c[0] === '/api/v1/users/settings' && (c[1] as { method?: string })?.method === 'PATCH',
         ),
       ).toBe(true),
     );
@@ -131,10 +147,14 @@ describe('SettingsPage', () => {
     expect(await screen.findByText('Active sessions')).toBeTruthy();
     expect(await screen.findByText('Firefox on Linux')).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: 'Revoke' }));
-    await waitFor(() => expect(apiMock.mock.calls.some((c) => String(c[0]).endsWith('/revoke'))).toBe(true));
+    await waitFor(() =>
+      expect(apiMock.mock.calls.some((c) => String(c[0]).endsWith('/revoke'))).toBe(true),
+    );
     await userEvent.click(screen.getByRole('button', { name: /Sign out all other sessions/ }));
     await waitFor(() =>
-      expect(apiMock.mock.calls.some((c) => c[0] === '/api/v1/auth/sessions/revoke-others')).toBe(true),
+      expect(apiMock.mock.calls.some((c) => c[0] === '/api/v1/auth/sessions/revoke-others')).toBe(
+        true,
+      ),
     );
   });
 
@@ -144,28 +164,56 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('link', { name: /Back to Profile settings/ })).toBeTruthy();
   });
 
-  it('runs the full TOTP setup: setup, confirm, recovery view', async () => {
+  it('runs the full TOTP setup: setup, confirm, recovery view (TI-36)', async () => {
     renderSettings('/settings/security');
     await userEvent.click(await screen.findByRole('button', { name: /Set up TOTP/ }));
     await userEvent.click(await screen.findByRole('button', { name: /Generate secret/ }));
     expect(await screen.findByText(/Scan this key/)).toBeTruthy();
     await userEvent.type(screen.getByLabelText('Verification code'), '123456');
     await userEvent.click(screen.getByRole('button', { name: /Verify & enable/ }));
+    // MR2: the recovery-code view is preferred over the disable form right
+    // after enabling (the old branch order rendered the disable form).
     expect(await screen.findByText('TOTP enabled!')).toBeTruthy();
+    expect(screen.queryByLabelText('Current code')).toBeNull();
     expect(screen.getAllByText(/AAAA-BBBB/).length).toBeGreaterThan(0);
+    // The confirm body carries the typed code.
+    expect(
+      apiMock.mock.calls.some(
+        (c) =>
+          c[0] === '/api/v1/auth/mfa/totp/confirm' &&
+          (c[1] as { body?: { code?: string } })?.body?.code === '123456',
+      ),
+    ).toBe(true);
     await userEvent.click(screen.getByRole('button', { name: 'Done' }));
     await waitFor(() => expect(screen.queryByText('TOTP enabled!')).toBeNull());
+    // TI-36: the faithful refresh flipped totpEnabled — the card now offers
+    // Disable TOTP.
+    await waitFor(() => expect(screen.getByRole('button', { name: /Disable TOTP/ })).toBeTruthy());
   });
 
-  it('disables TOTP from the modal when enabled', async () => {
+  it('disables TOTP from the modal and sends the typed code (TI-36/R2-88)', async () => {
     authState.user.totpEnabled = true;
+    meState.totpEnabled = true;
     renderSettings('/settings/security');
     await userEvent.click((await screen.findAllByRole('button', { name: /Disable TOTP/ }))[0]!);
-    await userEvent.type(await screen.findByLabelText('Current code'), '654321');
+    // MR3: the just-used code is never prefilled — the field starts empty.
+    const field = await screen.findByLabelText('Current code');
+    expect((field as HTMLInputElement).value).toBe('');
+    await userEvent.type(field, '654321');
     await userEvent.click(screen.getAllByRole('button', { name: 'Disable TOTP' })[1]!);
     await waitFor(() =>
-      expect(apiMock.mock.calls.some((c) => c[0] === '/api/v1/auth/mfa/totp/disable')).toBe(true),
+      expect(
+        apiMock.mock.calls.some(
+          (c) =>
+            c[0] === '/api/v1/auth/mfa/totp/disable' &&
+            (c[1] as { body?: { code?: string } })?.body?.code === '654321',
+        ),
+      ).toBe(true),
     );
+    // TI-36: the refresh() after disable reads the flipped server state (the
+    // jsdom mock cannot re-render without a context update; the label flip is
+    // proven by the setup test above).
+    await waitFor(() => expect(meState.totpEnabled).toBe(false));
   });
 
   it('registers a passkey and shows the success message', async () => {
@@ -173,7 +221,7 @@ describe('SettingsPage', () => {
       if (path === '/api/v1/auth/passkeys') return [];
       if (path === '/api/v1/auth/passkeys/options')
         return { optionsJSON: { challenge: 'ch', rpId: 'localhost', user: { id: 'u1' } } };
-      if (path === '/api/v1/auth/passkeys' ) return {};
+      if (path === '/api/v1/auth/passkeys') return {};
       return {};
     });
     renderSettings('/settings/security');
@@ -187,7 +235,9 @@ describe('SettingsPage', () => {
     await userEvent.type(await screen.findByLabelText('Current password'), 'old-pass-123');
     await userEvent.type(screen.getByLabelText(/New password/), 'new-pass-456');
     await userEvent.click(screen.getByRole('button', { name: /Change password/ }));
-    expect(await screen.findByText('Password changed. Other sessions were signed out.')).toBeTruthy();
+    expect(
+      await screen.findByText('Password changed. Other sessions were signed out.'),
+    ).toBeTruthy();
   });
 
   it('saves retention policy and runs the delete-account flow', async () => {
