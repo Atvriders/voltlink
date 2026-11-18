@@ -38,11 +38,22 @@ async function loadDriveTracker(
 > {
   const row = await prisma.driveTracker.findUnique({ where: { vehicleId } });
   if (!row) return undefined;
+  // P-DETECT: the DB Json column round-trips point timestamps as strings —
+  // hydrate them back to Dates or the close path throws on .getTime().
+  const pts = (
+    (row.points ?? []) as {
+      ts: string | Date;
+      lat: number;
+      lon: number;
+      speedKmh: number;
+      batteryPct: number | null;
+    }[]
+  ).map((p) => ({ ...p, ts: p.ts instanceof Date ? p.ts : new Date(p.ts) }));
   return {
     startedAt: row.startedAt,
     startedPct: row.startedPct ?? 0,
     maxSpeed: row.maxSpeed,
-    points: (row.points ?? []) as unknown[],
+    points: pts,
     lastMoving: row.lastMoving,
   };
 }
@@ -76,6 +87,13 @@ const chargeTracker = new Map<
   string,
   { startedAt: Date; startPct: number; peakKw: number; lastPct: number }
 >();
+
+/** Test/ops hook: drop the in-process tracker caches (simulates a process
+ * restart; the DB DriveTracker rows must carry the state across). */
+export function resetIngestTrackers(): void {
+  driveTracker.clear();
+  chargeTracker.clear();
+}
 const geofenceState = new Map<string, boolean>(); // `${geofenceId}:${vehicleId}` -> inside
 
 const MIN_DRIVE_SPEED = 8; // km/h
@@ -294,8 +312,14 @@ async function detectDrive(
         lastMoving: now,
       };
       driveTracker.set(vehicleId, current);
-      await persistDriveTracker(vehicleId, current);
-    } else {
+      // P-DETECT: drive_started fires on the FIRST moving sample, not when
+      // the drive row is finally written.
+      void dispatchTrigger({ type: 'drive_started', vehicleId, data: {} });
+    }
+    {
+      // P-DETECT: the FIRST moving sample is a route point too — the old code
+      // only recorded points from the second moving sample on, so drives lost
+      // their first segment and, after a restart, their true startAt.
       current.maxSpeed = Math.max(current.maxSpeed, speed);
       current.lastMoving = now;
       if (typeof state.lat === 'number' && typeof state.lon === 'number') {
@@ -307,7 +331,10 @@ async function detectDrive(
           batteryPct: state.batteryPercent ?? null,
         });
         if (current.points.length > 4000) current.points.splice(0, 2000); // bound memory
-        if (current.points.length % 10 === 0) await persistDriveTracker(vehicleId, current);
+        // P-DETECT: persist on EVERY moving sample. The old every-10th-point
+        // write dropped up to 9 points when the process restarted mid-drive,
+        // truncating or splitting drives.
+        await persistDriveTracker(vehicleId, current);
       }
     }
     return;
@@ -376,7 +403,6 @@ async function detectDrive(
       })),
     });
     await recomputeAggregate(vehicleId, first.ts);
-    void dispatchTrigger({ type: 'drive_started', vehicleId, data: { driveId: drive.id } });
   }
 }
 
