@@ -1,9 +1,7 @@
 // R2-07 / TI-36: real TOTP enrolment through the UI, then a recovery-code
 // sign-in against the live MFA step.
 import { test, expect } from '@playwright/test';
-import otplib from 'otplib';
-
-const { authenticator } = otplib;
+import { generate } from 'otplib';
 import { register } from './helpers';
 
 test.describe('TOTP enrolment and MFA sign-in (R2-07/TI-36)', () => {
@@ -27,7 +25,7 @@ test.describe('TOTP enrolment and MFA sign-in (R2-07/TI-36)', () => {
         .textContent()
     )?.trim();
     expect(secret).toBeTruthy();
-    const code = authenticator.generate(secret!);
+    const code = generate({ secret: secret! });
     await page.getByLabel('Verification code').fill(code);
     await page.getByRole('button', { name: /Verify & enable/ }).click();
     await expect(page.getByText('TOTP enabled!')).toBeVisible();
