@@ -12,6 +12,7 @@ import {
   openWebhookUrl,
 } from '../notifications/simpleWebhooks';
 import { sealJson, openJson, randomToken } from '../core/crypto';
+import { EVENT_TYPES } from '@voltlink/shared';
 import {
   isKnownPushEndpoint,
   pushConfig,
@@ -141,12 +142,32 @@ notificationsRouter.put(
       return;
     }
     // F-ONBOARD: the onboarding master toggle updates every event row for a
-    // channel at once.
+    // channel at once. Upsert, not updateMany: a brand-new user has NO rows,
+    // and updateMany made the onboarding toggle a silent no-op for exactly the
+    // users onboarding is for (TI-20).
     if (allEvents === true) {
-      await prisma.notificationPreference.updateMany({
-        where: { userId: sessionActor(req).userId, channel },
-        data: { enabled },
-      });
+      await prisma.$transaction(
+        EVENT_TYPES.map((event) =>
+          prisma.notificationPreference.upsert({
+            where: {
+              userId_channel_event_severity: {
+                userId: sessionActor(req).userId,
+                channel,
+                event,
+                severity: 'info',
+              },
+            },
+            update: { enabled },
+            create: {
+              userId: sessionActor(req).userId,
+              channel,
+              event,
+              severity: 'info',
+              enabled,
+            },
+          }),
+        ),
+      );
       res.json({ data: { ok: true } });
       return;
     }

@@ -41,7 +41,12 @@ async function newSession() {
   return { u, agent, token: session.token };
 }
 
-async function putJson(agent: ReturnType<typeof request.agent>, token: string, path: string, body: object) {
+async function putJson(
+  agent: ReturnType<typeof request.agent>,
+  token: string,
+  path: string,
+  body: object,
+) {
   let res = await agent.put(path).send(body);
   if (res.status === 403 && res.body?.error?.code === 'CSRF') {
     const cookies = (res.headers['set-cookie'] ?? []) as unknown as string[];
@@ -83,5 +88,33 @@ describe('onboarding persistence (F-ONBOARD)', () => {
     });
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((r) => r.enabled === false)).toBe(true);
+  });
+
+  it('stores the opt-out for a brand-new user with no preference rows (TI-20)', async () => {
+    const { u, agent, token } = await newSession();
+    // No seeded rows at all: the onboarding toggle must CREATE them.
+    const before = await prisma.notificationPreference.count({
+      where: { userId: u.id },
+    });
+    expect(before).toBe(0);
+    const res = await putJson(agent, token, '/api/v1/notifications/preferences', {
+      channel: 'in_app',
+      allEvents: true,
+      enabled: false,
+    });
+    expect(res.status).toBe(200);
+    const get = await agent.get('/api/v1/notifications/preferences');
+    expect(get.status).toBe(200);
+    const prefs = (get.body.data.prefs ?? []) as {
+      channel: string;
+      event: string;
+      enabled: boolean;
+    }[];
+    const inApp = prefs.filter((p) => p.channel === 'in_app');
+    expect(inApp.length).toBeGreaterThanOrEqual(15); // every EVENT_TYPES row
+    expect(inApp.every((p) => p.enabled === false)).toBe(true);
+    const events = new Set(inApp.map((p) => p.event));
+    const { EVENT_TYPES } = await import('@voltlink/shared');
+    for (const event of EVENT_TYPES) expect(events.has(event)).toBe(true);
   });
 });
