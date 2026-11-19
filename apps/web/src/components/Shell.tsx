@@ -413,7 +413,15 @@ function ThemeMenu() {
   );
 }
 
-function AccountMenu({ align = 'left', email }: { align?: 'left' | 'right'; email: string }) {
+function AccountMenu({
+  align = 'left',
+  up = true,
+  email,
+}: {
+  align?: 'left' | 'right';
+  up?: boolean;
+  email: string;
+}) {
   const { logout } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -464,7 +472,9 @@ function AccountMenu({ align = 'left', email }: { align?: 'left' | 'right'; emai
                 : (i - 1 + items.length) % items.length;
             items[next]?.focus();
           }}
-          className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} bottom-full z-40 mb-1 w-56 rounded-xl border border-line bg-panel p-1 shadow-2xl`}
+          className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} ${
+            up ? 'bottom-full mb-1' : 'top-full mt-1'
+          } z-40 w-56 rounded-xl border border-line bg-panel p-1 shadow-2xl`}
           role="menu"
         >
           <p role="none" className="px-2.5 py-1.5 text-xs text-faint">
@@ -671,7 +681,7 @@ export function Shell({ user, children }: { user: UserPublic | null; children: R
               )}
             </Link>
             <div className="lg:hidden">
-              <AccountMenu align="right" email={user?.email ?? ''} />
+              <AccountMenu align="right" up={false} email={user?.email ?? ''} />
             </div>
             {/* R2-36: theme + settings collapse into the account menu on phones. */}
             <div className="hidden lg:block">

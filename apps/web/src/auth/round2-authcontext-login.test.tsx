@@ -46,8 +46,7 @@ const userA: UserPublic = {
   theme: 'voltlink-dark',
   totpEnabled: false,
   demoEnabled: true,
-  isInstanceAdmin: true,
-};
+} as UserPublic;
 
 function Probe() {
   const { user, login, loginMfa } = useAuth();

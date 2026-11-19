@@ -12,7 +12,7 @@ test.describe('theme reachable on phones (R2-36/TI-27)', () => {
     await register(page, email);
 
     await page.goto('/vehicles', { waitUntil: 'domcontentloaded' });
-    const accountMenu = page.getByRole('button', { name: 'Account menu' }).first();
+    const accountMenu = page.locator('button[aria-label="Account menu"]:visible');
     await accountMenu.waitFor({ state: 'visible', timeout: 15000 });
     await accountMenu.click();
 

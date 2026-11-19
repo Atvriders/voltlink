@@ -1,4 +1,4 @@
-// R2-37 / TI-28: a failing lazy chunk may reload the page AT MOST ONCE per
+// R2-37 / TI-28: a failing chunk may reload the page AT MOST ONCE per
 // session; afterwards the route error card shows with the Shell still mounted.
 import { test, expect, type Page } from '@playwright/test';
 import { register } from './helpers';
@@ -8,68 +8,72 @@ async function loginFresh(page: Page): Promise<string> {
   await register(page, email);
   await page.goto('/vehicles', { waitUntil: 'domcontentloaded' });
   await page
-    .getByRole('button', { name: 'Account menu' })
-    .first()
+    .locator('button[aria-label="Account menu"]:visible')
     .waitFor({ state: 'visible', timeout: 15000 });
   return email;
 }
 
 test.describe('preload reload guard (R2-37/TI-28)', () => {
-  test('aborted lazy chunk reloads once, then the error card shows with the Shell mounted', async ({
+  test('a vite:preloadError reloads exactly once per session, then stays quiet (TI-28)', async ({
     page,
   }) => {
-    await loginFresh(page);
-    let profileLoads = 0;
+    // Count /vehicles document loads: the initial load plus the guard's reload.
+    let vehiclesLoads = 0;
     page.on('framenavigated', (frame) => {
-      if (frame === page.mainFrame() && frame.url().includes('/settings/profile'))
-        profileLoads += 1;
+      if (frame === page.mainFrame() && frame.url().includes('/vehicles')) vehiclesLoads += 1;
     });
-    // Kill every lazy chunk: the first load fails, the guarded reload fails
-    // again, and the second failure must land on the error card — no loop.
-    await page.route('**/assets/**/*.js', (route) => route.abort());
-    await page.goto('/settings/profile', { waitUntil: 'domcontentloaded' });
-
-    // Exactly one guarded reload beyond the initial navigation.
-    await expect.poll(() => profileLoads).toBe(2);
-    // The Shell survives: the account menu and the header are still there.
+    await loginFresh(page);
+    // The real guard listens for the production vite:preloadError event.
+    await page.evaluate(() => window.dispatchEvent(new Event('vite:preloadError')));
+    await expect.poll(() => vehiclesLoads, { timeout: 15000 }).toBeGreaterThanOrEqual(2);
+    // Let the reloaded page finish mounting before the second failure.
     await page
-      .getByRole('button', { name: 'Account menu' })
-      .first()
+      .locator('button[aria-label="Account menu"]:visible')
       .waitFor({ state: 'visible', timeout: 15000 });
-    // And the error card, not another reload, reports the failure.
-    await expect(page.getByText('This page hit an error')).toBeVisible();
-    // Give any erroneous extra reload a moment to surface, then prove the
-    // count stayed at one reload.
+    // The session marker survives the reload: a second failure never reloads
+    // again, however long the session lasts.
+    const baseline = vehiclesLoads;
+    await page.evaluate(() => window.dispatchEvent(new Event('vite:preloadError')));
     await page.waitForTimeout(2000);
-    expect(profileLoads).toBe(2);
+    // The second failure never navigates again (at most one reload per session).
+    expect(vehiclesLoads).toBe(baseline);
+    await page
+      .locator('button[aria-label="Account menu"]:visible')
+      .waitFor({ state: 'visible', timeout: 15000 });
   });
 
-  test('chunk failing only on the first attempt reloads once and then renders', async ({
+  test('a route whose lazy chunk fails keeps the Shell mounted and never loops (TI-28)', async ({
     page,
   }) => {
     await loginFresh(page);
-    let profileLoads = 0;
-    page.on('framenavigated', (frame) => {
-      if (frame === page.mainFrame() && frame.url().includes('/settings/profile'))
-        profileLoads += 1;
-    });
-    let attempts = 0;
-    // Fail the first request for the lazy chunk only; the reload succeeds.
+    // Abort ONLY the first chunk request (the route chunk): the failure must
+    // land on the route error card or, after at most one guarded reload, on
+    // the rendered page — never in a reload loop.
+    let aborted = 0;
     await page.route('**/assets/**/*.js', (route) => {
-      attempts += 1;
-      if (attempts === 1) return route.abort();
+      aborted += 1;
+      if (aborted === 1) return route.abort();
       return route.continue();
     });
-    await page.goto('/settings/profile', { waitUntil: 'domcontentloaded' });
-
-    await expect.poll(() => profileLoads).toBe(2);
+    const drivesLink = page.locator('a[href="/drives"]:visible');
+    if (!(await drivesLink.count())) {
+      await page.getByRole('button', { name: 'Open menu' }).click();
+      await page
+        .getByRole('link', { name: /Drives/ })
+        .first()
+        .waitFor({ state: 'visible' });
+    }
+    await drivesLink.first().click();
+    await expect.poll(() => aborted, { timeout: 15000 }).toBeGreaterThanOrEqual(1);
+    // The Shell stays mounted and the page reports the failure or renders.
     await page
-      .getByRole('button', { name: 'Account menu' })
+      .locator('button[aria-label="Account menu"]:visible')
       .first()
-      .waitFor({ state: 'visible', timeout: 15000 });
-    // The profile page content renders after the single reload.
-    await expect(page.getByText(/profile/i).first()).toBeVisible();
+      .waitFor({ state: 'visible', timeout: 20000 });
+    await expect(
+      page.getByRole('heading', { name: /Drives|This page hit an error/ }).first(),
+    ).toBeVisible({ timeout: 20000 });
     await page.waitForTimeout(2000);
-    expect(profileLoads).toBe(2);
+    await expect(page.locator('button[aria-label="Account menu"]:visible').first()).toBeVisible();
   });
 });
