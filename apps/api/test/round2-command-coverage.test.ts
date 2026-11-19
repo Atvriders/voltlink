@@ -440,7 +440,7 @@ describe('processCommandJob dispatch and confirm (M4)', () => {
   // with an audit event. Today's schema still cascades (onDelete: Cascade),
   // so the spec assertion fails; the schema/product fix lands in step 5
   // (PROGRESS honesty entry 2026-11-18).
-  it.skip('TI-44 a command for a removed vehicle keeps its history and ends failed', async () => {
+  it('TI-44 a command for a removed vehicle keeps its history and ends failed', async () => {
     const ghost = await prisma.vehicle.create({
       data: {
         organizationId: world.org.id,

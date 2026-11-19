@@ -267,7 +267,7 @@ describe('R2-19 A-TOTPLOGIN: ceremony negatives', () => {
   // ignoring the session user — the assertion below documents the defect and
   // the test stays skipped until the product fix (step 5) lands. See the
   // PROGRESS.md honesty entry of 2026-11-18.
-  it.skip("A's ceremony cookie cannot complete a sign-in under B's session", async () => {
+  it("A's ceremony cookie cannot complete a sign-in under B's session", async () => {
     const admin = await prisma.user.findFirstOrThrow({
       where: { email: { startsWith: 'cnotes-admin-' } },
     });

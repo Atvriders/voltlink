@@ -134,7 +134,7 @@ describe('automation actions are real (N-ACTIONSTUBS)', { tags: ['automation'] }
   // are issued. The current engine (engine.ts) re-runs every action on each
   // attempt; the assertion below documents the defect and the engine fix lands
   // in step 5 (PROGRESS honesty entry 2026-11-18).
-  it.skip('TI-13 maxRetries retries only the failed action, without duplicate side effects', async () => {
+  it('TI-13 maxRetries retries only the failed action, without duplicate side effects', async () => {
     const { vehicle, automation } = await mkWorld();
     const auto = await automation({
       maxRetries: 2,
