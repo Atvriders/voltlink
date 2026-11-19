@@ -45,7 +45,7 @@ afterAll(async () => {
   await prisma.$disconnect();
 }, 15_000);
 
-describe('Z-AUTOXTENANT', () => {
+describe('Z-AUTOXTENANT', { tags: ['security'] }, () => {
   it('a system event only fires automations of the vehicle own organization', async () => {
     const alice = await mkUser(`mx-alice-${Date.now()}@example.test`);
     const bob = await mkUser(`mx-bob-${Date.now()}@example.test`);
@@ -374,7 +374,7 @@ describe('R2-06 export honors grants', () => {
   }, 30_000);
 });
 
-describe('Z-RETENTION', () => {
+describe('Z-RETENTION', { tags: ['retention'] }, () => {
   it('applies each organization own retention, not only the global value', async () => {
     const u = await mkUser(`mx-ret-${Date.now()}@example.test`);
     const org = await prisma.organization.create({

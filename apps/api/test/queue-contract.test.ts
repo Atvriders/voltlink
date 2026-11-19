@@ -40,7 +40,7 @@ afterAll(async () => {
   await prisma.$disconnect();
 }, 15_000);
 
-describe('queue contract', () => {
+describe('queue contract', { tags: ['queue'] }, () => {
   it('every QueueName has exactly one startWorker in worker.ts (TI-57 source inventory)', () => {
     const workerSrc = readFileSync(path.join(__dirname, '..', 'src', 'worker.ts'), 'utf8');
     for (const name of Object.keys(QUEUE_DEFAULTS)) {

@@ -9,30 +9,41 @@ import { execSync } from 'node:child_process';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-// Spec categories that must never report zero tests (guide 08 §7 minimums).
-const REQUIRED: Record<string, string[]> = {
-  authz: ['authz'],
-  authn: ['authn', 'auth'],
-  'command-validation': ['command', 'commands', 'roles', 'api.integration'],
-  telemetry: ['telemetry', 'poller', 'ingest'],
-  automation: ['automation', 'phase5'],
-  notification: ['notification', 'notifications', 'webhook', 'phase5'],
-  'rate-limit': ['rate-limit', 'ratelimit', 'rate', 'security'],
-  retention: ['retention', 'privacy'],
-  realtime: ['realtime', 'sse'],
-  'status-page': ['status', 'status-page'],
-  incident: ['incident'],
-  scheduler: ['scheduler'],
-  migration: ['migration'],
-  queue: ['queue'],
-  observability: ['observability', 'metrics'],
-  security: ['security', 'xss', 'csrf'],
+// Spec categories that must never report zero PASSED tests (guide 08 §7
+// minimums). Each maps to the vitest tag declared on the owning suites.
+const REQUIRED: Record<string, string> = {
+  authz: 'authz',
+  authn: 'authn',
+  'command-validation': 'command-validation',
+  telemetry: 'telemetry',
+  automation: 'automation',
+  notification: 'notification',
+  'rate-limit': 'rate-limit',
+  retention: 'retention',
+  realtime: 'realtime',
+  'status-page': 'status-page',
+  incident: 'incident',
+  scheduler: 'scheduler',
+  migration: 'migration',
+  queue: 'queue',
+  observability: 'observability',
+  security: 'security',
 };
 
 type VitestReport = {
   numTotalTests: number;
   numPassedTests: number;
-  testResults?: { name: string; status: string }[];
+  numFailedTests: number;
+  testResults?: {
+    name: string;
+    status: string;
+    assertionResults?: {
+      name: string;
+      fullName: string;
+      status: string;
+      tags?: string[];
+    }[];
+  }[];
 };
 
 type PlaywrightReport = {
@@ -53,14 +64,22 @@ function main(): void {
   const vitest = readJson<VitestReport>(path.join(root, 'test-results', 'vitest.json'));
   const pw = readJson<PlaywrightReport>(path.join(root, 'test-results', 'playwright.json'));
 
+  // R2-47: count PASSED tests by their declared tags (guide 08 §5), not
+  // filename substrings, and never count failed/skipped files or tests.
   const categories: Record<string, number> = {};
+  const byTag: Record<string, number> = {};
   if (vitest?.testResults) {
     for (const r of vitest.testResults) {
-      for (const [cat, needles] of Object.entries(REQUIRED)) {
-        if (needles.some((n) => r.name.toLowerCase().includes(n))) {
-          categories[cat] = (categories[cat] ?? 0) + 1;
+      if (r.status !== 'passed') continue;
+      for (const a of r.assertionResults ?? []) {
+        if (a.status !== 'passed') continue;
+        for (const tag of a.tags ?? []) {
+          byTag[tag] = (byTag[tag] ?? 0) + 1;
         }
       }
+    }
+    for (const [cat, tag] of Object.entries(REQUIRED)) {
+      categories[cat] = byTag[tag] ?? 0;
     }
   }
 
@@ -72,8 +91,13 @@ function main(): void {
         return 'unknown';
       }
     })(),
-    vitest: { total: vitest?.numTotalTests ?? 0, passed: vitest?.numPassedTests ?? 0 },
+    vitest: {
+      total: vitest?.numTotalTests ?? 0,
+      passed: vitest?.numPassedTests ?? 0,
+      failed: vitest?.numFailedTests ?? 0,
+    },
     playwright: { total: pw?.stats?.expected ?? 0, skipped: pw?.stats?.skipped ?? 0 },
+    byTag,
     categories,
     generatedAt: new Date().toISOString(),
   };

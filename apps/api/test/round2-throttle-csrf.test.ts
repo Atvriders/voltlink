@@ -63,7 +63,7 @@ async function loginPost(ip: string, email: string, password: string) {
   return res;
 }
 
-describe('R2-55 remote lockout', () => {
+describe('R2-55 remote lockout', { tags: ['rate-limit'] }, () => {
   it('failures from one IP never lock the account for another IP', async () => {
     const email = `r255.${Date.now()}@test.dev`;
     const user = await prisma.user.create({

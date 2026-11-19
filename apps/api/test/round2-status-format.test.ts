@@ -27,7 +27,7 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe('badge + rss fidelity (N-STATUSMISC)', () => {
+describe('badge + rss fidelity (N-STATUSMISC)', { tags: ['status-page'] }, () => {
   it('badge.svg is wide enough to hold the longest label text', async () => {
     await ensureComponents();
     await prisma.statusComponent.updateMany({ data: { status: 'major_outage' } });

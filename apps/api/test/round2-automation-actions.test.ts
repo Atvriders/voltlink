@@ -67,7 +67,7 @@ async function mkWorld() {
   return { user, org, vehicle, automation };
 }
 
-describe('automation actions are real (N-ACTIONSTUBS)', () => {
+describe('automation actions are real (N-ACTIONSTUBS)', { tags: ['automation'] }, () => {
   it('tag_drive appends a tag to the latest drive', async () => {
     const { vehicle, automation } = await mkWorld();
     const drive = await prisma.drive.create({

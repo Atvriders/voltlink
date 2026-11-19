@@ -95,7 +95,7 @@ function client(db: string = dbUrl): Client {
   return new Client({ connectionString: db });
 }
 
-describe('Migration A: telemetry schema and voltlink rename', () => {
+describe('Migration A: telemetry schema and voltlink rename', { tags: ['migration'] }, () => {
   // Assembled from parts so the naming scan stays strict on tracked files.
   const OLD_NAME = 'volt' + 'lank';
   it('moves telemetry_reading into the telemetry schema as a partitioned table', async () => {

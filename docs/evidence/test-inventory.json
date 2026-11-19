@@ -1,30 +1,49 @@
 {
-  "commit": "24f0d09eef5626eeaf3d3c90d66942bc6e747d97",
+  "commit": "9b1ceb95ba20ca8aa74fb53520db9f1b31666fa6",
   "vitest": {
-    "total": 1949,
-    "passed": 1949
+    "total": 2449,
+    "passed": 2446,
+    "failed": 0
   },
   "playwright": {
-    "total": 51,
-    "skipped": 1
+    "total": 0,
+    "skipped": 0
+  },
+  "byTag": {
+    "authz": 1756,
+    "migration": 5,
+    "incident": 3,
+    "observability": 4,
+    "authn": 1,
+    "queue": 2,
+    "automation": 4,
+    "command-validation": 4,
+    "telemetry": 6,
+    "notification": 3,
+    "scheduler": 1,
+    "security": 1,
+    "retention": 1,
+    "realtime": 1,
+    "status-page": 2,
+    "rate-limit": 1
   },
   "categories": {
-    "command-validation": 2,
-    "realtime": 1,
-    "authz": 1,
-    "authn": 2,
-    "migration": 2,
-    "status-page": 2,
-    "incident": 1,
-    "observability": 1,
-    "rate-limit": 3,
-    "security": 3,
-    "automation": 1,
-    "notification": 2,
+    "authz": 1756,
+    "authn": 1,
+    "command-validation": 4,
+    "telemetry": 6,
+    "automation": 4,
+    "notification": 3,
+    "rate-limit": 1,
     "retention": 1,
-    "queue": 1,
+    "realtime": 1,
+    "status-page": 2,
+    "incident": 3,
     "scheduler": 1,
-    "telemetry": 1
+    "migration": 5,
+    "queue": 2,
+    "observability": 4,
+    "security": 1
   },
-  "generatedAt": "2026-11-02T15:28:35.395Z"
+  "generatedAt": "2026-11-19T00:12:19.523Z"
 }

@@ -15,7 +15,7 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe('scheduler leader lock', () => {
+describe('scheduler leader lock', { tags: ['scheduler'] }, () => {
   it('two concurrent ticks plan a due vehicle exactly once', async () => {
     const org = await prisma.organization.create({ data: { name: `SL-${Date.now()}` } });
     const account = await prisma.providerAccount.create({

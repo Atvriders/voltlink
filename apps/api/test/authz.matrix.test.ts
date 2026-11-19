@@ -1021,7 +1021,7 @@ describe('authorization golden cells', () => {
   });
 });
 
-describe('authorization matrix', () => {
+describe('authorization matrix', { tags: ['authz'] }, () => {
   it('covers every registered route', () => {
     expect(ROUTE_TABLE.length).toBeGreaterThanOrEqual(20);
   });

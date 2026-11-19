@@ -17,6 +17,15 @@ void envs;
 // so they are mocked here (the options generators stay real). This lets the
 // passkey success paths run end to end.
 const wb = vi.hoisted(() => ({ vAuth: vi.fn(), vReg: vi.fn() }));
+// TI-14: never open a real SMTP socket (the old run ECONNREFUSED on 127.0.0.1:
+// 1025). nodemailer is replaced so sendMail's 'smtp' branch resolves offline.
+const mailMock = vi.hoisted(() => ({
+  sent: vi.fn().mockResolvedValue({ accepted: ['a@b.c'], response: '250 ok' }),
+}));
+vi.mock('nodemailer', () => ({
+  default: { createTransport: () => ({ sendMail: mailMock.sent }) },
+  createTransport: () => ({ sendMail: mailMock.sent }),
+}));
 vi.mock('@simplewebauthn/server', async (importOriginal) => {
   const mod = await importOriginal<typeof import('@simplewebauthn/server')>();
   return {
@@ -154,15 +163,27 @@ describe('setup and registration modes', () => {
     // After bootstrap the instance is no longer in setup mode.
     expect((await setupStatus()).needsSetup).toBe(false);
     await prisma.organization.delete({
-      where: { id: (await prisma.appSetting.findUniqueOrThrow({ where: { key: 'instance.operatorOrgId' } })).value },
+      where: {
+        id: (
+          await prisma.appSetting.findUniqueOrThrow({ where: { key: 'instance.operatorOrgId' } })
+        ).value,
+      },
     });
     await prisma.appSetting.deleteMany({
-      where: { key: { in: ['instance.bootstrappedAt', 'instance.operatorOrgId', 'instance.registrationMode'] } },
+      where: {
+        key: {
+          in: ['instance.bootstrappedAt', 'instance.operatorOrgId', 'instance.registrationMode'],
+        },
+      },
     });
     // Re-seed a bootstrapped state like the tenancy migration would, so the
     // remaining suites in this worker DB behave normally.
     const org = await prisma.organization.create({
-      data: { kind: 'OPERATOR', name: 'VoltLink operators', memberships: { create: { userId: user.id, role: 'OWNER' } } },
+      data: {
+        kind: 'OPERATOR',
+        name: 'VoltLink operators',
+        memberships: { create: { userId: user.id, role: 'OWNER' } },
+      },
     });
     await prisma.appSetting.upsert({
       where: { key: 'instance.operatorOrgId' },
@@ -261,7 +282,9 @@ describe('setup and registration modes', () => {
       }),
     ).rejects.toMatchObject({ code: 'INVITE_REQUIRED' });
     await prisma.organization.delete({ where: { id: org.id } });
-    await prisma.user.deleteMany({ where: { id: { in: [host.id, result.kind === 'created' ? result.user.id : ''] } } });
+    await prisma.user.deleteMany({
+      where: { id: { in: [host.id, result.kind === 'created' ? result.user.id : ''] } },
+    });
   });
 
   it('handles open and closed modes', async () => {
@@ -329,7 +352,11 @@ describe('verification and password reset mail flows', () => {
       code: 'WEAK_PASSWORD',
     });
     await resetPassword(token, 'new-password-123');
-    const loginAfter = await login({ email: user.email, password: 'new-password-123', ip: '127.0.0.1' });
+    const loginAfter = await login({
+      email: user.email,
+      password: 'new-password-123',
+      ip: '127.0.0.1',
+    });
     expect(loginAfter.user?.id).toBe(user.id);
     // The reset token is single-use.
     await expect(resetPassword(token, 'another-password-123')).rejects.toMatchObject({
@@ -383,7 +410,9 @@ describe('TOTP and recovery codes', () => {
     expect(fresh.recoveryCodes.length).toBeGreaterThan(0);
 
     await totpDisable(user.id);
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).totpEnabled).toBe(false);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).totpEnabled).toBe(
+      false,
+    );
     await prisma.user.delete({ where: { id: user.id } });
   });
 
@@ -398,7 +427,11 @@ describe('TOTP and recovery codes', () => {
 
   it('login routes through MFA when TOTP is enabled', async () => {
     const user = await mkUser(`m.${Date.now()}@test.dev`, { totpEnabled: true });
-    const res = await login({ email: user.email, password: 'correct-horse-battery', ip: '1.1.1.1' });
+    const res = await login({
+      email: user.email,
+      password: 'correct-horse-battery',
+      ip: '1.1.1.1',
+    });
     expect(res.mfaRequired).toBe(true);
     expect(res.methods).toEqual(['totp', 'recovery_code']);
 
@@ -416,10 +449,12 @@ describe('sessions and passkey ceremonies', () => {
     const user = await mkUser(`s.${Date.now()}@test.dev`);
     const a = await createSession(user.id, '1.2.3.4', 'ua');
     const b = await createSession(user.id, '5.6.7.8', 'ua2');
-    const pub = publicUser(await prisma.user.update({
-      where: { id: user.id },
-      data: { suspendedAt: null, deletionRequestedAt: null, lockedAt: null, units: 'imperial' },
-    }));
+    const pub = publicUser(
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { suspendedAt: null, deletionRequestedAt: null, lockedAt: null, units: 'imperial' },
+      }),
+    );
     expect(pub.id).toBe(user.id);
 
     const sessions = await listSessions(user.id, a.sessionId);
@@ -449,7 +484,7 @@ describe('sessions and passkey ceremonies', () => {
 });
 
 describe('TOTP/session/passkey edge branches', () => {
-  const cookie = (name: string, value: string) => {};
+  const cookie = (_name: string, _value: string) => {};
   function cookieJar() {
     const jar: Record<string, string> = {};
     const res = { cookie: (n: string, v: string) => (jar[n] = v) };
@@ -521,7 +556,11 @@ describe('TOTP/session/passkey edge branches', () => {
   it('passkey login: unknown credential, success, and soft failure', async () => {
     const user = await mkUser(`pk.${Date.now()}@test.dev`);
     await expect(
-      passkeyLogin({ cookies: {} } as unknown as Request, { response: { id: 'nope' } } as never, '1.1.1.1'),
+      passkeyLogin(
+        { cookies: {} } as unknown as Request,
+        { response: { id: 'nope' } } as never,
+        '1.1.1.1',
+      ),
     ).rejects.toMatchObject({ code: 'PASSKEY_FAILED' });
 
     const cred = await prisma.passkeyCredential.create({
@@ -569,7 +608,11 @@ describe('TOTP/session/passkey edge branches', () => {
   it('passkey registration success and soft failures', async () => {
     const user = await mkUser(`pkreg.${Date.now()}@test.dev`);
     const { jar, res } = cookieJar();
-    await createCeremony(res as never, { purpose: 'passkey_register', userId: user.id, challenge: 'regch1' });
+    await createCeremony(res as never, {
+      purpose: 'passkey_register',
+      userId: user.id,
+      challenge: 'regch1',
+    });
     const req = { cookies: { vl_ceremony: jar['vl_ceremony'] } } as unknown as Request;
     wb.vReg.mockResolvedValueOnce({
       verified: true,
@@ -593,7 +636,11 @@ describe('TOTP/session/passkey edge branches', () => {
 
     // verified:true but no registrationInfo hits the second guard.
     const { jar: jar2, res: res2 } = cookieJar();
-    await createCeremony(res2 as never, { purpose: 'passkey_register', userId: user.id, challenge: 'regch2' });
+    await createCeremony(res2 as never, {
+      purpose: 'passkey_register',
+      userId: user.id,
+      challenge: 'regch2',
+    });
     wb.vReg.mockResolvedValueOnce({ verified: true, registrationInfo: undefined });
     await expect(
       verifyPasskeyRegistration(
@@ -667,11 +714,10 @@ describe('TOTP/session/passkey edge branches', () => {
       challenge: 'stepch3',
     });
     await expect(
-      stepUp(
-        actor,
-        { cookies: { vl_ceremony: jar3['vl_ceremony'] } } as unknown as Request,
-        { method: 'passkey', response: { id: cred.credentialId } as never },
-      ),
+      stepUp(actor, { cookies: { vl_ceremony: jar3['vl_ceremony'] } } as unknown as Request, {
+        method: 'passkey',
+        response: { id: cred.credentialId } as never,
+      }),
     ).rejects.toMatchObject({ code: 'PASSKEY_MISMATCH' });
 
     // recovery code

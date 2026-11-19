@@ -42,7 +42,7 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe('status platform', () => {
+describe('status platform', { tags: ['incident'] }, () => {
   it('public bundle never contains private data', async () => {
     const res = await request(base).get('/api/v1/status');
     expect(res.status).toBe(200);

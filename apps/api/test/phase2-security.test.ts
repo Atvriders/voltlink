@@ -116,121 +116,125 @@ async function sessionFor(userId: string, stepped = false) {
   return { token, sessionId };
 }
 
-describe('TOTP lifecycle (A-TOTPLOGIN, A-TOTPSETUP, A-TOTPSTORE, A-RECOVERY)', () => {
-  it('setup needs step-up; secret is sealed; login uses /login/mfa; codes and recovery codes are single-use', async () => {
-    const user = await mkUser(`p2-totp-${Date.now()}@example.test`);
-    const { token: plain } = await sessionFor(user.id, false);
-    const a0 = agentFor(plain);
-    const noStep = await withCsrf(a0, (csrf) =>
-      a0.post('/api/v1/auth/mfa/totp/setup').set('x-vl-csrf', csrf).send({}),
-    );
-    expect(noStep.status).toBe(403);
-    expect(noStep.body.error.code).toBe('STEP_UP_REQUIRED');
+describe(
+  'TOTP lifecycle (A-TOTPLOGIN, A-TOTPSETUP, A-TOTPSTORE, A-RECOVERY)',
+  { tags: ['authn'] },
+  () => {
+    it('setup needs step-up; secret is sealed; login uses /login/mfa; codes and recovery codes are single-use', async () => {
+      const user = await mkUser(`p2-totp-${Date.now()}@example.test`);
+      const { token: plain } = await sessionFor(user.id, false);
+      const a0 = agentFor(plain);
+      const noStep = await withCsrf(a0, (csrf) =>
+        a0.post('/api/v1/auth/mfa/totp/setup').set('x-vl-csrf', csrf).send({}),
+      );
+      expect(noStep.status).toBe(403);
+      expect(noStep.body.error.code).toBe('STEP_UP_REQUIRED');
 
-    const { token } = await sessionFor(user.id, true);
-    const a = agentFor(token);
-    const setup = await withCsrf(a, (csrf) =>
-      a.post('/api/v1/auth/mfa/totp/setup').set('x-vl-csrf', csrf).send({}),
-    );
-    expect(setup.status).toBe(200);
-    const secret = setup.body.data.secret as string;
-    expect(secret.length).toBeGreaterThan(10);
-    const pending = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
-    expect(pending.totpPendingSealed).toBeTruthy();
-    expect(JSON.stringify(pending)).not.toContain(secret);
+      const { token } = await sessionFor(user.id, true);
+      const a = agentFor(token);
+      const setup = await withCsrf(a, (csrf) =>
+        a.post('/api/v1/auth/mfa/totp/setup').set('x-vl-csrf', csrf).send({}),
+      );
+      expect(setup.status).toBe(200);
+      const secret = setup.body.data.secret as string;
+      expect(secret.length).toBeGreaterThan(10);
+      const pending = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect(pending.totpPendingSealed).toBeTruthy();
+      expect(JSON.stringify(pending)).not.toContain(secret);
 
-    const confirm = await withCsrf(a, (csrf) =>
-      a
-        .post('/api/v1/auth/mfa/totp/confirm')
-        .set('x-vl-csrf', csrf)
-        .send({ code: totpCode(secret) }),
-    );
-    expect(confirm.status).toBe(200);
-    const recoveryCodes = confirm.body.data.recoveryCodes as string[];
-    expect(recoveryCodes.length).toBeGreaterThanOrEqual(5);
-    const row = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
-    expect(row.totpSecretSealed).toBeTruthy();
-    expect(row.totpSecretSealed).not.toContain(secret); // A-TOTPSTORE: sealed at rest
+      const confirm = await withCsrf(a, (csrf) =>
+        a
+          .post('/api/v1/auth/mfa/totp/confirm')
+          .set('x-vl-csrf', csrf)
+          .send({ code: totpCode(secret) }),
+      );
+      expect(confirm.status).toBe(200);
+      const recoveryCodes = confirm.body.data.recoveryCodes as string[];
+      expect(recoveryCodes.length).toBeGreaterThanOrEqual(5);
+      const row = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect(row.totpSecretSealed).toBeTruthy();
+      expect(row.totpSecretSealed).not.toContain(secret); // A-TOTPSTORE: sealed at rest
 
-    // A-TOTPLOGIN: the old endpoint is gone; the real flow is login -> /login/mfa.
-    let old = await request(base)
-      .post('/api/v1/auth/login/totp')
-      .send({ email: user.email, code: '123456' });
-    if (old.status === 403 && old.body?.error?.code === 'CSRF') {
-      const cookie = ((old.headers['set-cookie'] ?? []) as string[]).join('; ');
-      const csrf = old.headers['set-cookie']?.[0]?.split(';')[0]?.split('=')[1] ?? '';
-      old = await request(base)
+      // A-TOTPLOGIN: the old endpoint is gone; the real flow is login -> /login/mfa.
+      let old = await request(base)
         .post('/api/v1/auth/login/totp')
-        .set('cookie', cookie)
-        .set('x-vl-csrf', csrf)
         .send({ email: user.email, code: '123456' });
-    }
-    expect(old.status).toBe(404);
+      if (old.status === 403 && old.body?.error?.code === 'CSRF') {
+        const cookie = ((old.headers['set-cookie'] ?? []) as string[]).join('; ');
+        const csrf = old.headers['set-cookie']?.[0]?.split(';')[0]?.split('=')[1] ?? '';
+        old = await request(base)
+          .post('/api/v1/auth/login/totp')
+          .set('cookie', cookie)
+          .set('x-vl-csrf', csrf)
+          .send({ email: user.email, code: '123456' });
+      }
+      expect(old.status).toBe(404);
 
-    const l1 = await withCsrf(a, (csrf) =>
-      a
-        .post('/api/v1/auth/login')
-        .set('x-vl-csrf', csrf)
-        .send({ email: user.email, password: 'password123' }),
-    );
-    expect(l1.status).toBe(200);
-    expect(l1.body.data.mfaRequired).toBe(true);
-    // Use the NEXT time step: the confirm above already consumed the current one.
-    const code = totpCode(secret, Date.now() + 30_000);
-    const m1 = await withCsrf(a, (csrf) =>
-      a.post('/api/v1/auth/login/mfa').set('x-vl-csrf', csrf).send({ code }),
-    );
-    expect(m1.status).toBe(200);
-    expect(((m1.headers['set-cookie'] ?? []) as string[]).join('; ')).toContain('vl_session');
+      const l1 = await withCsrf(a, (csrf) =>
+        a
+          .post('/api/v1/auth/login')
+          .set('x-vl-csrf', csrf)
+          .send({ email: user.email, password: 'password123' }),
+      );
+      expect(l1.status).toBe(200);
+      expect(l1.body.data.mfaRequired).toBe(true);
+      // Use the NEXT time step: the confirm above already consumed the current one.
+      const code = totpCode(secret, Date.now() + 30_000);
+      const m1 = await withCsrf(a, (csrf) =>
+        a.post('/api/v1/auth/login/mfa').set('x-vl-csrf', csrf).send({ code }),
+      );
+      expect(m1.status).toBe(200);
+      expect(((m1.headers['set-cookie'] ?? []) as string[]).join('; ')).toContain('vl_session');
 
-    // Replay of the same TOTP code is refused (A-TOTPSTORE replay guard).
-    const l2 = await withCsrf(a, (csrf) =>
-      a
-        .post('/api/v1/auth/login')
-        .set('x-vl-csrf', csrf)
-        .send({ email: user.email, password: 'password123' }),
-    );
-    expect(l2.status).toBe(200);
-    const m2 = await withCsrf(a, (csrf) =>
-      a.post('/api/v1/auth/login/mfa').set('x-vl-csrf', csrf).send({ code }),
-    );
-    expect(m2.status).toBe(401);
-    expect(m2.body.error.code).toBe('MFA_FAILED');
+      // Replay of the same TOTP code is refused (A-TOTPSTORE replay guard).
+      const l2 = await withCsrf(a, (csrf) =>
+        a
+          .post('/api/v1/auth/login')
+          .set('x-vl-csrf', csrf)
+          .send({ email: user.email, password: 'password123' }),
+      );
+      expect(l2.status).toBe(200);
+      const m2 = await withCsrf(a, (csrf) =>
+        a.post('/api/v1/auth/login/mfa').set('x-vl-csrf', csrf).send({ code }),
+      );
+      expect(m2.status).toBe(401);
+      expect(m2.body.error.code).toBe('MFA_FAILED');
 
-    // Recovery code works once, then burns (A-RECOVERY).
-    const l3 = await withCsrf(a, (csrf) =>
-      a
-        .post('/api/v1/auth/login')
-        .set('x-vl-csrf', csrf)
-        .send({ email: user.email, password: 'password123' }),
-    );
-    expect(l3.status).toBe(200);
-    const m3 = await withCsrf(a, (csrf) =>
-      a
-        .post('/api/v1/auth/login/mfa')
-        .set('x-vl-csrf', csrf)
-        .send({ recoveryCode: recoveryCodes[0] }),
-    );
-    expect(m3.status).toBe(200);
-    expect(((m3.headers['set-cookie'] ?? []) as string[]).join('; ')).toContain('vl_session');
-    const l4 = await withCsrf(a, (csrf) =>
-      a
-        .post('/api/v1/auth/login')
-        .set('x-vl-csrf', csrf)
-        .send({ email: user.email, password: 'password123' }),
-    );
-    expect(l4.status).toBe(200);
-    const m4 = await withCsrf(a, (csrf) =>
-      a
-        .post('/api/v1/auth/login/mfa')
-        .set('x-vl-csrf', csrf)
-        .send({ recoveryCode: recoveryCodes[0] }),
-    );
-    expect(m4.status).toBe(401);
+      // Recovery code works once, then burns (A-RECOVERY).
+      const l3 = await withCsrf(a, (csrf) =>
+        a
+          .post('/api/v1/auth/login')
+          .set('x-vl-csrf', csrf)
+          .send({ email: user.email, password: 'password123' }),
+      );
+      expect(l3.status).toBe(200);
+      const m3 = await withCsrf(a, (csrf) =>
+        a
+          .post('/api/v1/auth/login/mfa')
+          .set('x-vl-csrf', csrf)
+          .send({ recoveryCode: recoveryCodes[0] }),
+      );
+      expect(m3.status).toBe(200);
+      expect(((m3.headers['set-cookie'] ?? []) as string[]).join('; ')).toContain('vl_session');
+      const l4 = await withCsrf(a, (csrf) =>
+        a
+          .post('/api/v1/auth/login')
+          .set('x-vl-csrf', csrf)
+          .send({ email: user.email, password: 'password123' }),
+      );
+      expect(l4.status).toBe(200);
+      const m4 = await withCsrf(a, (csrf) =>
+        a
+          .post('/api/v1/auth/login/mfa')
+          .set('x-vl-csrf', csrf)
+          .send({ recoveryCode: recoveryCodes[0] }),
+      );
+      expect(m4.status).toBe(401);
 
-    await prisma.user.delete({ where: { id: user.id } });
-  });
-});
+      await prisma.user.delete({ where: { id: user.id } });
+    });
+  },
+);
 
 describe('MFA ceremony edges (A-TOTPLOGIN)', () => {
   it('A-TOTPLOGIN: /login/mfa refuses no, consumed, expired and foreign ceremonies', async () => {

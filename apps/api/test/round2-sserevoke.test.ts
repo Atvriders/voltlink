@@ -84,7 +84,7 @@ function openStream(token: string) {
   };
 }
 
-describe('A-SSEREVOKE immediate stream termination', () => {
+describe('A-SSEREVOKE immediate stream termination', { tags: ['realtime'] }, () => {
   it('revoke-others closes the victim stream with session_revoked', async () => {
     const owner = await prisma.user.create({
       data: {

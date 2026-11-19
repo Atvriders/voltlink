@@ -66,7 +66,7 @@ async function mkOutbox(userId: string, channel: string) {
   });
 }
 
-describe('notifications never lie about delivery (N-DROPPED)', () => {
+describe('notifications never lie about delivery (N-DROPPED)', { tags: ['notification'] }, () => {
   it('a webhook 4xx is retried, never marked sent', async () => {
     const user = await mkUser();
     await prisma.webhookEndpoint.create({

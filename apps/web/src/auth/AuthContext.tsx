@@ -22,7 +22,10 @@ export { THEMES, normalizeThemeId } from './themes';
 interface AuthState {
   user: UserPublic | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<{
+  login: (
+    email: string,
+    password: string,
+  ) => Promise<{
     mfaRequired?: boolean;
     methods?: string[];
   }>;
@@ -138,6 +141,12 @@ export function useAuth(): AuthState {
 }
 
 let mediaListenerAttached = false;
+
+/** Test hook: the attach-once flag is module-private; tests reset it so a
+ * fresh matchMedia mock receives the change listener. */
+export function resetThemeMediaListenerForTests(): void {
+  mediaListenerAttached = false;
+}
 
 function systemDark(): boolean {
   return window.matchMedia('(prefers-color-scheme: dark)').matches;

@@ -25,7 +25,7 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe('observability', () => {
+describe('observability', { tags: ['observability'] }, () => {
   it('/metrics exposes process and business families', async () => {
     const res = await request(base).get('/metrics');
     expect(res.status).toBe(200);

@@ -82,7 +82,7 @@ const state = (over: Partial<VehicleState>): VehicleState =>
     ...over,
   }) as VehicleState;
 
-describe('telemetry ingest', () => {
+describe('telemetry ingest', { tags: ['telemetry'] }, () => {
   it('writes snapshot, location and a partitioned telemetry reading', async () => {
     const { vehicle } = await mkWorld();
     await ingestVehicleState(vehicle, state({ fetchedAt: new Date().toISOString() }), {

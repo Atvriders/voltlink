@@ -118,7 +118,7 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe('issueCommand guards (M4)', () => {
+describe('issueCommand guards (M4)', { tags: ['command-validation'] }, () => {
   it('rejects unknown commands, inline step-up and invalid params', async () => {
     await expect(
       issueCommand(world.actor, world.vehicle.id, 'bogus_cmd' as never, {}),
