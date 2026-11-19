@@ -27,7 +27,7 @@ function runValidator(args: string[]): { status: number; out: string } {
 }
 
 describe('C-ASSETVALID validator', () => {
-  it('fails with SPEC_INVALID on a malformed GLB', () => {
+  it('fails with SPEC_INVALID on a malformed GLB (R2-63)', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'voltlink-bad-'));
     try {
       writeFileSync(
@@ -36,7 +36,10 @@ describe('C-ASSETVALID validator', () => {
       );
       const { status, out } = runValidator(['--staged', dir]);
       expect(status).not.toBe(0);
-      expect(out).toMatch(/FAIL|Error|error/i);
+      // R2-63: a malformed GLB is a SPEC_INVALID finding — never an uncaught
+      // crash ('Missing required GLB JSON chunk.') and never a config ENOENT.
+      expect(out).toContain('SPEC_INVALID');
+      expect(out).not.toMatch(/ENOENT|Missing required GLB JSON chunk/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
