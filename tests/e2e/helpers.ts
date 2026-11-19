@@ -95,15 +95,23 @@ export async function enableDemo(page: Page): Promise<void> {
   await expect(page.getByText(/^\d+ demo vehicles$/)).toBeVisible({ timeout: 30000 });
   // The user's OWN fleet must be fully provisioned before any navigation:
   // poll GET /api/v1/vehicles until 5 vehicles exist.
+  // C-E2EHOLLOW: exactly 5 of the USER'S OWN fleet, each WITH state
+  // (this endpoint is session-scoped). '>= 5' would accept foreign vehicles
+  // in the list — the hollow-out bug itself — and a count without state would
+  // accept an unprovisioned fleet.
   await expect
     .poll(
       async () => {
         const r = await page.request.get('/api/v1/vehicles');
-        if (!r.ok()) return 0;
-        const body = (await r.json()) as { data?: unknown[] };
-        return Array.isArray(body.data) ? body.data.length : 0;
+        if (!r.ok()) return { count: -1, withState: false };
+        const body = (await r.json()) as { data?: { state?: unknown }[] };
+        const data = Array.isArray(body.data) ? body.data : [];
+        return {
+          count: data.length,
+          withState: data.length === 5 && data.every((v) => v && v.state),
+        };
       },
       { timeout: 30000 },
     )
-    .toBeGreaterThanOrEqual(5);
+    .toEqual({ count: 5, withState: true });
 }
