@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import type { TestProject } from 'vitest/node';
+import { dropDatabases } from './drop-databases';
 
 // R2-24: a per-run prefix so teardown drops only what THIS run created — never
 // every voltlink_test_% database on the shared server. The default is unique
@@ -87,15 +88,16 @@ export default async function setup(project: TestProject) {
   project.provide('dbTemplate', TEMPLATE);
   project.provide('dbPrefix', PREFIX);
   return async () => {
+    // R2-24: drop each database separately, retry 42501/55006 with a plain
+    // DROP, carry on when one fails, print everything, and fail the run if
+    // anything remains (process.exitCode as well as throwing).
     const c = new pg.Client({ connectionString: withDb(adminUrl, 'postgres') });
     await c.connect();
-    // Escape LIKE wildcards so the prefix is matched literally.
-    const like = PREFIX.replace(/[\\_%]/g, (ch) => `\\${ch}`) + '%';
-    const { rows } = await c.query<{ datname: string }>(
-      `SELECT datname FROM pg_database WHERE datname LIKE '${like}'`,
-    );
-    for (const r of rows) await c.query(`DROP DATABASE IF EXISTS "${r.datname}" WITH (FORCE)`);
-    await c.end();
+    try {
+      await dropDatabases(c, PREFIX);
+    } finally {
+      await c.end();
+    }
   };
 }
 
