@@ -185,3 +185,60 @@ describe('R2-20 first-run setup over HTTP on an unseeded database', () => {
     expect(bodyText).toContain('REGISTRATION_CLOSED');
   });
 });
+
+// R2-20: the generated-token path — VL_SETUP_TOKEN UNSET. The web role
+// generates the token at boot, stores only its hash, and the operator reads
+// the plaintext from the boot log; registering with that token must complete
+// first-run setup exactly like the configured token.
+it('R2-20 generated token (VL_SETUP_TOKEN unset) completes first-run setup', async () => {
+  const saved = process.env.VL_SETUP_TOKEN;
+  delete process.env.VL_SETUP_TOKEN;
+  // Unseed again: the suite bootstrapped and toggled modes before this
+  // test; the generated-token path needs a setup-state instance.
+  await prisma.appSetting.deleteMany({
+    where: { key: { in: ['instance.bootstrappedAt', 'instance.operatorOrgId'] } },
+  });
+  await prisma.user.deleteMany({});
+  await prisma.organization.deleteMany({});
+  try {
+    const { ensureSetupToken } = await import('../src/auth/setup-token');
+    const token = await ensureSetupToken();
+    expect(token).toBeTruthy();
+    expect(token!.length).toBeGreaterThanOrEqual(32);
+    const row = await prisma.appSetting.findUnique({
+      where: { key: 'instance.setupTokenHash' },
+    });
+    expect(row, 'generated token must be hashed at rest').toBeTruthy();
+    expect(row!.value).toBe(sha256hex(token!));
+
+    const email = `r20g-${uniq()}@test.dev`;
+    const res = await csrfAndPost('/api/v1/auth/register', {
+      email,
+      name: 'Generated Token User',
+      password: 'long-enough-123',
+      setupToken: token,
+    });
+    const bodyText = await res.text();
+    expect(res.status, bodyText).toBe(201);
+
+    const u = await prisma.user.findUniqueOrThrow({ where: { email } });
+    expect(u.isInstanceAdmin, 'first admin must be instance admin').toBe(true);
+    const opOrg = await prisma.appSetting.findUnique({
+      where: { key: 'instance.operatorOrgId' },
+    });
+    expect(opOrg).toBeTruthy();
+    const membership = await prisma.membership.findFirst({
+      where: { organizationId: opOrg!.value, userId: u.id, role: 'OWNER' },
+    });
+    expect(membership, 'first admin must own the operator org').toBeTruthy();
+    // The hash row is consumed by the bootstrap.
+    const after = await prisma.appSetting.findUnique({
+      where: { key: 'instance.setupTokenHash' },
+    });
+    expect(after).toBeNull();
+    await prisma.user.delete({ where: { id: u.id } });
+  } finally {
+    if (saved === undefined) delete process.env.VL_SETUP_TOKEN;
+    else process.env.VL_SETUP_TOKEN = saved;
+  }
+});
