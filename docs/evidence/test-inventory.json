@@ -1,12 +1,12 @@
 {
-  "commit": "9b1ceb95ba20ca8aa74fb53520db9f1b31666fa6",
+  "commit": "826c48d58ea1634a26ef228927a0f3bf78344bb9",
   "vitest": {
-    "total": 2449,
-    "passed": 2446,
+    "total": 2453,
+    "passed": 2450,
     "failed": 0
   },
   "playwright": {
-    "total": 0,
+    "total": 8,
     "skipped": 0
   },
   "byTag": {
@@ -45,5 +45,5 @@
     "observability": 4,
     "security": 1
   },
-  "generatedAt": "2026-11-19T00:12:19.523Z"
+  "generatedAt": "2026-11-19T01:28:58.670Z"
 }
