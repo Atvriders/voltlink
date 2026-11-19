@@ -263,14 +263,23 @@ describe('R2-19 A-TOTPLOGIN: ceremony negatives', () => {
   });
 
   // R2-19/TI-15: presenting A's ceremony cookie with B's session must be
-  // refused. CURRENT PRODUCT BEHAVIOUR: loginMfa follows the ceremony owner,
-  // ignoring the session user — the assertion below documents the defect and
-  // the test stays skipped until the product fix (step 5) lands. See the
   // PROGRESS.md honesty entry of 2026-11-18.
   it("A's ceremony cookie cannot complete a sign-in under B's session", async () => {
     const admin = await prisma.user.findFirstOrThrow({
       where: { email: { startsWith: 'cnotes-admin-' } },
     });
+    // A REAL valid code: with the defect the ceremony owner completes the
+    // sign-in (200 + session cookie) and the 401 assertion fails.
+    const setup = await totpSetup(admin.id);
+    const confirmCode = await moduleTotp.generate({ secret: setup.secret });
+    await totpConfirm(admin.id, confirmCode);
+    // The confirm consumed the replay slot for this step; clear it so the
+    // login below is judged on the session-ceremony mismatch, not replay.
+    await prisma.user.update({
+      where: { id: admin.id },
+      data: { totpLastStep: null },
+    });
+
     const userB = await prisma.user.create({
       data: {
         email: `cnotes-f-${uniq()}@test.dev`,
@@ -301,7 +310,7 @@ describe('R2-19 A-TOTPLOGIN: ceremony negatives', () => {
         'x-vl-csrf': c.header,
         cookie: `${c.cookie}; vl_session=${sessionB}; ${CEREMONY_COOKIE}=${handle}`,
       },
-      body: JSON.stringify({ code: '123456' }),
+      body: JSON.stringify({ code: await moduleTotp.generate({ secret: setup.secret }) }),
     });
     const bodyText = await res.text();
     expect(res.status, bodyText).toBe(401);
