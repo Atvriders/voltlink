@@ -6,11 +6,13 @@ process.env.NODE_ENV = 'test';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
+import http from 'node:http';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { buildApp } from '../src/app';
 import { ROUTE_TABLE, type RoutePolicy } from '../src/authz/policy';
 import { prisma } from '../src/core/db';
+import { startHub, stopHub } from '../src/realtime/hub';
 import { initRedis } from '../src/core/redis';
 import { ensureComponents } from '../src/status/service';
 import { sha256hex, randomId } from '../src/core/crypto';
@@ -546,9 +548,13 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => server.once('listening', resolve));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   w = await world();
+  // TI-42/R2-46: GET /realtime answers 503 NOT_READY without the hub; the
+  // matrix must exercise the real stream, so the hub is up for the run.
+  await startHub();
 }, 60_000);
 
 afterAll(async () => {
+  stopHub();
   await w.cleanup();
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await prisma.$disconnect();
@@ -666,12 +672,32 @@ const SKIP_ROUTES: ReadonlySet<string> = new Set([
   // Session-only routes whose matrix answer is refined per persona above.
   'POST /api/v1/providers/demo/connect',
   'POST /api/v1/users/demo-mode',
+  // TI-42/R2-46: documented 503s in the test environment — the Tesla
+  // authorize route answers 503 until Tesla OAuth is configured (fake-Fleet
+  // flow in tesla.spec.ts) and refresh answers 503 while the provider has no
+  // credentials. The matrix asserts the DOCUMENTED answer per persona instead
+  // of a generic <500 that would hide a crash behind the same 503.
+  'GET /api/v1/providers/tesla/authorize',
+  'POST /api/v1/vehicles/:id/refresh',
+  'GET /api/v1/realtime', // SSE: handled specially below (never-ending stream)
 ]);
 
 // Per-persona expected statuses for skip routes. A function returning null
 // asserts only "never 5xx" (the allow/deny paths of that route are covered by
 // the dedicated suites named in SKIP_ROUTES).
 const SKIP_EXPECT: Record<string, (persona: Persona) => number | null> = {
+  // TI-42/R2-46: exact documented 503 for personas the route serves
+  // (Tesla OAuth unconfigured in this env; provider has no credentials);
+  // denied personas keep the skip-route <500 guard and are covered by the
+  // route suites.
+  'GET /api/v1/providers/tesla/authorize': (p) => {
+    const pol = ROUTE_TABLE.find((r) => r.path === '/api/v1/providers/tesla/authorize')?.policy;
+    return pol && personaHas(pol, p) ? 503 : null;
+  },
+  'POST /api/v1/vehicles/:id/refresh': (p) => {
+    const pol = ROUTE_TABLE.find((r) => r.path === '/api/v1/vehicles/:id/refresh')?.policy;
+    return pol && personaHas(pol, p) ? 503 : null;
+  },
   'POST /api/v1/auth/logout': (p) => (p.startsWith('apiKey') ? 403 : null),
   'POST /api/v1/auth/login': () => null, // throttled empty-body logins answer 429
   'POST /api/v1/auth/login/mfa': () => 401, // no ceremony
@@ -1116,6 +1142,29 @@ describe('authorization matrix', { tags: ['authz'] }, () => {
           return;
         }
 
+        if (key === 'GET /api/v1/realtime') {
+          // TI-42/R2-46: an SSE stream never ends — assert the status on the
+          // response event and destroy the socket.
+          await new Promise<void>((resolve, reject) => {
+            const req = http.request(
+              `${base}/api/v1/realtime`,
+              {
+                headers: persona.startsWith('apiKey')
+                  ? { Authorization: `Bearer ${w.tokens[persona]}` }
+                  : { Cookie: `vl_session=${w.tokens[persona]}` },
+              },
+              (res) => {
+                expect(res.statusCode, `${key} as ${persona}`).toBe(expected ? 200 : 403);
+                res.destroy();
+                resolve();
+              },
+            );
+            req.on('error', reject);
+            req.end();
+          });
+          return;
+        }
+
         if (SKIP_ROUTES.has(key)) {
           if (key === 'POST /api/v1/auth/logout' && !persona.startsWith('apiKey')) {
             // Session personas log out a throwaway session so the matrix
@@ -1142,13 +1191,11 @@ describe('authorization matrix', { tags: ['authz'] }, () => {
           const exact = expectFn(persona);
           if (exact !== null) {
             expect(res.status, `${key} as ${persona}`).toBe(exact);
-          } else {
-            expect(
-              res.status,
-              `${key} as ${persona} (allow path covered by dedicated suite)`,
-            ).toBeLessThan(500);
+            return;
           }
-          expect(res.status, `${key} as ${persona} must never answer 5xx`).toBeLessThan(500);
+          expect(res.status, `${key} as ${persona} (path covered by dedicated suite)`).toBeLessThan(
+            500,
+          );
           return;
         }
 
@@ -1164,7 +1211,13 @@ describe('authorization matrix', { tags: ['authz'] }, () => {
           const agent = agentFor(w.tokens[persona]);
           const res = await csrfRequest(agent, method, url ?? route.path, body);
           expect(res.status, `${key} as ${persona} must never answer 5xx`).toBeLessThan(500);
-          if (!expected) expect([401, 403, 404]).toContain(res.status);
+          if (expected) {
+            // TI-42/R2-46: body-target routes carry real payloads here, so an
+            // allowed cell must not be answered as a deny.
+            expect([401, 403, 404], `${key} as ${persona} must allow`).not.toContain(res.status);
+          } else {
+            expect([401, 403, 404]).toContain(res.status);
+          }
           return;
         }
 
@@ -1178,20 +1231,32 @@ describe('authorization matrix', { tags: ['authz'] }, () => {
         if (url === null) throw new Error(`no fixture for ${key} as ${persona}`);
         const res = await csrfRequest(agent, method, url, body);
         if (expected) {
-          if (res.status >= 500) {
-            // A 5xx is only acceptable as a documented, coded answer — a bare
-            // crash-500 (no error.code) fails the cell.
-            expect(
-              res.body?.error?.code,
-              `${key} as ${persona} must carry a documented error code on 5xx`,
-            ).toBeTruthy();
-          } else {
-            expect([401, 403, 404], `${key} as ${persona} must allow`).not.toContain(res.status);
-          }
+          // TI-42/R2-46: a coded 5xx is still a 5xx — allowed cells never
+          // accept one (mutations M7/M12 hid behind the old coded exception).
+          expect(res.status, `${key} as ${persona} must never answer 5xx`).toBeLessThan(500);
+          expect([401, 403, 404], `${key} as ${persona} must allow`).not.toContain(res.status);
         } else {
           expect([401, 403, 404], `${key} as ${persona} must deny`).toContain(res.status);
         }
       });
     },
   );
+});
+
+describe('list endpoints never leak foreign ids (M3b/R2-46)', () => {
+  it('drives, vehicles, commands and charging lists contain only own-org rows', async () => {
+    const agent = request.agent(base).set('Cookie', `vl_session=${w.tokens.ownerA}`);
+    for (const [path, own, foreign] of [
+      ['/api/v1/drives', ids.vehicleA1, ids.vehicleB1],
+      ['/api/v1/vehicles', ids.vehicleA1, ids.vehicleB1],
+      ['/api/v1/commands', ids.vehicleA1, ids.vehicleB1],
+      ['/api/v1/charging', ids.vehicleA1, ids.vehicleB1],
+    ] as const) {
+      const res = await agent.get(path);
+      expect(res.status).toBe(200);
+      const text = JSON.stringify(res.body);
+      expect(text, `${path} must list own rows`).toContain(own);
+      expect(text, `${path} must not leak foreign rows`).not.toContain(foreign);
+    }
+  });
 });
