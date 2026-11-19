@@ -8,9 +8,11 @@ import {
   OPERATOR_ONLY_ROLES,
   OPERATOR_PERMISSIONS,
   ORG_PERMISSIONS,
+  ORG_ROLES,
   ROLE_PERMISSIONS,
   VEHICLE_PERMISSIONS,
 } from './roles';
+import { COMMAND_DEFINITIONS, HIGH_RISK_COMMANDS, RISK_LEVELS } from './commands';
 
 describe('role → permission matrix (golden)', () => {
   it('STATUS_MANAGER and SUPPORT have no vehicle permissions', () => {
@@ -80,5 +82,38 @@ describe('role → permission matrix (golden)', () => {
       'vehicles.history_edit',
       'vehicles.manage',
     ]);
+  });
+
+  describe('PL-01 restored tests (reverted from f6b5241)', () => {
+    it('every permission is granted to at least one role (PL-01)', () => {
+      const granted = new Set<string>();
+      for (const role of ORG_ROLES) {
+        for (const p of ROLE_PERMISSIONS[role]) granted.add(p);
+      }
+      for (const p of [...ORG_PERMISSIONS, ...VEHICLE_PERMISSIONS]) {
+        expect(granted.has(p), `permission ${p} is unassigned`).toBe(true);
+      }
+    });
+
+    it('unknown roles have no permissions (PL-01)', () => {
+      expect(ROLE_PERMISSIONS).not.toHaveProperty('SUPERUSER');
+      for (const key of Object.keys(ROLE_PERMISSIONS)) {
+        expect((ORG_ROLES as readonly string[]).includes(key), `${key} is not a defined role`).toBe(
+          true,
+        );
+      }
+    });
+
+    it('every command has a definition and high-risk commands are high (PL-01)', () => {
+      for (const [name, def] of Object.entries(COMMAND_DEFINITIONS)) {
+        expect(def.label.length).toBeGreaterThan(0);
+        expect([...RISK_LEVELS]).toContain(def.risk);
+        expect(name).toBeTypeOf('string');
+      }
+      expect(HIGH_RISK_COMMANDS.length).toBeGreaterThanOrEqual(3);
+      for (const cmd of HIGH_RISK_COMMANDS) {
+        expect(COMMAND_DEFINITIONS[cmd].risk).toBe('high');
+      }
+    });
   });
 });
