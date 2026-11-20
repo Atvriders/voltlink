@@ -36,7 +36,7 @@ test('live vehicle controls at project viewport', async ({ page }) => {
   await registerWithDemoFleet(page);
   await page.getByRole('button', { name: 'Live vehicle' }).first().click();
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 30000 });
-  await expect(page.getByText('Aurora', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Honk horn', exact: true })).toBeVisible();
   await page.waitForTimeout(1500);
   await expect(page).toHaveScreenshot('live-vehicle.png', {
     ...T,
