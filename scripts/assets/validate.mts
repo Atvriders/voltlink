@@ -594,7 +594,15 @@ for (const cls of classes) {
   for (const lodSuffix of ['', '_lod', '_lod2']) {
     const f = path.join(STAGED, `${cls}${lodSuffix}.glb`);
     if (!existsSync(f)) continue;
-    const doc = await load(f);
+    let doc: import('@gltf-transform/core').Document;
+    try {
+      doc = await load(f);
+    } catch (err) {
+      // Same as the per-file loop: a malformed GLB is a SPEC_INVALID
+      // finding, never an uncaught crash.
+      fail(f, 'SPEC_INVALID', `gltf parse failed: ${(err as Error).message.slice(0, 200)}`);
+      continue;
+    }
     const nodes = collectNodes(doc);
     names.push([...nodes.keys()].sort());
     for (const [name, node] of nodes) {
