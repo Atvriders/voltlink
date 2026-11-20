@@ -296,7 +296,9 @@ async function executeAction(
           source: 'automation',
         },
       });
-      return isPublic ? `Incident created${dry}` : `Incident created (private: public posting is operator-only)${dry}`;
+      return isPublic
+        ? `Incident created${dry}`
+        : `Incident created (private: public posting is operator-only)${dry}`;
     }
     case 'tag_drive': {
       if (!ctx.vehicleId) return `Tag drive skipped (no vehicle)${dry}`;
@@ -427,19 +429,31 @@ export async function runAutomation(
   }
 
   const actions = (row.actions ?? []) as { type: ActionType; params: Record<string, unknown> }[];
-  // maxRetries: failed actions are retried up to the configured count.
+  // maxRetries: TI-13 — the spec is per-ACTION retry. Only the FAILING
+  // actions are re-run on each attempt; successful actions execute exactly
+  // once, so side effects (notifications, commands) never duplicate.
   const attempts = Math.max(1, (row.maxRetries ?? 0) + 1);
-  let actionResults: { action: ActionType; ok: boolean; detail: string }[] = [];
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    actionResults = await executeActions(row.userId, actions, {
-      vehicleId: event.vehicleId ?? undefined,
-      vehicleName: vehicle?.displayName,
-      dryRun: !!opts.dryRun,
-      automationId: row.id,
-      organizationId: row.organizationId,
+  const finalResults = new Map<number, { action: ActionType; ok: boolean; detail: string }>();
+  let pending = actions.map((action, index) => ({ index, action }));
+  for (let attempt = 0; attempt < attempts && pending.length > 0; attempt++) {
+    const batch = await executeActions(
+      row.userId,
+      pending.map((p) => p.action),
+      {
+        vehicleId: event.vehicleId ?? undefined,
+        vehicleName: vehicle?.displayName,
+        dryRun: !!opts.dryRun,
+        automationId: row.id,
+        organizationId: row.organizationId,
+      },
+    );
+    pending = pending.filter((p, i) => {
+      const result = batch[i]!;
+      finalResults.set(p.index, result);
+      return !result.ok;
     });
-    if (actionResults.every((r) => r.ok)) break;
   }
+  const actionResults = actions.map((_a, index) => finalResults.get(index)!);
   const ok = actionResults.every((r) => r.ok);
   const result = opts.dryRun ? 'dry_run' : ok ? 'success' : 'failed';
   await prisma.automationExecution.create({
