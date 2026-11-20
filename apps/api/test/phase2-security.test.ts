@@ -284,7 +284,12 @@ describe('MFA ceremony edges (A-TOTPLOGIN)', () => {
     );
     expect(expired.status).toBe(401);
 
-    // 3. Foreign ceremony: B's session cannot consume A's login ceremony.
+    // 3. A wrong code under a foreign session is refused. Guide 05 §6.1 binds
+    // the ceremony to its owner by the code check (the code below is a FUTURE
+    // time step, so this is a wrong-code refusal, not a session-binding
+    // negative). The real foreign-ceremony negative (B's session + A's
+    // ceremony + B's valid code) is R2-19/TI-15 in
+    // round2-cnotes-tenancy.test.ts.
     const l2 = await withCsrf(a, (csrf) =>
       a
         .post('/api/v1/auth/login')
@@ -301,7 +306,8 @@ describe('MFA ceremony edges (A-TOTPLOGIN)', () => {
     );
     expect(foreign.status).toBe(401);
 
-    // 4. A successful MFA marks the ceremony consumed.
+    // 4. A successful MFA marks the ceremony consumed. (The consumed-ceremony
+    // replay negative moved to R2-19/TI-15 in round2-cnotes-tenancy.test.ts.)
     const code = totpCode(secret, Date.now() + 30_000);
     const good = await withCsrf(a, (csrf) =>
       a.post('/api/v1/auth/login/mfa').set('x-vl-csrf', csrf).send({ code }),

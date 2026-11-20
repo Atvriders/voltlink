@@ -213,24 +213,56 @@ describe("C-NOTESTS M3b: drive lists never leak another org's drives", () => {
   });
 });
 
-describe('R2-19 A-TOTPLOGIN: ceremony negatives', () => {
+describe('R2-19 A-TOTPLOGIN: ceremony negatives (self-contained)', () => {
   const moduleTotp = new TOTP({ crypto: new NobleCryptoPlugin(), base32: new ScureBase32Plugin() });
 
-  it('a consumed ceremony cannot be replayed even with a correct code', async () => {
-    const admin = await prisma.user.findFirstOrThrow({
-      where: { email: { startsWith: 'cnotes-admin-' } },
+  // Each ceremony test owns its users and enrolment: nothing depends on the
+  // beforeAll admin or on test order (review #2 point 5 — the previous version
+  // enrolled TOTP for the shared admin and broke with TOTP_ALREADY_ENABLED).
+  async function mkUser(email: string): Promise<{ id: string; email: string }> {
+    return prisma.user.create({
+      data: {
+        email,
+        name: email.split('@')[0]!,
+        passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
+        webauthnUserId: randomId(),
+        emailVerifiedAt: new Date(),
+      },
+      select: { id: true, email: true },
     });
-    // Enable TOTP for the admin so a REAL correct code exists.
-    const setup = await totpSetup(admin.id);
-    const code = await moduleTotp.generate({ secret: setup.secret });
-    await totpConfirm(admin.id, code);
+  }
 
+  async function postMfa(cookieHeader: string, body: unknown): Promise<Response> {
+    const res = await fetch(`${base}/api/v1/auth/csrf`);
+    const setCookies = res.headers.getSetCookie?.() ?? [];
+    const token = setCookies.join(';').match(/vl_csrf=([^;]+)/)?.[1] ?? '';
+    const cookie = setCookies.find((x) => x.startsWith('vl_csrf='))?.split(';')[0] ?? '';
+    return fetch(`${base}/api/v1/auth/login/mfa`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-vl-csrf': token,
+        cookie: `${cookie}; ${cookieHeader}`,
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  async function makeCeremony(userId: string): Promise<string> {
     const cookies: Record<string, string> = {};
     await createMfaCeremony(
       { cookie: (name: string, value: string) => (cookies[name] = value) } as never,
-      admin.id,
+      userId,
     );
-    const handle = cookies[CEREMONY_COOKIE] as string;
+    return cookies[CEREMONY_COOKIE] as string;
+  }
+
+  it('R2-19: a consumed ceremony cannot be replayed even with a correct code (M2c red answers 200 with Set-Cookie)', async () => {
+    const user = await mkUser(`cnotes-r19-${uniq()}@test.dev`);
+    const setup = await totpSetup(user.id);
+    await totpConfirm(user.id, await moduleTotp.generate({ secret: setup.secret }));
+
+    const handle = await makeCeremony(user.id);
     // Consume the ceremony out from under the replay (by its own handle hash).
     const row = await prisma.authChallenge.findFirstOrThrow({
       where: { handleHash: sha256hex(handle) },
@@ -239,81 +271,49 @@ describe('R2-19 A-TOTPLOGIN: ceremony negatives', () => {
       where: { id: row.id },
       data: { consumedAt: new Date() },
     });
+    // Clear the replay marker so ONLY the consumedAt check refuses this
+    // attempt: M2c (consumedAt ignored) then answers 200 with a Set-Cookie.
+    await prisma.user.update({ where: { id: user.id }, data: { totpLastStep: null } });
 
-    const c = await (async () => {
-      const res = await fetch(`${base}/api/v1/auth/csrf`);
-      const setCookies = res.headers.getSetCookie?.() ?? [];
-      const token = setCookies.join(';').match(/vl_csrf=([^;]+)/)?.[1] ?? '';
-      const cookie = setCookies.find((x) => x.startsWith('vl_csrf='))?.split(';')[0] ?? '';
-      return { header: token, cookie };
-    })();
-    const res = await fetch(`${base}/api/v1/auth/login/mfa`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-vl-csrf': c.header,
-        cookie: `${c.cookie}; ${CEREMONY_COOKIE}=${handle}`,
-      },
-      body: JSON.stringify({ code: await moduleTotp.generate({ secret: setup.secret }) }),
+    const res = await postMfa(`${CEREMONY_COOKIE}=${handle}`, {
+      code: await moduleTotp.generate({ secret: setup.secret }),
     });
     const bodyText = await res.text();
     expect(res.status, bodyText).toBe(401);
     expect(bodyText).toContain('MFA_EXPIRED');
     expect(res.headers.getSetCookie?.() ?? []).toEqual([]);
+    expect(await prisma.userSession.count({ where: { userId: user.id } })).toBe(0);
   });
 
-  // R2-19/TI-15: presenting A's ceremony cookie with B's session must be
-  // PROGRESS.md honesty entry of 2026-11-18.
-  it("A's ceremony cookie cannot complete a sign-in under B's session", async () => {
-    const admin = await prisma.user.findFirstOrThrow({
-      where: { email: { startsWith: 'cnotes-admin-' } },
-    });
-    // A REAL valid code: with the defect the ceremony owner completes the
-    // sign-in (200 + session cookie) and the 401 assertion fails.
-    const setup = await totpSetup(admin.id);
-    const confirmCode = await moduleTotp.generate({ secret: setup.secret });
-    await totpConfirm(admin.id, confirmCode);
-    // The confirm consumed the replay slot for this step; clear it so the
-    // login below is judged on the session-ceremony mismatch, not replay.
-    await prisma.user.update({
-      where: { id: admin.id },
-      data: { totpLastStep: null },
-    });
+  // R2-19 / TI-15, the spec negative (guide 05 §6.1): the ceremony is bound to
+  // its owner by the code check — B, with its own session AND its own enrolled
+  // TOTP, presents A's ceremony cookie with B's code: 401 MFA_FAILED, no
+  // Set-Cookie, no new UserSession. (A's ceremony + A's own code signs A in
+  // even under B's session — that is specified behaviour, not a defect; the
+  // previous test asserted the opposite and was rewritten per review 1a.)
+  it("R2-19: B's session + A's ceremony + B's code is refused", async () => {
+    const userA = await mkUser(`cnotes-r19a-${uniq()}@test.dev`);
+    const userB = await mkUser(`cnotes-r19b-${uniq()}@test.dev`);
+    const setupA = await totpSetup(userA.id);
+    await totpConfirm(userA.id, await moduleTotp.generate({ secret: setupA.secret }));
+    const setupB = await totpSetup(userB.id);
+    await totpConfirm(userB.id, await moduleTotp.generate({ secret: setupB.secret }));
+    // The mutant that accepts B's code under B's session must not be blocked
+    // by B's own replay marker.
+    await prisma.user.update({ where: { id: userB.id }, data: { totpLastStep: null } });
 
-    const userB = await prisma.user.create({
-      data: {
-        email: `cnotes-f-${uniq()}@test.dev`,
-        name: 'Foreign session user',
-        passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
-        webauthnUserId: randomId(),
-        emailVerifiedAt: new Date(),
-      },
-    });
     const { token: sessionB } = await createSession(userB.id, '127.0.0.1');
-    const cookies: Record<string, string> = {};
-    await createMfaCeremony(
-      { cookie: (name: string, value: string) => (cookies[name] = value) } as never,
-      admin.id,
-    );
-    const handle = cookies[CEREMONY_COOKIE] as string;
-    const c = await (async () => {
-      const res = await fetch(`${base}/api/v1/auth/csrf`);
-      const setCookies = res.headers.getSetCookie?.() ?? [];
-      const token = setCookies.join(';').match(/vl_csrf=([^;]+)/)?.[1] ?? '';
-      const cookie = setCookies.find((x) => x.startsWith('vl_csrf='))?.split(';')[0] ?? '';
-      return { header: token, cookie };
-    })();
-    const res = await fetch(`${base}/api/v1/auth/login/mfa`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-vl-csrf': c.header,
-        cookie: `${c.cookie}; vl_session=${sessionB}; ${CEREMONY_COOKIE}=${handle}`,
-      },
-      body: JSON.stringify({ code: await moduleTotp.generate({ secret: setup.secret }) }),
+    const sessionsBefore = await prisma.userSession.count({ where: { userId: userB.id } });
+    expect(sessionsBefore).toBe(1);
+
+    const handle = await makeCeremony(userA.id);
+    const res = await postMfa(`vl_session=${sessionB}; ${CEREMONY_COOKIE}=${handle}`, {
+      code: await moduleTotp.generate({ secret: setupB.secret }),
     });
     const bodyText = await res.text();
     expect(res.status, bodyText).toBe(401);
+    expect(bodyText).toContain('MFA_FAILED');
     expect(res.headers.getSetCookie?.() ?? []).toEqual([]);
+    expect(await prisma.userSession.count({ where: { userId: userB.id } })).toBe(sessionsBefore);
   });
 });
