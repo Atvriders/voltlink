@@ -527,7 +527,7 @@ export default function VehicleViewer({
           <CameraRig target={classCamera(vehicle.vehicleClass)} interacted={interactedRef} />
           <StudioLights hour={new Date().getHours()} />
           <Suspense fallback={<FallbackVehicle vehicle={vehicle} state={state} />}>
-            {useGlb ? (
+            {useGlb && asset !== null ? (
               <ErrorBoundary3D onError={() => setMissing(true)}>
                 <VehicleModel
                   url={asset}
