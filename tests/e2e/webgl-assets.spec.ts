@@ -26,6 +26,13 @@ test('showroom renders the right GLB per vehicle class, with zero page errors', 
 
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(String(err)));
+  // R2-61: browser console errors count too — the old viewer fired a 404
+  // HEAD for /assets/models/<class>.glb on every mount before the staged
+  // manifest resolved, and Chromium logs it as a console.error.
+  const consoleErrors: string[] = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
 
   await page.goto('/showroom');
   await page.waitForURL(/showroom/);
@@ -115,4 +122,8 @@ test('showroom renders the right GLB per vehicle class, with zero page errors', 
     { timeout: 10000 },
   );
   expect(errors, 'no page errors during the whole sweep').toEqual([]);
+  expect(
+    consoleErrors.filter((t) => t.includes('404')),
+    'no 404 console errors during the sweep (R2-61)',
+  ).toEqual([]);
 });
