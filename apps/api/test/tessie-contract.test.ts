@@ -504,10 +504,15 @@ describe('Tessie provider request routes match guide 02 (expected reds until ste
           cmdCalls.map((c) => `${c.method} ${c.path}`).join(', ') || 'no command request'
         })`,
       ).toBe(true);
-      const wrong = cmdCalls.filter(
-        (r) => r.path.includes('/command/') && !r.path.endsWith(`/command/${routeName}`),
-      );
-      expect(wrong, `${type} hit ${wrong.map((r) => r.path).join(',')}`).toEqual([]);
+      // speed_limit is a documented multi-step command (set_speed_limit then
+      // enable/disable_speed_limit) — its steps are asserted in the dedicated
+      // test, so the generic wrong-route check is skipped for it.
+      if (type !== 'speed_limit') {
+        const wrong = cmdCalls.filter(
+          (r) => r.path.includes('/command/') && !r.path.endsWith(`/command/${routeName}`),
+        );
+        expect(wrong, `${type} hit ${wrong.map((r) => r.path).join(',')}`).toEqual([]);
+      }
     }
   });
 });
