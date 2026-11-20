@@ -33,6 +33,9 @@ const PAGES = [
 ] as const;
 
 test('PL-05: every core page in all five themes has no axe violations', async ({ page }) => {
+  // 5 themes × 15 pages of full axe scans exceed the 180s slow-test budget;
+  // the per-assertion timeouts are unchanged (recorded reason).
+  test.setTimeout(600_000);
   test.slow();
   const email = `e2e-a11y-${Date.now()}@voltlink.test`;
   await register(page, email);
