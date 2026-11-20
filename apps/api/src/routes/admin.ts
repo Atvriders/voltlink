@@ -1,5 +1,5 @@
 // Admin routes: users, roles, settings, retention, health, and demo controls.
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { policyRouter, sessionActor } from '../authz/policy';
@@ -280,8 +280,18 @@ adminRouter.get(
     try {
       await prisma.$queryRaw`SELECT 1`;
       // NEW-10: migrationsCurrent compares the applied set against the
-      // bundled migration list, not just SELECT 1.
-      const bundled = readdirSync(join(__dirname, '..', '..', 'prisma', 'migrations'), {
+      // bundled migration list, not just SELECT 1. The bundled dist lays the
+      // API out flat (dist/index.cjs), so resolve the migrations dir from
+      // several image/local layouts instead of one hard-coded path.
+      const candidates = [
+        join(__dirname, '..', '..', 'prisma', 'migrations'),
+        join(__dirname, '..', 'prisma', 'migrations'),
+        join(__dirname, '..', '..', 'apps', 'api', 'prisma', 'migrations'),
+        join(process.cwd(), 'apps', 'api', 'prisma', 'migrations'),
+      ];
+      const dir = candidates.find((d) => existsSync(d));
+      if (!dir) throw new Error('prisma migrations directory not found');
+      const bundled = readdirSync(dir, {
         withFileTypes: true,
       })
         .filter((d) => d.isDirectory())
