@@ -67,11 +67,16 @@ export async function runRetention(): Promise<{
   // Status checks older than 90 days.
   const checks = await prisma.statusCheck.deleteMany({ where: { at: { lt: checksCutoff } } });
 
+  // P-TESLAMAP: expired one-time command PIN secrets (10-minute TTL).
+  const secrets = await prisma.vehicleCommandSecret.deleteMany({
+    where: { expiresAt: { lt: new Date() } },
+  });
+
   await prisma.dataRetentionJob.create({
     data: {
       kind: 'retention',
-      rowsDeleted: telemetryRows + routePoints + checks.count,
-      detail: `per-org retention run: telemetry ${telemetryRows} rows, route points ${routePoints}, checks ${checks.count}`,
+      rowsDeleted: telemetryRows + routePoints + checks.count + secrets.count,
+      detail: `per-org retention run: telemetry ${telemetryRows} rows, route points ${routePoints}, checks ${checks.count}, pin secrets ${secrets.count}`,
     },
   });
   return {

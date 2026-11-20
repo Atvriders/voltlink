@@ -18,6 +18,7 @@ import { AccessDenied } from '../authz/errors';
 import type { Actor } from '../authz/types';
 import { buildContext, getProvider } from '../providers/registry';
 import { randomId, sha256hex } from '../core/crypto';
+import { open, seal } from '../core/keyring';
 
 import {
   COMMAND_DEFINITIONS,
@@ -263,6 +264,20 @@ export async function issueCommand(
           idempotencyKey,
         },
       });
+      // P-TESLAMAP: the PIN never reaches params, audit rows, logs or queue
+      // payloads — it is sealed into a one-time secret the worker consumes.
+      const pinParam = (cleanParams as { pin?: string }).pin;
+      if (pinParam) {
+        await tx.vehicleCommandSecret.create({
+          data: {
+            commandId: c.id,
+            ciphertext: JSON.stringify(
+              seal(JSON.stringify({ pin: pinParam }), `vehicle-command-secret:${c.id}`),
+            ),
+            expiresAt: new Date(Date.now() + 10 * 60_000),
+          },
+        });
+      }
       try {
         await tx.commandIdempotency.create({
           data: {
@@ -522,9 +537,30 @@ export async function processCommandJob(payload: {
       };
       try {
         const ctx = await buildContext(vehicle.providerAccount);
+        // P-TESLAMAP: consume the one-time PIN secret right before dispatch.
+        const secret = await prisma.vehicleCommandSecret.findUnique({
+          where: { commandId: command.id },
+        });
+        let pin: string | undefined;
+        if (secret) {
+          await prisma.vehicleCommandSecret.delete({ where: { commandId: command.id } });
+          try {
+            const envelope = JSON.parse(secret.ciphertext) as {
+              ciphertext: string;
+              keyVersion?: number;
+              algorithm?: string;
+            };
+            const payload = JSON.parse(
+              open(envelope.ciphertext, `vehicle-command-secret:${command.id}`),
+            ) as { pin?: string };
+            pin = payload.pin;
+          } catch {
+            /* unreadable secret — dispatch proceeds without a PIN */
+          }
+        }
         const provider = getProvider(vehicle.provider);
         const sent = await provider.sendCommand(
-          ctx,
+          { ...ctx, pin },
           vehicle.providerVehicleId,
           command.type as CommandType,
           (command.params ?? {}) as CommandParams,

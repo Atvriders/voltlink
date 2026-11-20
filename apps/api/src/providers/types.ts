@@ -16,6 +16,9 @@ export interface ProviderContext {
   credentials: Record<string, unknown>;
   /** Provider account row extras. */
   meta: { provider: string; label: string; demo: boolean; scopes: string[] };
+  /** P-TESLAMAP: the one-time PIN for PIN commands, consumed from
+   * VehicleCommandSecret right before dispatch (never in params/audit). */
+  pin?: string;
 }
 
 export interface ProviderVehicleDescriptor {

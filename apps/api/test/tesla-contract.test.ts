@@ -565,7 +565,7 @@ describe('Tesla provider-level flows', () => {
     expect(h.ok).toBe(true);
   });
 
-  it('sendCommand sends the stored PIN for speed_limit steps (expected red until step 5)', async () => {
+  it('sendCommand sends the stored PIN for speed_limit steps (P-TESLAMAP)', async () => {
     const org = await prisma.organization.create({ data: { name: 'Tesla Org PIN' } });
     const pa = await prisma.providerAccount.create({
       data: {
@@ -603,10 +603,12 @@ describe('Tesla provider-level flows', () => {
     });
     fake.pairKey('5YJ3000000NEXUS01');
     fake.setConnectivity('5YJ3000000NEXUS01', 'online');
+    // The worker passes the consumed VehicleCommandSecret PIN on the ctx.
     const ctx = {
       accountId: pa.id,
       userId: 'u1',
       credentials: {},
+      pin: '1234',
       meta: { provider: 'tesla', label: 'T', demo: false, scopes: [] },
     };
     const p = new TeslaProviderImpl();

@@ -244,7 +244,9 @@ export class TeslaProviderImpl implements VehicleProvider {
     type: CommandType,
     params: CommandParams,
   ): Promise<CommandDispatchResult> {
-    const steps = buildTeslaSteps(type, params, {});
+    // P-TESLAMAP: the PIN arrives via ProviderContext, consumed from
+    // VehicleCommandSecret by the worker right before this call.
+    const steps = buildTeslaSteps(type, params, { pin: ctx.pin });
     if (steps.length === 0) {
       return { kind: 'unsupported', errorMessage: `Command ${type} is not mapped for Tesla.` };
     }
