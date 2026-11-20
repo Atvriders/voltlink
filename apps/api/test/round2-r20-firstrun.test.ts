@@ -267,10 +267,11 @@ it('R2-20 generated token (VL_SETUP_TOKEN unset) completes first-run setup', asy
 });
 
 // R2-20 (review #2 point 9): the documented extraction greps the BOOT LOG —
-// start-stack.sh:136 and ci.yml:349 run
+// start-stack.sh and ci.yml run
 //   grep -o 'first-run setup token [A-Za-z0-9_-]*' | awk '{print $NF}'
-// which returns the word "token" on today's log line. Boot the REAL web role
-// (apps/api/src/index.ts) with VL_SETUP_TOKEN unset on this file's own
+// The boot line now prints 'first-run setup token <token> (shown once…)' so
+// that extraction returns the token itself (R2-01 fix). Boot the REAL web
+// role (apps/api/src/index.ts) with VL_SETUP_TOKEN unset on this file's own
 // unseeded database, parse the token from its stdout, and register with it.
 // The child is stopped by its own PID.
 it('R2-20 real web-role boot (VL_SETUP_TOKEN unset) logs a token that completes first-run setup', async () => {
@@ -322,13 +323,19 @@ it('R2-20 real web-role boot (VL_SETUP_TOKEN unset) logs a token that completes 
     const deadline = Date.now() + 60_000;
     let token = '';
     while (Date.now() < deadline && !token && child.exitCode === null) {
-      const m = captured.match(/first-run setup token \(shown once[^\n]*\): ([A-Za-z0-9_-]{32,})/);
+      const m = captured.match(/first-run setup token ([A-Za-z0-9_-]{32,}) \(shown once/);
       if (m) token = m[1]!;
-      else await new Promise((r) => setTimeout(r, 250));
+      if (!token) await new Promise((r) => setTimeout(r, 250));
     }
+    // R2-01: the documented extraction (start-stack.sh / ci.yml) must return
+    // the token itself, not the literal word 'token'.
+    const documented = [...captured.matchAll(/first-run setup token [A-Za-z0-9_-]*/g)]
+      .map((m) => m[0].split(' ').at(-1))
+      .filter((w) => w !== 'token');
     expect(token, `boot log must print the token; captured was:\n${captured.slice(-2000)}`).toMatch(
       /^[A-Za-z0-9_-]{32,}$/,
     );
+    expect(documented, 'the documented grep must extract the token').toContain(token);
 
     // Hash at rest; the plaintext never is.
     const row = await prisma.appSetting.findUnique({
