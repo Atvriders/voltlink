@@ -9,7 +9,7 @@ import { DEMO_VEHICLES, enableDemo, register } from './helpers';
 const T = { maxDiffPixels: 25 };
 
 function maskDynamic(page: Page) {
-  return [page.getByRole('button', { name: 'Account menu' }), page.locator('.tabular-nums')];
+  return [page.getByRole('button', { name: /Account menu/ }), page.locator('.tabular-nums')];
 }
 
 async function registerWithDemoFleet(page: Page): Promise<void> {

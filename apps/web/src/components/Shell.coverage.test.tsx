@@ -241,7 +241,7 @@ describe('Shell page', () => {
     // The account menu (the below-lg entry point) carries Settings AND a
     // theme control — jsdom has no layout, so the viewport proof lives in
     // theme-mobile.spec.ts.
-    await user.click(screen.getAllByRole('button', { name: 'Account menu' })[0]!);
+    await user.click(screen.getAllByRole('button', { name: /Account menu/ })[0]!);
     const menuitems = await screen.findAllByRole('menuitem');
     const labels = menuitems.map((m) => m.textContent ?? '');
     expect(labels.some((l) => l.includes('Settings'))).toBe(true);
@@ -320,7 +320,7 @@ describe('Shell page', () => {
     const user = userEvent.setup();
     renderShell();
 
-    const accountButtons = screen.getAllByRole('button', { name: 'Account menu' });
+    const accountButtons = screen.getAllByRole('button', { name: /Account menu/ });
     await user.click(accountButtons[0]!);
 
     expect(await screen.findByText(/Signed in as/)).toBeTruthy();
@@ -398,7 +398,7 @@ describe('Shell page', () => {
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
 
     // Account menu: ArrowDown opens and focuses a menuitem; Escape closes.
-    const accountButton = screen.getAllByRole('button', { name: 'Account menu' })[0]!;
+    const accountButton = screen.getAllByRole('button', { name: /Account menu/ })[0]!;
     accountButton.focus();
     await user.keyboard('{ArrowDown}');
     await waitFor(() => expect(screen.getAllByRole('menuitem').length).toBeGreaterThan(0));

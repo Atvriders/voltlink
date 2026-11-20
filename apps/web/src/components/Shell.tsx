@@ -179,7 +179,9 @@ function VehicleSwitcher() {
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label={
-          selected ? `Vehicle: ${selected.displayName}. Change vehicle` : 'Choose vehicle'
+          selected
+            ? `Vehicle: ${selected.displayName}. ${list.length} vehicles. Change vehicle`
+            : 'Choose vehicle'
         }
       >
         <Car size={15} className="text-accent" />
@@ -447,7 +449,7 @@ function AccountMenu({
           }
         }}
         className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-subtle hover:bg-panel2 hover:text-ink"
-        aria-label="Account menu"
+        aria-label={email ? `Account menu: ${email}` : 'Account menu'}
         aria-expanded={open}
       >
         <CircleUserRound size={15} />
@@ -690,10 +692,10 @@ export function Shell({ user, children }: { user: UserPublic | null; children: R
             <div className="hidden lg:block">
               <Link
                 to="/settings/profile"
-                className="rounded-lg p-2 text-subtle hover:bg-panel2 hover:text-ink"
+                className="flex h-6 w-6 items-center justify-center rounded-lg text-subtle hover:bg-panel2 hover:text-ink"
                 aria-label="Settings"
               >
-                <Settings size={17} />
+                <Settings size={16} />
               </Link>
             </div>
           </div>

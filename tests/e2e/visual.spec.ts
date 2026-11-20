@@ -26,7 +26,7 @@ const T = { maxDiffPixels: 25 };
 // Dynamic regions: the account chip (email) and tabular numbers (relative
 // times, odometers, live counters) are masked in every logged-in snapshot.
 function maskDynamic(page: Page) {
-  return [page.getByRole('button', { name: 'Account menu' }), page.locator('.tabular-nums')];
+  return [page.getByRole('button', { name: /Account menu/ }), page.locator('.tabular-nums')];
 }
 
 async function loginAsInstanceAdmin(page: Page): Promise<void> {
@@ -36,7 +36,7 @@ async function loginAsInstanceAdmin(page: Page): Promise<void> {
     .getByLabel('Password')
     .fill(process.env.E2E_ADMIN_PASSWORD ?? 'e2e-admin-password-123');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Account menu' })).toBeVisible({
+  await expect(page.getByRole('button', { name: /Account menu/ })).toBeVisible({
     timeout: 20000,
   });
 }
