@@ -481,7 +481,14 @@ class DemoProviderImpl implements VehicleProvider {
   async fetchState(ctx: ProviderContext, providerVehicleId: string): Promise<FetchStateResult> {
     const spec = DEMO_VEHICLES.find((v) => v.id === providerVehicleId);
     if (!spec) throw new Error('Unknown demo vehicle');
-    const state = simulatedState(spec, new Date(), await orgDegraded(ctx));
+    // Visual-regression determinism (R2-35/C-VISUAL): with
+    // VL_DEMO_FROZEN_AT set, the simulated state is computed at a fixed
+    // instant so pixel-exact baselines (maxDiffPixels 25) never drift with
+    // the wall clock. Only the e2e visual stack sets it.
+    const now = process.env.VL_DEMO_FROZEN_AT
+      ? new Date(process.env.VL_DEMO_FROZEN_AT)
+      : new Date();
+    const state = simulatedState(spec, now, await orgDegraded(ctx));
     const freshness = state.freshness ?? 'live';
     return {
       state: { ...state, vehicleId: undefined } as never,

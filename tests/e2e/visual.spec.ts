@@ -192,7 +192,8 @@ test('admin page as instance admin', async ({ page }) => {
   await page.waitForTimeout(1200);
   await expect(page).toHaveScreenshot('admin.png', {
     ...T,
-    mask: maskDynamic(page),
+    // the instance account count grows with every test user — instance data
+    mask: [...maskDynamic(page), page.getByText(/accounts$/)],
   });
 });
 
@@ -364,7 +365,7 @@ test('admin users tab as instance admin', async ({ page }) => {
   await page.waitForTimeout(1000);
   await expect(page).toHaveScreenshot('admin-users.png', {
     ...T,
-    mask: maskDynamic(page),
+    mask: [...maskDynamic(page), page.getByText(/accounts$/)],
   });
 });
 
