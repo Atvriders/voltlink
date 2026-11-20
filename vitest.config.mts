@@ -71,6 +71,14 @@ export default defineConfig({
           include: ['src/**/*.test.{ts,tsx}'],
         },
       },
+      {
+        test: {
+          name: 'e2e-helpers',
+          root: abs('./tests/e2e'),
+          include: ['**/*.test.ts'],
+          environment: 'node',
+        },
+      },
     ],
     coverage: {
       provider: 'v8',

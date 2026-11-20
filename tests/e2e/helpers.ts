@@ -2,6 +2,7 @@
 
 import fs from 'node:fs';
 import { expect, type Page } from '@playwright/test';
+import { demoFleetPredicate } from './demo-fleet-predicate';
 
 /** Open registration answers 202 "check_email"; in the e2e environment the
  * dev token echo lands in the API log, so verify + sign in programmatically. */
@@ -91,27 +92,39 @@ export async function enableDemo(page: Page): Promise<void> {
   await demoBtn.click();
   const connectRes = await connectDone;
   if (!connectRes.ok()) throw new Error(`demo connect failed: ${connectRes.status()}`);
+  // R2-16 / C-E2EHOLLOW (review #2 point 11): the connect response carries
+  // accountId; the fleet is valid only when the user has exactly ONE ACTIVE
+  // PERSONAL OWNER membership and exactly five demo vehicles belonging to
+  // that organization AND that account, each with a non-null state.
+  const connectBody = (await connectRes.json()) as { data?: { accountId?: string } };
+  const accountId = connectBody.data?.accountId;
+  if (!accountId) throw new Error('demo connect response had no accountId');
   // Exact-count badge (strict match) — the marketing sentence never matches.
   await expect(page.getByText(/^\d+ demo vehicles$/)).toBeVisible({ timeout: 30000 });
-  // The user's OWN fleet must be fully provisioned before any navigation:
-  // poll GET /api/v1/vehicles until 5 vehicles exist.
-  // C-E2EHOLLOW: exactly 5 of the USER'S OWN fleet, each WITH state
-  // (this endpoint is session-scoped). '>= 5' would accept foreign vehicles
-  // in the list — the hollow-out bug itself — and a count without state would
-  // accept an unprovisioned fleet.
   await expect
     .poll(
       async () => {
-        const r = await page.request.get('/api/v1/vehicles');
-        if (!r.ok()) return { count: -1, withState: false };
-        const body = (await r.json()) as { data?: { state?: unknown }[] };
-        const data = Array.isArray(body.data) ? body.data : [];
-        return {
-          count: data.length,
-          withState: data.length === 5 && data.every((v) => v && v.state),
+        const meRes = await page.request.get('/api/v1/auth/me');
+        const vehRes = await page.request.get('/api/v1/vehicles');
+        if (!meRes.ok() || !vehRes.ok()) return false;
+        const meBody = (await meRes.json()) as {
+          data?: { memberships?: { organizationId: string; kind: string; role: string }[] };
         };
+        const vehBody = (await vehRes.json()) as {
+          data?: {
+            organizationId?: string;
+            providerAccountId?: string;
+            demo?: boolean;
+            state?: unknown;
+          }[];
+        };
+        return demoFleetPredicate({
+          accountId,
+          memberships: meBody.data?.memberships ?? [],
+          vehicles: vehBody.data ?? [],
+        });
       },
       { timeout: 30000 },
     )
-    .toEqual({ count: 5, withState: true });
+    .toBe(true);
 }

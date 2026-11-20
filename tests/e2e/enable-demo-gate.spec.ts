@@ -7,7 +7,9 @@
 import { expect, test } from '@playwright/test';
 import { enableDemo, register } from './helpers';
 
-test('R2-16/C-E2EHOLLOW: enableDemo waits for the demo connect response', async ({ page }) => {
+test('R2-16/C-E2EHOLLOW/TI-11: enableDemo waits for the demo connect response', async ({
+  page,
+}) => {
   test.setTimeout(120_000);
   await register(page, `gate-${Date.now()}@voltlink-e2e.test`);
   await page.route('**/providers/demo/connect', async (route) => {
