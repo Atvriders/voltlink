@@ -4,6 +4,7 @@
 import { randomBytes } from 'node:crypto';
 import { afterAll, inject } from 'vitest';
 import pg from 'pg';
+import { dropOne } from './drop-databases';
 
 // R2-24: the per-run prefix is created once in global-db setup (unique default
 // pid+random) and injected here; teardown drops only prefix% databases, so a
@@ -28,15 +29,10 @@ await admin.connect();
 await admin.query('SELECT pg_advisory_lock($1)', [lockKey]); // serialize template clones
 // A fork that just exited can still hold a backend on this DB for a moment;
 // FORCE-drops then fail with "permission denied to terminate process".
-// Retry briefly instead of failing the whole file.
-for (let attempt = 0; ; attempt++) {
-  try {
-    await admin.query(`DROP DATABASE IF EXISTS ${db} WITH (FORCE)`);
-    break;
-  } catch (err) {
-    if (attempt >= 10) throw err;
-    await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
-  }
+// R2-24 (4f): route through the shared drop loop (FORCE, then plain-DROP
+// retries for 42501/55006) instead of FORCE-only retries.
+if (!(await dropOne(admin, db))) {
+  throw new Error(`could not drop previous worker database "${db}"`);
 }
 await admin.query(`CREATE DATABASE ${db} TEMPLATE ${inject('dbTemplate')}`);
 await admin.query('SELECT pg_advisory_unlock($1)', [lockKey]);

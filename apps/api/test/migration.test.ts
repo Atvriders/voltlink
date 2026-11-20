@@ -6,8 +6,9 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { Client } from 'pg';
+import { dropOne } from './setup/drop-databases';
 import { adminDatabaseUrl } from './lib/admin-url';
 
 const ADMIN_URL = adminDatabaseUrl();
@@ -42,7 +43,9 @@ async function adminClient(): Promise<Client> {
 }
 
 const suffix = `${Date.now()}_${process.pid}`;
-const dbName = `voltlink_test_tenancy_${suffix}`;
+// R2-24 (4f): live under the run prefix so the run teardown owns them (and
+// drop via the shared drop loop, not FORCE-only retries).
+const dbName = `${inject('dbPrefix')}tenancy_${suffix}`;
 let admin!: Client;
 let dbUrl: string;
 
@@ -86,14 +89,8 @@ beforeAll(async () => {
 }, 180_000);
 
 afterAll(async () => {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      await admin.query(`DROP DATABASE IF EXISTS "${dbName}" WITH (FORCE)`);
-      break;
-    } catch (err) {
-      if (attempt >= 4) throw err;
-      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
-    }
+  if (!(await dropOne(admin, dbName))) {
+    throw new Error(`could not drop "${dbName}" (run teardown will retry it)`);
   }
   await admin.end();
 }, 60_000);

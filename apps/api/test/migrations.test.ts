@@ -7,8 +7,9 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { Client, Pool } from 'pg';
+import { dropOne } from './setup/drop-databases';
 import { adminDatabaseUrl } from './lib/admin-url';
 
 const ADMIN_URL = adminDatabaseUrl();
@@ -59,23 +60,17 @@ async function createDb(name: string, admin: Client): Promise<string> {
 }
 
 async function dropDb(name: string, admin: Client): Promise<void> {
-  // WITH (FORCE) fails with "permission denied to terminate process" when a
-  // superuser-owned backend (e.g. an autovacuum worker) is briefly in the
-  // database. Retry a few times; the blocker passes on its own.
-  for (let attempt = 0; ; attempt++) {
-    try {
-      await admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
-      return;
-    } catch (err) {
-      if (attempt >= 4) throw err;
-      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
-    }
+  // R2-24 (4f): route through the shared drop loop (FORCE, then plain-DROP
+  // retries for 42501/55006) instead of FORCE-only retries.
+  if (!(await dropOne(admin, name))) {
+    throw new Error(`could not drop "${name}" (run teardown will retry it)`);
   }
 }
 
 const suffix = `${Date.now()}_${process.pid}`;
-const dbName = `voltlink_test_mig_${suffix}`;
-const upgradeDbName = `voltlink_test_mig_upgrade_${suffix}`;
+// R2-24 (4f): live under the run prefix so the run teardown owns them.
+const dbName = `${inject('dbPrefix')}mig_${suffix}`;
+const upgradeDbName = `${inject('dbPrefix')}mig_upgrade_${suffix}`;
 let admin!: Client;
 let dbUrl: string;
 

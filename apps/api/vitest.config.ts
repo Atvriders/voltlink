@@ -23,6 +23,12 @@ config({ path: resolve(__dirname, '.env') });
 export default defineConfig({
   test: {
     pool: 'forks',
+    // R2-24 (4b): cap the workers. Each worker opens Prisma
+    // (connection_limit=5) plus the pg.Pool in src/core/db.ts (max 10;
+    // node-postgres ignores connection_limit), so the previous default of 35
+    // workers meant up to ~525 connections against max_connections=100 on a
+    // server other projects share. Every run must stay under the cap.
+    maxWorkers: Number(process.env.VL_TEST_MAX_WORKERS ?? 2),
     testTimeout: 30000,
     hookTimeout: 60000,
     teardownTimeout: 15000,

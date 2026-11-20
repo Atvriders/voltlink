@@ -17,52 +17,84 @@ export interface DropOptions {
 
 const RETRYABLE = new Set(['42501', '55006']);
 
+// R2-24 (4a): before ANY SQL, reject a prefix that would widen the teardown's
+// LIKE to other databases on the shared server. `??` keeps an explicit empty
+// string, so VL_TEST_DB_PREFIX='' would match LIKE '%' (every database), and
+// the bare 'voltlink_test_' would drop every other run's databases too.
+const PREFIX_PATTERN = /^voltlink_test_[a-z0-9_]+_$/;
+
+export function validatePrefix(prefix: string): void {
+  if (!PREFIX_PATTERN.test(prefix)) {
+    throw new Error(
+      `VL_TEST_DB_PREFIX must match ${PREFIX_PATTERN} (a safe per-run prefix); got ${JSON.stringify(prefix)}`,
+    );
+  }
+}
+
+const escapeLike = (prefix: string) => prefix.replace(/[\\_%]/g, (ch) => `\\${ch}`);
+
+/** Drop one database with the shared retry policy: FORCE first, then plain
+ * DROP for 42501/55006 (autovacuum/session-termination blockers) until the
+ * window closes. Returns false when the database could not be dropped;
+ * callers that must not leak throw on false. */
+export async function dropOne(
+  admin: DbAdmin,
+  name: string,
+  opts: DropOptions = {},
+): Promise<boolean> {
+  const retryMs = opts.retryMs ?? 30_000;
+  const pollMs = opts.pollMs ?? 2_000;
+  const force = `DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`;
+  const plain = `DROP DATABASE IF EXISTS "${name}"`;
+  try {
+    await admin.query(force);
+    return true;
+  } catch (err) {
+    const code = (err as { code?: string }).code ?? '';
+    if (!RETRYABLE.has(code)) return false;
+    // Retry with plain DROP until the window closes.
+    const deadline = Date.now() + retryMs;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, pollMs));
+      try {
+        await admin.query(plain);
+        return true;
+      } catch (err2) {
+        const code2 = (err2 as { code?: string }).code ?? '';
+        if (!RETRYABLE.has(code2)) return false;
+      }
+    }
+    return false;
+  }
+}
+
 export async function dropDatabases(
   admin: DbAdmin,
   prefix: string,
   opts: DropOptions = {},
 ): Promise<{ dropped: string[]; remaining: string[] }> {
-  const retryMs = opts.retryMs ?? 30_000;
-  const pollMs = opts.pollMs ?? 2_000;
-  const like = prefix.replace(/[\\_%]/g, (ch) => `\\${ch}`) + '%';
+  validatePrefix(prefix); // before any SQL
+  const like = escapeLike(prefix) + '%';
 
   const list = async (): Promise<string[]> => {
-    const { rows } = await admin.query(
-      `SELECT datname FROM pg_database WHERE datname LIKE '${like}'`,
-    );
-    return (rows ?? []).map((r) => r.datname);
+    try {
+      const { rows } = await admin.query(
+        `SELECT datname FROM pg_database WHERE datname LIKE '${like}'`,
+      );
+      return (rows ?? []).map((r) => r.datname);
+    } catch (err) {
+      // R2-24 (4d): a failed SELECT must fail the run and name the prefix —
+      // never exit 0 silently leaving the run's databases behind.
+      console.error(`[test-db] prefix ${prefix}: listing databases failed: ${String(err)}`);
+      process.exitCode = 1;
+      throw err;
+    }
   };
 
   const names = await list();
   const dropped: string[] = [];
   for (const name of names) {
-    const force = `DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`;
-    const plain = `DROP DATABASE IF EXISTS "${name}"`;
-    let done = false;
-    try {
-      await admin.query(force);
-      done = true;
-    } catch (err) {
-      const code = (err as { code?: string }).code ?? '';
-      if (RETRYABLE.has(code)) {
-        // Retry with plain DROP until the window closes.
-        const deadline = Date.now() + retryMs;
-        while (Date.now() < deadline) {
-          await new Promise((r) => setTimeout(r, pollMs));
-          try {
-            await admin.query(plain);
-            done = true;
-            break;
-          } catch (err2) {
-            const code2 = (err2 as { code?: string }).code ?? '';
-            if (!RETRYABLE.has(code2)) break;
-          }
-        }
-      }
-      // Non-retryable failure or window closed: leave it listed; the final
-      // leftover check names it and fails the run.
-    }
-    if (done) dropped.push(name);
+    if (await dropOne(admin, name, opts)) dropped.push(name);
   }
 
   const remaining = await list();

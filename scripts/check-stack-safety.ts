@@ -60,13 +60,44 @@ const CHECKS: Record<string, Assertion[]> = {
       /LIKE 'voltlink\\\\_test\\\\_%'/,
       'teardown must not drop every voltlink_test_% database',
     ),
-    requireMatch(/PREFIX\.replace\(\//, 'teardown LIKE must escape the prefix wildcards'),
+    requireMatch(
+      /dropDatabases\(/,
+      'teardown must route the drops through the shared dropDatabases loop',
+    ),
+    requireMatch(/validatePrefix\(/, 'the prefix must be validated before any SQL runs'),
+  ],
+  'apps/api/test/setup/drop-databases.ts': [
+    requireMatch(
+      /validatePrefix\(/,
+      'must validate the prefix before any SQL (reject empty and bare voltlink_test_)',
+    ),
+    requireMatch(
+      /prefix\.replace\(\/\[\\\\_%\]\/g/,
+      'teardown LIKE must escape the prefix wildcards',
+    ),
+    requireMatch(/new Set\(\['42501'/, 'RETRYABLE must include 42501'),
+    requireMatch(/55006/, 'RETRYABLE must include 55006'),
+    requireMatch(
+      /const plain = `DROP DATABASE IF EXISTS "\$\{name\}"`/,
+      'must retry 42501/55006 with a plain DROP (no FORCE)',
+    ),
+    requireMatch(
+      /process\.exitCode = 1/,
+      'leftovers or a failed listing must set a non-zero exit code',
+    ),
+  ],
+  'apps/api/vitest.config.ts': [
+    requireMatch(
+      /VL_TEST_MAX_WORKERS \?\? 2/,
+      'api workers must be capped (VL_TEST_MAX_WORKERS, default 2)',
+    ),
   ],
   'apps/api/test/setup/worker-db.ts': [
     requireMatch(
       /inject\('dbPrefix'\)/,
       'worker DB name must come from the injected per-run prefix',
     ),
+    requireMatch(/dropOne\(/, 'worker DB drop must route through the shared drop loop'),
     forbidMatch(
       /VL_TEST_DB_PREFIX \?\? 'voltlink_test_'/,
       'must not fall back to the shared voltlink_test_ default',

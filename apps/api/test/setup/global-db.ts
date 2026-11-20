@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import type { TestProject } from 'vitest/node';
-import { dropDatabases } from './drop-databases';
+import { dropDatabases, validatePrefix } from './drop-databases';
 
 // R2-24: a per-run prefix so teardown drops only what THIS run created — never
 // every voltlink_test_% database on the shared server. The default is unique
@@ -16,6 +16,9 @@ import { dropDatabases } from './drop-databases';
 const PREFIX =
   process.env.VL_TEST_DB_PREFIX ??
   `voltlink_test_${process.pid}_${randomBytes(8).toString('hex')}_`;
+// R2-24 (4a): reject an unsafe VL_TEST_DB_PREFIX before any SQL — `??` keeps
+// an explicit empty string, which would make the teardown's LIKE match '%'.
+validatePrefix(PREFIX);
 const TEMPLATE = `${PREFIX}template`;
 const CONNECTION_LIMIT = '5';
 
@@ -45,45 +48,55 @@ export default async function setup(project: TestProject) {
     );
   }
   const admin = new pg.Client({ connectionString: withDb(adminUrl, 'postgres') });
-  await admin.connect();
-  await admin.query('SELECT pg_advisory_lock($1)', [prefixLockKey]);
+  // R2-24 (4d): every failure below must print the prefix and set a non-zero
+  // exit code — a plain throw can leak this run's databases under a prefix no
+  // later run matches while still reporting success.
+  console.log(`[test-db] prefix ${PREFIX}: global setup starting`);
   try {
-    await admin.query(`DROP DATABASE IF EXISTS ${TEMPLATE} WITH (FORCE)`);
-    await admin.query(`CREATE DATABASE ${TEMPLATE}`);
-  } finally {
-    await admin.query('SELECT pg_advisory_unlock($1)', [prefixLockKey]);
+    await admin.connect();
+    await admin.query('SELECT pg_advisory_lock($1)', [prefixLockKey]);
+    try {
+      await admin.query(`DROP DATABASE IF EXISTS ${TEMPLATE} WITH (FORCE)`);
+      await admin.query(`CREATE DATABASE ${TEMPLATE}`);
+    } finally {
+      await admin.query('SELECT pg_advisory_unlock($1)', [prefixLockKey]);
+    }
+    await admin.end();
+    execFileSync(
+      'npx',
+      [
+        'prisma',
+        'migrate',
+        'deploy',
+        '--schema',
+        fileURLToPath(new URL('../../prisma/schema.prisma', import.meta.url)),
+      ],
+      { stdio: 'inherit', env: { ...process.env, DATABASE_URL: withDb(adminUrl, TEMPLATE) } },
+    );
+    // Open registration in the template so API tests can register over HTTP.
+    const seed = new pg.Client({ connectionString: withDb(adminUrl, TEMPLATE) });
+    await seed.connect();
+    await seed.query(
+      'INSERT INTO "AppSetting" (key, value, "updatedAt") VALUES ($1, $2, now()) ON CONFLICT (key) DO NOTHING',
+      ['instance.registrationMode', 'invite'],
+    );
+    await seed.query(
+      'INSERT INTO "AppSetting" (key, value, "updatedAt") VALUES ($1, $2, now()) ON CONFLICT (key) DO NOTHING',
+      ['instance.bootstrappedAt', new Date().toISOString()],
+    );
+    // The instance must be bootstrapped (>= 1 user) or registration answers
+    // SETUP_REQUIRED (403) even in open mode.
+    await seed.query(
+      `INSERT INTO "User" (id, email, name, "passwordHash", "webauthnUserId", "createdAt")
+       VALUES ('test-bootstrap', 'test-bootstrap@voltlink.test', 'Bootstrap', '$argon2id$test', NULL, now())
+       ON CONFLICT (id) DO NOTHING`,
+    );
+    await seed.end();
+  } catch (err) {
+    console.error(`[test-db] prefix ${PREFIX}: setup failed: ${String(err)}`);
+    process.exitCode = 1;
+    throw err;
   }
-  await admin.end();
-  execFileSync(
-    'npx',
-    [
-      'prisma',
-      'migrate',
-      'deploy',
-      '--schema',
-      fileURLToPath(new URL('../../prisma/schema.prisma', import.meta.url)),
-    ],
-    { stdio: 'inherit', env: { ...process.env, DATABASE_URL: withDb(adminUrl, TEMPLATE) } },
-  );
-  // Open registration in the template so API tests can register over HTTP.
-  const seed = new pg.Client({ connectionString: withDb(adminUrl, TEMPLATE) });
-  await seed.connect();
-  await seed.query(
-    'INSERT INTO "AppSetting" (key, value, "updatedAt") VALUES ($1, $2, now()) ON CONFLICT (key) DO NOTHING',
-    ['instance.registrationMode', 'invite'],
-  );
-  await seed.query(
-    'INSERT INTO "AppSetting" (key, value, "updatedAt") VALUES ($1, $2, now()) ON CONFLICT (key) DO NOTHING',
-    ['instance.bootstrappedAt', new Date().toISOString()],
-  );
-  // The instance must be bootstrapped (>= 1 user) or registration answers
-  // SETUP_REQUIRED (403) even in open mode.
-  await seed.query(
-    `INSERT INTO "User" (id, email, name, "passwordHash", "webauthnUserId", "createdAt")
-     VALUES ('test-bootstrap', 'test-bootstrap@voltlink.test', 'Bootstrap', '$argon2id$test', NULL, now())
-     ON CONFLICT (id) DO NOTHING`,
-  );
-  await seed.end();
   project.provide('dbAdminUrl', adminUrl);
   project.provide('dbTemplate', TEMPLATE);
   project.provide('dbPrefix', PREFIX);
@@ -92,11 +105,15 @@ export default async function setup(project: TestProject) {
     // DROP, carry on when one fails, print everything, and fail the run if
     // anything remains (process.exitCode as well as throwing).
     const c = new pg.Client({ connectionString: withDb(adminUrl, 'postgres') });
-    await c.connect();
     try {
+      await c.connect();
       await dropDatabases(c, PREFIX);
+    } catch (err) {
+      console.error(`[test-db] prefix ${PREFIX}: teardown failed: ${String(err)}`);
+      process.exitCode = 1;
+      throw err;
     } finally {
-      await c.end();
+      await c.end().catch(() => {});
     }
   };
 }
