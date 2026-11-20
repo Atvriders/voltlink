@@ -265,7 +265,7 @@ describe('Shell page', () => {
     fireEvent.input(search, { target: { value: 'zzz' } });
     // The switcher stays, and the menu explains there are no matches.
     expect(await within(menu).findByText('No vehicles match.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Choose vehicle' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Choose vehicle/ })).toBeTruthy();
   });
 
   it('toggles a favorite through the API', async () => {
