@@ -164,7 +164,12 @@ test('public status page', async ({ page }) => {
     timeout: 20000,
   });
   await page.waitForTimeout(1500);
-  await expect(page).toHaveScreenshot('public-status.png', T);
+  await expect(page).toHaveScreenshot('public-status.png', {
+    ...T,
+    // live instance status: the incident 'Updated' stamp and the rolling
+    // 30-day uptime percentages advance with the wall clock
+    mask: [page.getByText(/^Updated /), page.getByText(/uptime/i)],
+  });
 });
 
 test('settings security tab', async ({ page }) => {
@@ -403,7 +408,12 @@ test('status admin page', async ({ page }) => {
   await page.waitForTimeout(1000);
   await expect(page).toHaveScreenshot('status-admin.png', {
     ...T,
-    mask: maskDynamic(page),
+    mask: [
+      ...maskDynamic(page),
+      // rolling 30-day uptime + live incident stamps
+      page.getByText(/uptime/i),
+      page.getByText(/^Updated /),
+    ],
   });
 });
 
