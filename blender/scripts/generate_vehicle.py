@@ -120,10 +120,12 @@ def world_matrix(obj):
 
 def parent(child, parent_obj):
     child.parent = parent_obj
-    # Blender's cached matrix_world can be stale inside a headless script;
-    # compute the parent world recursively and set the inverse explicitly so
-    # the exported local transform is identity for meshes moved to their pivot.
-    child.matrix_parent_inverse = world_matrix(parent_obj).inverted()
+    # R2-39: use the REAL parent world matrix (depsgraph-refreshed) for the
+    # parent-inverse. The old recursive matrix_basis product missed ancestors'
+    # matrix_parent_inverse terms, so nested pivots (door window under the
+    # door hinge) exported below the ground plane.
+    bpy.context.view_layer.update()
+    child.matrix_parent_inverse = parent_obj.matrix_world.inverted()
 
 
 def shift_origin(obj, new_origin_gltf):
