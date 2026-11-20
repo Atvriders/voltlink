@@ -253,7 +253,8 @@ jobs:
           npx playwright install --with-deps chromium
           npx playwright test \
             --project=desktop --project=tablet --project=mobile \
-            --project=webgl-swiftshader --project=no-webgl --project=a11y
+            --project=webgl-swiftshader --project=no-webgl --project=a11y \
+            --workers=3
         env:
           E2E_BASE_URL: http://127.0.0.1:3111
           VL_E2E_SMTP_HTTP: http://127.0.0.1:1026

@@ -1,14 +1,21 @@
 // Tesla e2e (guide 01 §14): connect through the fake OAuth, import, see the
 // virtual-key readiness state, pair in the fake, and watch the check flip.
-// Run via scripts/e2e/tesla-e2e.sh, which starts the fake and sets the env.
+// PL-04 decision (PROGRESS): this spec stays in its own CI step because it
+// needs the fake Fleet API + seeded Tesla user (scripts/e2e/tesla-e2e.sh),
+// not the demo stack. There is no test.skip: running it without the fake
+// fails loudly instead of silently skipping.
 
 import { test, expect } from '@playwright/test';
 
 const FAKE = process.env.E2E_TESLA_FAKE_URL;
 
-test.describe('Tesla connect + virtual key (fake Fleet API)', () => {
-  test.skip(!process.env.E2E_TESLA_FAKE_URL, 'Tesla e2e runs via scripts/e2e/tesla-e2e.sh only');
+if (!FAKE) {
+  throw new Error(
+    'E2E_TESLA_FAKE_URL is not set — run the Tesla spec via scripts/e2e/tesla-e2e.sh',
+  );
+}
 
+test.describe('Tesla connect + virtual key (fake Fleet API)', () => {
   test('connect, import, pair, readiness flips', async ({ page }) => {
     // The stack was seeded by scripts/e2e/tesla-e2e.sh with a login-ready user.
     await page.goto('/login');
