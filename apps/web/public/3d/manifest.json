@@ -2,94 +2,94 @@
   "version": 1,
   "files": {
     "compact_crossover": {
-      "url": "/3d/compact_crossover.91dca7ed60.glb",
-      "bytes": 359128,
-      "sha256": "91dca7ed6046dc5eaac95af8b0b97ed1c842a2d06689a9cd330d60eab1f00316"
+      "url": "/3d/compact_crossover.65db3e4479.glb",
+      "bytes": 359140,
+      "sha256": "65db3e44793ea919a2eef2962df89c5256a669462f605b2d051043667b69c35b"
     },
     "compact_crossover_lod": {
-      "url": "/3d/compact_crossover_lod.72a0a49b9d.glb",
-      "bytes": 68768,
-      "sha256": "72a0a49b9dbbd68420adfb76f801e5f004ef97014c3ecf9722e18a87d9cc4938"
+      "url": "/3d/compact_crossover_lod.c65b8cfbdb.glb",
+      "bytes": 68780,
+      "sha256": "c65b8cfbdbd2fe044144891bcbc6099d610b73208ed154f864b54a89f5893d58"
     },
     "compact_crossover_lod2": {
-      "url": "/3d/compact_crossover_lod2.5a6b6b15d2.glb",
-      "bytes": 43296,
-      "sha256": "5a6b6b15d2093c5473fbc118fc1f016000136e52b1527c7936a586dbd5819d4f"
+      "url": "/3d/compact_crossover_lod2.63c0ca5906.glb",
+      "bytes": 43304,
+      "sha256": "63c0ca5906e5a52e0877a700d04e86aa53b724d5022b2bc427a188c13f8e39bb"
     },
     "compact_sedan": {
-      "url": "/3d/compact_sedan.7ddd32ff7f.glb",
-      "bytes": 349788,
-      "sha256": "7ddd32ff7fb1fba766cac03c553b5a22ff707246ca3b1f655778ce87a7ac4fc3"
+      "url": "/3d/compact_sedan.d25b973181.glb",
+      "bytes": 349796,
+      "sha256": "d25b973181573ed661411045f2bff51faf44b24d878262f42dc914b7a7828a9a"
     },
     "compact_sedan_lod": {
-      "url": "/3d/compact_sedan_lod.22af2dc5d7.glb",
-      "bytes": 68484,
-      "sha256": "22af2dc5d7bb146585beeadb13e2ed0aaa85fc995ec79a4dbdaeaf45d99ed229"
+      "url": "/3d/compact_sedan_lod.f1c9ef6ed5.glb",
+      "bytes": 68492,
+      "sha256": "f1c9ef6ed5d3ba2539be663d46cd32a329056720d83562c67b29320a62bc3fb8"
     },
     "compact_sedan_lod2": {
-      "url": "/3d/compact_sedan_lod2.32fc58c73d.glb",
-      "bytes": 42928,
-      "sha256": "32fc58c73dcf5203b04d95aa9c350b757541a54248d0d082a339c5087af7baa6"
+      "url": "/3d/compact_sedan_lod2.781297cba4.glb",
+      "bytes": 42936,
+      "sha256": "781297cba4f3299e9eff81ff39ec5e72a0a09568b2269f4dd0766ca077f6046f"
     },
     "fallback": {
-      "url": "/3d/fallback.eb2ea1b58c.glb",
-      "bytes": 310400,
-      "sha256": "eb2ea1b58cd25607330613c9bb8279b2d8bfed1c3aa0b22e819db6884b224c15"
+      "url": "/3d/fallback.c802aed6e1.glb",
+      "bytes": 310444,
+      "sha256": "c802aed6e11427414ca0ec583765548149b3c178418fa45c8dedd0005eaf064f"
     },
     "fallback_lod": {
-      "url": "/3d/fallback_lod.ce9d00da11.glb",
-      "bytes": 65660,
-      "sha256": "ce9d00da111c82b6a1103ca98466c35d3c793ba0a10d52c679489565a0323be9"
+      "url": "/3d/fallback_lod.f87adc09b8.glb",
+      "bytes": 65704,
+      "sha256": "f87adc09b8aa5191151573cb234976539737024f311a368a12d3fe1f68eeafa2"
     },
     "fallback_lod2": {
-      "url": "/3d/fallback_lod2.0be6d74993.glb",
-      "bytes": 42344,
-      "sha256": "0be6d749934bf4c56fef944705a35d8e1c017244f8c4c540f2746d6ca2769d29"
+      "url": "/3d/fallback_lod2.5515f56329.glb",
+      "bytes": 42388,
+      "sha256": "5515f5632939608761bb0eee53b19bc03a305792e3074c46ab3a6b4790f4e9de"
     },
     "pickup": {
-      "url": "/3d/pickup.d4688fa9c5.glb",
-      "bytes": 292980,
-      "sha256": "d4688fa9c52d8e241d441f8ee6046aee59c85f708626784c779078a039657183"
+      "url": "/3d/pickup.332e7735e9.glb",
+      "bytes": 292992,
+      "sha256": "332e7735e93a7d23556c7490da0db3f27783c9ae9a8663b18118ba0bec13e69b"
     },
     "pickup_lod": {
-      "url": "/3d/pickup_lod.4794aef3a7.glb",
-      "bytes": 65540,
-      "sha256": "4794aef3a7d2b287bbaec8dfbb753cb4a976538f0e69a49a856e553617cd1dcf"
+      "url": "/3d/pickup_lod.8883eb3659.glb",
+      "bytes": 65556,
+      "sha256": "8883eb3659a9c372bd2fa17c8c9b9cd0a76078a94075fd4fe8166bd30e134516"
     },
     "pickup_lod2": {
-      "url": "/3d/pickup_lod2.fa20871e4f.glb",
-      "bytes": 42180,
-      "sha256": "fa20871e4f2d8e94726fc50fc9d251f37ca393d126ee34feeb24d531c0316c7d"
+      "url": "/3d/pickup_lod2.f18a1b6b68.glb",
+      "bytes": 42196,
+      "sha256": "f18a1b6b684eef21832e4f89da724b77e21e59f661c2833c0dd4e40d33814302"
     },
     "sport_sedan": {
-      "url": "/3d/sport_sedan.35a125016e.glb",
-      "bytes": 292600,
-      "sha256": "35a125016ef526fa78ead7cd90f0b6a249992fbebe7f98c5fc6e67444e083639"
+      "url": "/3d/sport_sedan.92f8732063.glb",
+      "bytes": 292612,
+      "sha256": "92f8732063358973a0a4ebe264ef305ea02f61a3c34cffaffe5fea439de59010"
     },
     "sport_sedan_lod": {
-      "url": "/3d/sport_sedan_lod.fc924c7cd4.glb",
-      "bytes": 65456,
-      "sha256": "fc924c7cd436166247eb1c19a041a9536fca8c62db23c4f75e80641f13f596b1"
+      "url": "/3d/sport_sedan_lod.525b965dcc.glb",
+      "bytes": 65468,
+      "sha256": "525b965dcccdf48fed3cb2dee33a665ca41ba0d3d31a917559ecab862069b40f"
     },
     "sport_sedan_lod2": {
-      "url": "/3d/sport_sedan_lod2.83f54f01b5.glb",
-      "bytes": 42368,
-      "sha256": "83f54f01b5d37c9691fdcffd928cceaf93824b2f3393e2f1c292a121a3d439ba"
+      "url": "/3d/sport_sedan_lod2.05a19d36d3.glb",
+      "bytes": 42380,
+      "sha256": "05a19d36d3dc40ed9f72fcb257accc15ac5ed3adc5538178c805e678d5b8b856"
     },
     "suv": {
-      "url": "/3d/suv.9316c880bb.glb",
-      "bytes": 356252,
-      "sha256": "9316c880bbd7195bb028118eee8ae71900af6b461e4749ff0017df09b965e3b4"
+      "url": "/3d/suv.b6aed712d9.glb",
+      "bytes": 356268,
+      "sha256": "b6aed712d9ff5e567fed2fa22ac700e9ff88bc46fee2b6156278a800eaa7008b"
     },
     "suv_lod": {
-      "url": "/3d/suv_lod.e6d2162c9e.glb",
-      "bytes": 69608,
-      "sha256": "e6d2162c9e861a9562510e7d49078416bd23300488481620adc83f98d7b20ba9"
+      "url": "/3d/suv_lod.cf6944c4a3.glb",
+      "bytes": 69624,
+      "sha256": "cf6944c4a3e13a02e71195f46c67372efafc175e54bccbb406bd7002203e1a5f"
     },
     "suv_lod2": {
-      "url": "/3d/suv_lod2.59e6734288.glb",
-      "bytes": 42952,
-      "sha256": "59e6734288473729024d488e4bf95245d56a25af89b2851e706fe9d0beecab63"
+      "url": "/3d/suv_lod2.00ef3caa6d.glb",
+      "bytes": 42972,
+      "sha256": "00ef3caa6df8304eaefae5c911ee1929040ba667257e890cab35c25f4b6d01c6"
     },
     "charging_bay": {
       "url": "/3d/charging_bay.9c35a0f570.glb",
