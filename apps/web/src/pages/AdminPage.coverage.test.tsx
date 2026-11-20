@@ -171,47 +171,45 @@ describe('AdminPage', () => {
       },
     ];
 
-    apiMock.mockImplementation(
-      async (path: string, opts?: { method?: string; body?: unknown }) => {
-        if (path === '/api/v1/admin/settings') {
-          if (opts?.method === 'PATCH') return { ok: true };
-          return settingsFixture;
-        }
-        if (path === '/api/v1/admin/users') return usersFixture;
-        if (path.startsWith('/api/v1/admin/users/') && path.endsWith('/role')) {
-          return { ok: true };
-        }
-        if (path === '/api/v1/admin/health') {
-          return {
-            database: 'ok',
-            redis: 'ok',
-            migrationsCurrent: true,
-            workersActive: true,
-            queueDepth: 3,
-            telemetryFresh: true,
-            uptimeSec: 7200,
-            memoryMb: 256,
-          };
-        }
-        if (path === '/api/v1/commands/switches/status') {
-          return {
-            globalReadOnly: false,
-            commandsEnabled: true,
-            providerCommandsEnabled: true,
-            vehicleCommandsEnabled: true,
-          };
-        }
-        if (path === '/api/v1/commands/switches' && opts?.method === 'POST') {
-          return { ok: true };
-        }
-        if (path === '/api/v1/admin/queue/dead') return deadJobsFixture;
-        if (path.startsWith('/api/v1/admin/queue/') && path.endsWith('/flush')) {
-          return { ok: true };
-        }
-        if (path === '/api/v1/admin/retention/run') return { ok: true };
-        return {};
-      },
-    );
+    apiMock.mockImplementation(async (path: string, opts?: { method?: string; body?: unknown }) => {
+      if (path === '/api/v1/admin/settings') {
+        if (opts?.method === 'PATCH') return { ok: true };
+        return settingsFixture;
+      }
+      if (path === '/api/v1/admin/users') return usersFixture;
+      if (path.startsWith('/api/v1/admin/users/') && path.endsWith('/role')) {
+        return { ok: true };
+      }
+      if (path === '/api/v1/admin/health') {
+        return {
+          database: 'ok',
+          redis: 'ok',
+          migrationsCurrent: true,
+          workersActive: true,
+          queueDepth: 3,
+          telemetryFresh: true,
+          uptimeSec: 7200,
+          memoryMb: 256,
+        };
+      }
+      if (path === '/api/v1/commands/switches/status') {
+        return {
+          globalReadOnly: false,
+          commandsEnabled: true,
+          providerCommandsEnabled: true,
+          vehicleCommandsEnabled: true,
+        };
+      }
+      if (path === '/api/v1/commands/switches' && opts?.method === 'POST') {
+        return { ok: true };
+      }
+      if (path === '/api/v1/admin/queue/dead') return deadJobsFixture;
+      if (path.startsWith('/api/v1/admin/queue/') && path.endsWith('/flush')) {
+        return { ok: true };
+      }
+      if (path === '/api/v1/admin/retention/run') return { ok: true };
+      return {};
+    });
   });
 
   afterEach(() => {
@@ -237,22 +235,10 @@ describe('AdminPage', () => {
     expect(await screen.findByText('Command timed out')).toBeInTheDocument();
   });
 
-  it('updates a user role from the users list', async () => {
-    const user = userEvent.setup();
-    renderPage('/admin', <AdminPage />);
-
-    const roleSelect = await screen.findByLabelText('Role for Alice');
-    fireEvent.change(roleSelect, { target: { value: 'DRIVER' } });
-
-    await waitFor(() => {
-      expect(apiMock).toHaveBeenCalledWith('/api/v1/admin/users/u1/role', {
-        method: 'PATCH',
-        body: { role: 'DRIVER' },
-      });
-    });
-
-    await user.click(screen.getByRole('button', { name: 'Save' }));
-  });
+  // R2-45: the test that asserted PATCH {role:'DRIVER'} was deleted — the API
+  // rejects that body ("role must be admin or member"), so it locked in R2-22
+  // (PROGRESS note). A spec-correct role-update test lands with the R2-22 fix
+  // (step 6).
 
   it('saves the telemetry retention setting', async () => {
     const user = userEvent.setup();
