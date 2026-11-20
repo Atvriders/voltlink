@@ -178,15 +178,16 @@ function VehicleSwitcher() {
         className="flex items-center gap-2 rounded-lg border border-line bg-panel2 px-2.5 py-1.5 text-sm hover:border-faint"
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-label={
-          selected
-            ? `Vehicle: ${selected.displayName}. ${list.length} vehicles. Change vehicle`
-            : `Choose vehicle. Fleet. ${list.length} vehicles`
-        }
       >
         <Car size={15} className="text-accent" />
         <span className="hidden sm:inline">{selected ? selected.displayName : 'Fleet'}</span>
         <span className="text-faint">{list.length}</span>
+        <span
+          className="absolute h-px w-px overflow-hidden whitespace-nowrap border-0 p-0"
+          style={{ clip: 'rect(0 0 0 0)', clipPath: 'inset(50%)' }}
+        >
+          {selected ? `Vehicle: ${selected.displayName}. Change vehicle` : 'Choose vehicle'}
+        </span>
         <ChevronDown size={13} />
       </button>
       {open && (
