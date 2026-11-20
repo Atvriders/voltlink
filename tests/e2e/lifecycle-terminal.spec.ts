@@ -53,6 +53,27 @@ async function waitTerminal(page: Page, commandId: string): Promise<Cmd> {
   throw new Error('command did not reach a terminal state within 90s');
 }
 
+/** Poll until a SPECIFIC status (and its audit event) — 'accepted' alone is
+ * not enough for an observable command whose confirm lands ~10 s later. */
+async function waitForStatus(page: Page, commandId: string, status: string): Promise<Cmd> {
+  const deadline = Date.now() + 90_000;
+  let last: Cmd = { id: commandId };
+  while (Date.now() < deadline) {
+    const res = await page.request.get(`/api/v1/commands/${commandId}`);
+    expect(res.status(), 'command detail must be reachable').toBe(200);
+    const body = (await res.json()) as {
+      data?: { command?: Cmd; events?: { event: string }[] } & Cmd;
+    };
+    const detail = (body.data ?? {}) as { command?: Cmd; events?: { event: string }[] };
+    const cmd = (detail.command ?? detail) as Cmd;
+    const events = detail.events ?? cmd.events ?? [];
+    last = { ...cmd, events };
+    if (cmd.status === status && events.some((e) => e.event === status)) return last;
+    await page.waitForTimeout(500);
+  }
+  throw new Error(`command did not reach ${status} within 90s (last: ${last.status})`);
+}
+
 test('R2-17: honk reaches accepted/not_observable with the full event chain (API + UI)', async ({
   page,
 }) => {
@@ -201,7 +222,7 @@ test('R2-17: confirmed lifecycle — Aurora lock reaches confirmed with the full
   await page.getByRole('button', { name: 'Lock', exact: true }).click();
 
   const issued = await newestCommand(page, vehicleId, clickTime);
-  const final = await waitTerminal(page, issued.id);
+  const final = await waitForStatus(page, issued.id, 'confirmed');
   expect(final.status, 'Aurora lock must reach confirmed').toBe('confirmed');
   const events = (final.events ?? []).map((e) => e.event);
   for (const step of ['queued', 'submitted', 'accepted', 'confirmed']) {

@@ -15,6 +15,11 @@ const CLASS_BY_NAME: Record<string, string> = {
 test('showroom renders the right GLB per vehicle class, with zero page errors', async ({
   page,
 }) => {
+  // Five GLB loads plus the WEBGL_lose_context cycle take ~1.1m on the shared
+  // machine's SwiftShader path; the default 60s test timeout is too tight
+  // (PROGRESS honesty 2026-11-20, review #2 point 10). Assertion timeouts
+  // inside the test are unchanged.
+  test.setTimeout(180_000);
   const email = `e2e-glb-${Date.now()}@voltlink.test`;
   await register(page, email);
   await enableDemo(page);
