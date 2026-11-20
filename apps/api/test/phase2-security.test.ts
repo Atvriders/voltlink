@@ -44,7 +44,7 @@ function totpCode(secret: string, at = Date.now()): string {
 }
 import { buildApp } from '../src/app';
 import { initRedis } from '../src/core/redis';
-import { sseStart } from '../src/core/sse';
+import { ssePublish, sseStart } from '../src/core/sse';
 import { prisma } from '../src/core/db';
 import { env, parseTrustProxy } from '../src/core/env';
 import { hashPassword, randomId } from '../src/core/crypto';
@@ -470,7 +470,7 @@ describe('keyring rotation (A-KEYROT)', () => {
 });
 
 describe('SSE revocation (A-SSEREVOKE)', () => {
-  it('ends open realtime streams when the session is revoked', async () => {
+  it('R2-31 / TI-29 ends open realtime streams when the session is revoked', async () => {
     const user = await mkUser(`p2-sse-${Date.now()}@example.test`);
     const { token, sessionId } = await sessionFor(user.id);
     const res = await fetch(`${base}/api/v1/realtime`, {
@@ -504,6 +504,16 @@ describe('SSE revocation (A-SSEREVOKE)', () => {
       }
     }
     expect(closed).toBe(true);
+    // Review #2 point 7: a revoked stream must receive NOTHING — publish a
+    // marker after the revoking request and prove it never arrives (the
+    // stream is already closed, so the next read resolves done, never data).
+    ssePublish({ userId: user.id, type: 'notification', data: { message: 'post-revoke-marker' } });
+    await new Promise((r) => setTimeout(r, 300));
+    const after = await Promise.race([
+      reader.read(),
+      new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), 1000)),
+    ]);
+    expect(after === 'timeout' ? false : (after as { done: boolean }).done).toBe(true);
     await prisma.user.delete({ where: { id: user.id } });
   });
 });
