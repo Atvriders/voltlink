@@ -42,14 +42,12 @@ vi.mock('./auth/AuthContext', () => ({
     refresh: vi.fn(),
   }),
 }));
-let pickHandler: ((lat: number, lon: number) => void) | null = null;
 vi.mock('./components/MapView', () => ({
   default: (props: {
     onPointPick?: (lat: number, lon: number) => void;
     onReady?: (m: unknown) => void;
     mapStyle?: unknown;
   }) => {
-    pickHandler = props.onPointPick ?? null;
     return (
       <div data-testid="map">
         <button type="button" onClick={() => props.onPointPick?.(40.1234, -100.5678)}>
@@ -87,14 +85,16 @@ const vehicle = {
 };
 
 beforeEach(() => {
-  pickHandler = null;
   apiMock.mockImplementation(async (path: string) => {
     if (path === '/api/v1/vehicles') return [vehicle];
     if (path === '/api/v1/vehicles/places/all') return [];
     if (path === '/api/v1/vehicles/geofences/all') return [];
     if (path === '/api/v1/vehicles/privacy-zones') return [];
     if (path === '/api/v1/config/client')
-      return { map: { mode: 'demo', assetsUrl: '/assets/' }, geocoder: { enabled: false, autocomplete: false } };
+      return {
+        map: { mode: 'demo', assetsUrl: '/assets/' },
+        geocoder: { enabled: false, autocomplete: false },
+      };
     if (path.startsWith('/api/v1/charging')) return { items: [] };
     if (path.startsWith('/api/v1/drives')) return { items: [] };
     return {};
@@ -136,7 +136,12 @@ describe('save place picker (NEW-12)', () => {
         '/api/v1/vehicles/places/all',
         expect.objectContaining({
           method: 'POST',
-          body: expect.objectContaining({ name: 'HQ' }),
+          body: expect.objectContaining({
+            name: 'HQ',
+            // the picked coordinates must reach the API
+            lat: 40.1234,
+            lon: -100.5678,
+          }),
         }),
       ),
     );

@@ -243,10 +243,7 @@ describe('BatteryPage', () => {
     renderPage('/analytics/battery', <BatteryPage />);
 
     await screen.findByRole('img', { name: 'Efficiency chart' });
-    await user.selectOptions(
-      screen.getByLabelText('Efficiency window') as HTMLSelectElement,
-      '30',
-    );
+    await user.selectOptions(screen.getByLabelText('Efficiency window') as HTMLSelectElement, '30');
 
     await waitFor(() =>
       expect(apiMock).toHaveBeenCalledWith('/api/v1/analytics/v1/efficiency?days=30'),
@@ -302,7 +299,9 @@ describe('BatteryPage', () => {
     expect(await screen.findByText('01-03')).toBeTruthy();
     expect(screen.getByText('10.5 km')).toBeTruthy();
     expect(screen.getByText('3.0 kWh in')).toBeTruthy();
-    expect(screen.getAllByText('1 drives').length).toBeGreaterThan(0);
+    // driveCount pluralization: one drive is singular, two are plural
+    expect(screen.getAllByText('1 drive').length).toBeGreaterThan(0);
+    expect(screen.getByText('2 drives')).toBeTruthy();
     expect(screen.getByText('Energy (drives)')).toBeTruthy();
     expect(screen.getByText('Charged')).toBeTruthy();
   });

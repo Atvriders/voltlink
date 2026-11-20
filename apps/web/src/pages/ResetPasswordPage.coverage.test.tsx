@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, cleanup } from '@testing-library/react';
 
 const apiMock = vi.fn();
 const csvMock = vi.fn().mockResolvedValue('a,b');
@@ -154,11 +154,14 @@ describe('Password reset and verification pages', () => {
     expect(await screen.findByText('Check your inbox')).toBeTruthy();
     expect(apiMock).toHaveBeenCalledWith(
       '/api/v1/auth/forgot-password',
-      expect.objectContaining({ method: 'POST' }),
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.objectContaining({ email: 'alice@example.test' }),
+      }),
     );
   });
 
-  it('submits a new password and shows the updated state', async () => {
+  it('submits a new password and sends the URL token (W11)', async () => {
     renderPage('/reset-password?token=reset-token', <ResetPasswordPage />);
 
     const password = await screen.findByLabelText(/new password/i);
@@ -168,7 +171,13 @@ describe('Password reset and verification pages', () => {
     expect(await screen.findByText('Password updated')).toBeTruthy();
     expect(apiMock).toHaveBeenCalledWith(
       '/api/v1/auth/reset-password',
-      expect.objectContaining({ method: 'POST' }),
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.objectContaining({
+          token: 'reset-token',
+          password: 'verysecurepassword',
+        }),
+      }),
     );
   });
 
