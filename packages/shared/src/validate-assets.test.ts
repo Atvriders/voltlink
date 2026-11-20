@@ -65,4 +65,30 @@ describe('C-ASSETVALID validator', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('fails ENVELOPE when a mesh node is exported below the ground plane (R2-39)', async () => {
+    const { NodeIO } = await import('@gltf-transform/core');
+    const io = new NodeIO();
+    const src = path.join(root, 'assets', 'models', 'processed', 'compact_sedan.glb');
+    const doc = await io.read(src);
+    const target = doc
+      .getRoot()
+      .listNodes()
+      .find((n) => (n.getName() ?? '').endsWith('_mesh') && n.getMesh());
+    expect(target, 'a mesh node exists in the fixture').toBeTruthy();
+    // R2-39: the old generator's parent-inverse bug exported door windows
+    // under the car. Any mesh below the ground plane must fail the build.
+    const t = target!.getTranslation();
+    target!.setTranslation([t[0], t[1] - 5, t[2]]);
+    const dir = mkdtempSync(path.join(tmpdir(), 'voltlink-ground-'));
+    try {
+      const data = await io.writeBinary(doc);
+      writeFileSync(path.join(dir, 'compact_sedan.glb'), data);
+      const { status, out } = runValidator(['--staged', dir]);
+      expect(status).not.toBe(0);
+      expect(out).toContain('below ground');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
