@@ -260,6 +260,17 @@ for (const file of readdirSync(STAGED).filter((f) => f.endsWith('.glb') && !f.in
       fail(full, 'NAME_INVALID', `bad name: ${name}`);
   }
 
+  // ENVELOPE / ground floor — R2-39: no mesh may be exported below the
+  // ground plane (the old generator's parent-inverse bug exported door
+  // windows under the car). Per-mesh world box, not the whole-model box.
+  for (const [name, node] of nodes) {
+    if (!name.endsWith('_mesh')) continue;
+    if (!node.getMesh() || node.getMesh()!.listPrimitives().length === 0) continue;
+    const mb = worldBox(doc, node);
+    if (mb.min.y < -0.01)
+      fail(full, 'ENVELOPE', `${name} below ground: min.y ${mb.min.y.toFixed(3)}`);
+  }
+
   // PART_MISSING — required part set per class
   const required = [
     'body_mesh',
