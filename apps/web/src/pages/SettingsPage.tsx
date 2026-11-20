@@ -276,7 +276,9 @@ function SecurityTab() {
               </li>
             ))}
             {(passkeys ?? []).length === 0 && (
-              <p className="py-1 text-sm text-faint">No passkeys registered.</p>
+              <li>
+                <p className="py-1 text-sm text-faint">No passkeys registered.</p>
+              </li>
             )}
           </ul>
           <div className="mt-3 flex items-end gap-2">
