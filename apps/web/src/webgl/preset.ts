@@ -2,11 +2,11 @@
 // default preset without pulling the 1.1 MB viewer chunk into their bundle.
 export type GraphicsPreset = 'low' | 'medium' | 'high' | 'ultra';
 
-export const PRESETS: Record<GraphicsPreset, { pxRatio: number; shadows: boolean; ao: boolean }> = {
-  low: { pxRatio: 1, shadows: false, ao: false },
-  medium: { pxRatio: 1.25, shadows: false, ao: false },
-  high: { pxRatio: 1.75, shadows: true, ao: false },
-  ultra: { pxRatio: 2, shadows: true, ao: true },
+export const PRESETS: Record<GraphicsPreset, { pxRatio: number; shadows: boolean }> = {
+  low: { pxRatio: 1, shadows: false },
+  medium: { pxRatio: 1.25, shadows: false },
+  high: { pxRatio: 1.75, shadows: true },
+  ultra: { pxRatio: 2, shadows: true },
 };
 
 export function autoPreset(): GraphicsPreset {

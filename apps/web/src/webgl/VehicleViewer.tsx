@@ -29,7 +29,8 @@ function meshoptLoader(): GLTFLoader {
   return sharedLoader;
 }
 import type { VehicleState, VehicleWithState } from '@voltlink/shared';
-import { resolveAssetUrl } from './vehicleAssets';
+import { lodBaseFor, resolveAssetUrl } from './vehicleAssets';
+import { rigShouldFollow } from './cameraRig';
 
 import { PRESETS, autoPreset, type GraphicsPreset } from './preset';
 export { PRESETS, autoPreset };
@@ -52,13 +53,22 @@ const classCamera = (cls: string): [number, number, number] =>
   (CLASS_CAMERA[cls] ?? CLASS_CAMERA.fallback) as [number, number, number];
 
 /** Smoothly eases the default camera toward the class framing (spec L1300). */
-function CameraRig({ target }: { target: [number, number, number] }) {
+function CameraRig({
+  target,
+  interacted,
+}: {
+  target: [number, number, number];
+  interacted: { current: boolean };
+}) {
   const targetRef = useRef(new THREE.Vector3(...target));
   useEffect(() => {
     targetRef.current.set(...target);
   }, [target]);
   useFrame((state) => {
     const cam = state.camera;
+    // R2-43: after the first orbit/zoom the user owns the camera — stop
+    // driving it so orbit/zoom never snaps back.
+    if (!rigShouldFollow(interacted.current)) return;
     const t = targetRef.current;
     if (reducedMotion()) {
       cam.position.copy(t);
@@ -435,11 +445,14 @@ export default function VehicleViewer({
   const [glbLoaded, setGlbLoaded] = useState(false);
   const [partNames, setPartNames] = useState<string[]>([]);
   const signal = useRef({ ok: false });
-  // LOD: low/medium graphics presets load the decimated _lod variant that the
-  // Blender pipeline emits alongside every class.
-  const useLod = p === 'low' || p === 'medium';
-  const base = `${vehicle.vehicleClass}${useLod ? '_lod' : ''}`;
-  const [asset, setAsset] = useState(`/assets/models/${base}.glb`);
+  // R2-43: once the user grabs the camera the rig never drives it again.
+  const interactedRef = useRef(false);
+  // R2-62: LOD variants per graphics preset — low → _lod2, medium → _lod,
+  // high/ultra → LOD0.
+  const base = lodBaseFor(vehicle.vehicleClass, p);
+  // R2-61: the initial asset is null until the staged manifest resolves, so
+  // no 404 HEAD for /assets/models/<class>.glb fires on mount.
+  const [asset, setAsset] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -454,6 +467,7 @@ export default function VehicleViewer({
   // Preflight the GLB before letting GLTFLoader fetch it, so a missing asset
   // degrades to the procedural fallback instead of a loader error.
   useEffect(() => {
+    if (!asset) return;
     let cancelled = false;
     const url = asset;
     fetch(url, { method: 'HEAD' })
@@ -510,7 +524,7 @@ export default function VehicleViewer({
       >
         <CanvasBoundary height={height}>
           <PerspectiveCamera makeDefault position={classCamera(vehicle.vehicleClass)} fov={40} />
-          <CameraRig target={classCamera(vehicle.vehicleClass)} />
+          <CameraRig target={classCamera(vehicle.vehicleClass)} interacted={interactedRef} />
           <StudioLights hour={new Date().getHours()} />
           <Suspense fallback={<FallbackVehicle vehicle={vehicle} state={state} />}>
             {useGlb ? (
@@ -540,6 +554,9 @@ export default function VehicleViewer({
               maxPolarAngle={Math.PI * 0.62}
               autoRotate={!reducedMotion()}
               autoRotateSpeed={0.6}
+              onStart={() => {
+                interactedRef.current = true;
+              }}
             />
           )}
         </CanvasBoundary>

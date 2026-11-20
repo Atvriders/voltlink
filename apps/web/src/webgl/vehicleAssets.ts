@@ -6,6 +6,8 @@ export interface ManifestFile {
   sha256: string;
 }
 
+import type { GraphicsPreset } from './preset';
+
 let cached: Record<string, ManifestFile> | null = null;
 let pending: Promise<Record<string, ManifestFile>> | null = null;
 
@@ -33,4 +35,15 @@ export async function resolveAssetUrl(base: string): Promise<string> {
   const entry = files[base];
   if (entry?.url) return entry.url;
   return `/assets/models/${base}.glb`;
+}
+
+/**
+ * R2-62: pick the LOD variant the Blender pipeline emits for a preset —
+ * low → _lod2 (most decimated), medium → _lod, high/ultra → LOD0. Every
+ * shipped variant is used, none is dead weight.
+ */
+export function lodBaseFor(vehicleClass: string, preset: GraphicsPreset): string {
+  if (preset === 'low') return `${vehicleClass}_lod2`;
+  if (preset === 'medium') return `${vehicleClass}_lod`;
+  return vehicleClass;
 }
