@@ -288,7 +288,9 @@ export default function BatteryPage() {
                       <span className="text-subtle">{a.date.slice(5)}</span>
                       <span>{a.distanceKm.toFixed(1)} km</span>
                       <span className="text-subtle">{a.chargeEnergyKwh.toFixed(1)} kWh in</span>
-                      <Badge tone="accent">{a.driveCount} drives</Badge>
+                      <Badge tone="accent">
+                        {a.driveCount} {a.driveCount === 1 ? 'drive' : 'drives'}
+                      </Badge>
                     </li>
                   ))}
               </ul>
