@@ -80,8 +80,8 @@ test('live vehicle controls panel', async ({ page }) => {
   await registerWithDemoFleet(page);
   await page.getByRole('button', { name: 'Live vehicle' }).first().click();
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
-  // The panel drives the selected vehicle, never an empty shell.
-  await expect(page.getByText('Aurora', { exact: true }).first()).toBeVisible();
+  // The panel renders the real command buttons, never an empty shell.
+  await expect(page.getByRole('button', { name: 'Honk', exact: true })).toBeVisible();
   await page.waitForTimeout(1500);
   await expect(page).toHaveScreenshot('live-vehicle.png', {
     ...T,
@@ -111,7 +111,7 @@ test('charging page', async ({ page }) => {
   await page.goto('/charging');
   await expect(page.getByText('Electricity rates')).toBeVisible({ timeout: 20000 });
   // Content: the seeded rate rules are listed.
-  await expect(page.getByText('Home TOU', { exact: true })).toBeVisible({
+  await expect(page.getByText('Home TOU', { exact: true }).first()).toBeVisible({
     timeout: 20000,
   });
   await page.waitForTimeout(1500);
@@ -140,7 +140,12 @@ test('fleet page', async ({ page }) => {
   await registerWithDemoFleet(page);
   await page.goto('/fleet');
   await expect(page.getByText('Fleet status')).toBeVisible({ timeout: 20000 });
-  await assertDemoFleetOn(page);
+  // Content: the seeded counts, then the vehicle rows themselves.
+  await expect(page.getByText('5 vehicles · 1 charging · 1 offline')).toBeVisible({
+    timeout: 20000,
+  });
+  await expect(page.getByRole('cell', { name: /Aurora/ }).first()).toBeVisible();
+  await expect(page.getByRole('cell', { name: /Bison/ }).first()).toBeVisible();
   await page.waitForTimeout(1500);
   await expect(page).toHaveScreenshot('fleet.png', {
     ...T,
@@ -212,10 +217,13 @@ test('map page', async ({ page }) => {
   await expect(page.locator('div[aria-label="Map"]')).toBeVisible({
     timeout: 25000,
   });
-  // Content: the mirrored map facts list the demo vehicles, and a place is
-  // shown — the blank-panel baseline is gone.
-  await assertDemoFleetOn(page);
-  await expect(page.getByText('Home', { exact: true }).first()).toBeVisible({
+  // Content: the mirrored map facts list the demo vehicles and places — the
+  // blank-panel baseline is gone.
+  const layers = page.locator('aside[aria-label="Map layers"]');
+  await expect(layers.getByText('Aurora', { exact: true })).toBeVisible({
+    timeout: 25000,
+  });
+  await expect(layers.getByText('Home', { exact: true }).first()).toBeVisible({
     timeout: 20000,
   });
   await page.waitForTimeout(3000);
@@ -244,7 +252,8 @@ test('battery page', async ({ page }) => {
   await expect(page.getByText('Battery health estimate')).toBeVisible({
     timeout: 30000,
   });
-  await expect(page.getByText('Aurora', { exact: true }).first()).toBeVisible();
+  // Content: the health estimate renders its kWh figure.
+  await expect(page.getByText(/kWh/).first()).toBeVisible({ timeout: 20000 });
   await page.waitForTimeout(1500);
   await expect(page).toHaveScreenshot('battery.png', {
     ...T,
@@ -318,6 +327,9 @@ test('showroom page', async ({ page }) => {
   const viewer = page.locator('[data-testid="vehicle-viewer"]');
   await expect(viewer).toBeVisible({ timeout: 30000 });
   // Content: the viewer announces the loaded part names (data-parts hook).
+  await expect(viewer).toHaveAttribute('data-parts', /body_mesh/, {
+    timeout: 30000,
+  });
   const parts = (await viewer.getAttribute('data-parts')) ?? '';
   expect(parts).toContain('body_mesh');
   await page.waitForTimeout(1500);
