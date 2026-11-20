@@ -1005,12 +1005,13 @@ describe(
         // Non-matching online snapshot: stays accepted, and a confirm job is
         // re-enqueued for the next attempt.
         await snapshot(row.mismatch);
-        const delayedBefore = (await queue('vehicle-commands').getJobCounts('delayed')).delayed;
+        const delayedBefore =
+          (await queue('vehicle-commands').getJobCounts('delayed')).delayed ?? 0;
         await processCommandJob({ commandId: command.id, stage: 'confirm', n: 1 });
         expect(
           (await prisma.vehicleCommand.findUniqueOrThrow({ where: { id: command.id } })).status,
         ).toBe('accepted');
-        const delayedAfter = (await queue('vehicle-commands').getJobCounts('delayed')).delayed;
+        const delayedAfter = (await queue('vehicle-commands').getJobCounts('delayed')).delayed ?? 0;
         expect(
           delayedAfter,
           'confirm must be re-enqueued after a non-matching snapshot',

@@ -2,6 +2,9 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // Specs are *.spec.ts; *.test.ts files in tests/e2e (vitest unit tests like
+  // demo-fleet-predicate.test.ts) are never Playwright tests.
+  testMatch: /\.spec\.ts$/,
   timeout: 60000,
   expect: { timeout: 10000 },
   fullyParallel: false,

@@ -150,7 +150,9 @@ test('providers page', async ({ page }) => {
   await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await enableDemo(page);
   await page.goto('/providers');
-  await expect(page.getByText(/demo vehicles/)).toBeVisible({ timeout: 30000 });
+  // Strict: the exact-count badge — the loose /demo vehicles/ regex also
+  // matched the marketing sentence (strict-mode violation under workers=3).
+  await expect(page.getByText(/^\d+ demo vehicles$/)).toBeVisible({ timeout: 30000 });
   await page.waitForTimeout(1000);
   await expect(page).toHaveScreenshot('providers.png', T);
 });
