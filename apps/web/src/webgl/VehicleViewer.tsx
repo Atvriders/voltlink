@@ -93,7 +93,7 @@ function VehicleModel({
   state: VehicleState | null;
   preset: GraphicsPreset;
   signal: { ok: boolean };
-  onLoaded?: () => void;
+  onLoaded?: (partNames: string[]) => void;
 }) {
   const [gltf, setGltf] = useState<Awaited<ReturnType<GLTFLoader['loadAsync']>> | null>(null);
   useEffect(() => {
@@ -136,7 +136,7 @@ function VehicleScene({
   state: VehicleState | null;
   preset: GraphicsPreset;
   signal: { ok: boolean };
-  onLoaded?: () => void;
+  onLoaded?: (partNames: string[]) => void;
 }) {
   const ref = useRef<THREE.Group>(null);
   const stateRef = useRef(state);
@@ -194,12 +194,14 @@ function VehicleScene({
 
   const onLoadedRef = useRef(onLoaded);
   onLoadedRef.current = onLoaded;
+  const sceneRef = useRef(parts.scene);
+  sceneRef.current = parts.scene;
 
   // Load signal: stable deps only (onLoaded identity changes with every parent
   // render and must never re-run the cleanup below).
   useEffect(() => {
     signal.ok = true;
-    onLoadedRef.current?.();
+    onLoadedRef.current?.(sceneRef.current.children.map((c) => c.name));
     return () => {
       signal.ok = false;
     };
@@ -429,6 +431,7 @@ export default function VehicleViewer({
   });
   const [assetOk, setAssetOk] = useState<boolean | null>(null);
   const [glbLoaded, setGlbLoaded] = useState(false);
+  const [partNames, setPartNames] = useState<string[]>([]);
   const signal = useRef({ ok: false });
   // LOD: low/medium graphics presets load the decimated _lod variant that the
   // Blender pipeline emits alongside every class.
@@ -486,6 +489,7 @@ export default function VehicleViewer({
       data-testid="vehicle-viewer"
       data-asset={useGlb && glbLoaded ? 'glb' : 'fallback'}
       data-asset-url={useGlb && glbLoaded ? asset : undefined}
+      data-parts={useGlb && glbLoaded ? partNames.join(',') : undefined}
     >
       <Canvas
         dpr={cfg.pxRatio}
@@ -515,7 +519,10 @@ export default function VehicleViewer({
                   state={state}
                   preset={p}
                   signal={signal.current}
-                  onLoaded={() => setGlbLoaded(true)}
+                  onLoaded={(names) => {
+                    setGlbLoaded(true);
+                    setPartNames(names);
+                  }}
                 />
               </ErrorBoundary3D>
             ) : (

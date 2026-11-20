@@ -50,7 +50,40 @@ test('showroom renders the right GLB per vehicle class, with zero page errors', 
     await expect(viewer.first()).toHaveAttribute('data-asset', 'glb', {
       timeout: 30000,
     });
+    // C-WEBGLTEST: part names — the loaded GLB must expose the required
+    // part set (guide 06 s12); a wrong or truncated model fails here.
+    const parts = (await viewer.first().getAttribute('data-parts')) ?? '';
+    for (const p of ['body_mesh', 'wheel_fl', 'wheel_fr', 'door_fl']) {
+      expect(parts, `${cls} GLB must contain part ${p}`).toContain(p);
+    }
     console.log(`glb asset ${cls} rendered for ${name}`);
   }
+
+  // Context loss (guide 06 s12 / guide 08 s12): lose the context, restore it,
+  // and the viewer must keep rendering without a page error.
+  const lose = await page.evaluate(() => {
+    const c = document.querySelector(
+      '[data-testid="vehicle-viewer"] canvas',
+    ) as HTMLCanvasElement | null;
+    const gl = (c?.getContext('webgl2') || c?.getContext('webgl')) as WebGLRenderingContext | null;
+    const ext = gl?.getExtension('WEBGL_lose_context');
+    ext?.loseContext();
+    return Boolean(ext);
+  });
+  expect(lose, 'WEBGL_lose_context available').toBe(true);
+  await page.waitForTimeout(500);
+  await page.evaluate(() => {
+    const c = document.querySelector(
+      '[data-testid="vehicle-viewer"] canvas',
+    ) as HTMLCanvasElement | null;
+    const gl = (c?.getContext('webgl2') || c?.getContext('webgl')) as WebGLRenderingContext | null;
+    gl?.getExtension('WEBGL_lose_context')?.restoreContext();
+  });
+  await page.waitForTimeout(500);
+  await expect(page.locator('[data-testid="vehicle-viewer"]').first()).toHaveAttribute(
+    'data-asset',
+    'glb',
+    { timeout: 10000 },
+  );
   expect(errors, 'no page errors during the whole sweep').toEqual([]);
 });

@@ -8,7 +8,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { enableDemo, register } from './helpers';
 
-const TERMINAL = ['accepted', 'not_observable', 'rejected', 'failed', 'timed_out'];
+const TERMINAL = ['confirmed', 'accepted', 'not_observable', 'rejected', 'failed', 'timed_out'];
 
 type Cmd = { id: string; status?: string; createdAt?: string; events?: { event: string }[] };
 
@@ -175,4 +175,56 @@ test('R2-17: timed_out lifecycle — Bison window_vent times out end to end', as
       { timeout: 15000 },
     )
     .toBe('timed_out');
+});
+
+test('R2-17: confirmed lifecycle — Aurora lock reaches confirmed with the full event chain', async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await register(page, `e2e-lc-conf-${Date.now()}@voltlink.test`);
+  await enableDemo(page);
+
+  const vres = await page.request.get('/api/v1/vehicles');
+  const vbody = (await vres.json()) as {
+    data?: { id: string; displayName?: string }[];
+  };
+  const aurora = (vbody.data ?? []).find((v) => (v.displayName ?? '').includes('Aurora'));
+  expect(aurora, 'Aurora exists in the demo fleet').toBeTruthy();
+  await page.goto(`/vehicles/${aurora!.id}`);
+  await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
+  const vehicleId = aurora!.id;
+
+  // An OBSERVABLE command: the demo snapshot has locked=true, so lock
+  // accepts, the confirm stage matches the ingested snapshot and the command
+  // ends confirmed (guide 08 s10 / C-E2ENOWORKER).
+  const clickTime = Date.now();
+  await page.getByRole('button', { name: /^Lock/ }).click();
+
+  const issued = await newestCommand(page, vehicleId, clickTime);
+  const final = await waitTerminal(page, issued.id);
+  expect(final.status, 'Aurora lock must reach confirmed').toBe('confirmed');
+  const events = (final.events ?? []).map((e) => e.event);
+  for (const step of ['queued', 'submitted', 'accepted', 'confirmed']) {
+    expect(events, `event chain must contain ${step}`).toContain(step);
+  }
+  const q = events.indexOf('queued');
+  const s = events.indexOf('submitted');
+  const a = events.indexOf('accepted');
+  const c = events.indexOf('confirmed');
+  expect(q).toBeGreaterThanOrEqual(0);
+  expect(s).toBeGreaterThan(q);
+  expect(a).toBeGreaterThan(s);
+  expect(c, 'confirmed after accepted').toBeGreaterThan(a);
+
+  // UI: the modal for THIS command shows data-status=confirmed.
+  await expect
+    .poll(
+      async () =>
+        (await page
+          .locator(`[data-command-id="${issued.id}"]`)
+          .first()
+          .getAttribute('data-status')) ?? '',
+      { timeout: 15000 },
+    )
+    .toBe('confirmed');
 });
