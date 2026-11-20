@@ -293,9 +293,13 @@ describe('R2-31 / TI-29 A-SSEREVOKE immediate stream termination', { tags: ['rea
         expiresAt: new Date(Date.now() + 3600_000),
       },
     });
-    const res = await request(base)
-      .post('/api/v1/auth/reset-password')
-      .send({ token, password: 'brand-new-password-123' });
+    const publicAgent = request.agent(base);
+    const res = await withCsrf(publicAgent, (csrf) =>
+      publicAgent
+        .post('/api/v1/auth/reset-password')
+        .set('x-vl-csrf', csrf)
+        .send({ token, password: 'brand-new-password-123' }),
+    );
     expect(res.status).toBe(200);
 
     const me = await agentFor(a.token).get('/api/v1/auth/me');
