@@ -24,7 +24,10 @@ export async function seedDemoWorld(
   vehicles: { id: string; providerVehicleId: string }[],
 ): Promise<void> {
   const rng = seededRng(hashString(organizationId) ^ 0x9e3779b9);
-  const now = new Date();
+  // Visual-regression determinism (R2-35/C-VISUAL): when VL_DEMO_FROZEN_AT
+  // is set, the 30-day demo history (drives, charges, telemetry) is anchored
+  // to a fixed instant so baselines never drift with the wall clock.
+  const now = process.env.VL_DEMO_FROZEN_AT ? new Date(process.env.VL_DEMO_FROZEN_AT) : new Date();
 
   // ---- Places ----
   const placeHome = await prisma.place.create({
