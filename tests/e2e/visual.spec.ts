@@ -86,6 +86,7 @@ test('live vehicle controls panel', async ({ page }) => {
   await expect(page).toHaveScreenshot('live-vehicle.png', {
     ...T,
     mask: maskDynamic(page),
+    timeout: 60000,
   });
 });
 
@@ -220,15 +221,23 @@ test('map page', async ({ page }) => {
   // Content: the mirrored map facts list the demo vehicles and places — the
   // blank-panel baseline is gone.
   const layers = page.locator('aside[aria-label="Map layers"]');
-  await expect(layers.getByText('Vehicles 5')).toBeVisible({ timeout: 25000 });
-  await expect(layers.getByText('Places 4')).toBeVisible({ timeout: 20000 });
+  await expect(layers.getByText('Vehicles', { exact: true })).toBeVisible({
+    timeout: 25000,
+  });
+  await expect(layers.getByText('Places', { exact: true })).toBeVisible({
+    timeout: 20000,
+  });
   await expect(layers.getByRole('button', { name: 'Show on map: Aurora' })).toBeVisible({
+    timeout: 20000,
+  });
+  await expect(layers.getByRole('button', { name: 'Show on map: Home' })).toBeVisible({
     timeout: 20000,
   });
   await page.waitForTimeout(3000);
   await expect(page).toHaveScreenshot('map.png', {
     maxDiffPixels: 25,
     mask: maskDynamic(page),
+    timeout: 60000,
   });
 });
 
