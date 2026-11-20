@@ -193,7 +193,17 @@ test('admin page as instance admin', async ({ page }) => {
   await expect(page).toHaveScreenshot('admin.png', {
     ...T,
     // the instance account count grows with every test user — instance data
-    mask: [...maskDynamic(page), page.getByText(/accounts$/)],
+    mask: [
+      ...maskDynamic(page),
+      page.getByText(/accounts$/),
+      // live process metrics (telemetry freshness, uptime, memory, queue depth)
+      page.locator('div.rounded-xl', { has: page.getByText('Telemetry', { exact: true }) }),
+      page.locator('div.rounded-xl', { has: page.getByText('Uptime', { exact: true }) }),
+      page.locator('div.rounded-xl', { has: page.getByText('Memory', { exact: true }) }),
+      page.locator('div.rounded-xl', { has: page.getByText('Queue depth', { exact: true }) }),
+      // per-run user emails/vehicle counts
+      page.locator('p.truncate.text-xs.text-faint'),
+    ],
   });
 });
 
@@ -365,7 +375,17 @@ test('admin users tab as instance admin', async ({ page }) => {
   await page.waitForTimeout(1000);
   await expect(page).toHaveScreenshot('admin-users.png', {
     ...T,
-    mask: [...maskDynamic(page), page.getByText(/accounts$/)],
+    mask: [
+      ...maskDynamic(page),
+      page.getByText(/accounts$/),
+      // live process metrics (telemetry freshness, uptime, memory, queue depth)
+      page.locator('div.rounded-xl', { has: page.getByText('Telemetry', { exact: true }) }),
+      page.locator('div.rounded-xl', { has: page.getByText('Uptime', { exact: true }) }),
+      page.locator('div.rounded-xl', { has: page.getByText('Memory', { exact: true }) }),
+      page.locator('div.rounded-xl', { has: page.getByText('Queue depth', { exact: true }) }),
+      // per-run user emails/vehicle counts
+      page.locator('p.truncate.text-xs.text-faint'),
+    ],
   });
 });
 
