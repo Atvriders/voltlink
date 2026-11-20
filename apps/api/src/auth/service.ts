@@ -71,6 +71,7 @@ export function publicUser(u: {
   onboardingCompletedAt: Date | null;
   onboardingStep: string;
   favoriteVehicleIds: string[];
+  isInstanceAdmin?: boolean;
   createdAt: Date;
 }): UserPublic {
   return {
@@ -81,6 +82,7 @@ export function publicUser(u: {
     emailVerified: !!u.emailVerifiedAt,
     totpEnabled: u.totpEnabled,
     passkeyEnabled: false,
+    isInstanceAdmin: u.isInstanceAdmin === true,
     timezone: u.timezone,
     units: u.units === 'imperial' ? 'imperial' : 'metric',
     theme: u.theme,

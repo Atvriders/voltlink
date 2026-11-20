@@ -6,9 +6,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertOctagon, Database, RefreshCw, Users } from 'lucide-react';
 import { api } from '../api/client';
 import { Badge, Button, Card, Field, Input, Select, Spinner, Stat } from '../components/ui';
+import { useAuth } from '../auth/AuthContext';
 import type { HealthInfo } from '@voltlink/shared';
 
 export default function AdminPage() {
+  const { user } = useAuth();
   const qc = useQueryClient();
   const { data: settings, isLoading } = useQuery({
     queryKey: ['admin-settings'],
@@ -87,6 +89,21 @@ export default function AdminPage() {
         <Spinner size={22} />
       </div>
     );
+
+  // R2-35: a non-instance-admin gets a 403 card, never the admin shell (the
+  // API already refuses every /api/v1/admin/* call).
+  if (!user?.isInstanceAdmin) {
+    return (
+      <div className="mx-auto max-w-md space-y-4 p-6">
+        <Card title="403 — Access denied">
+          <p className="text-sm text-subtle">
+            This page is for instance administrators only. Your account does not have access to the
+            administration area.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

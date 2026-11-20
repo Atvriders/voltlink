@@ -701,7 +701,11 @@ authRouter.get('/me', { auth: 'session', target: { kind: 'none' } }, async (req,
   const { ROLE_PERMISSIONS } = await import('@voltlink/shared');
   res.json({
     data: {
-      user: { ...publicUser(user), passkeyEnabled: user._count.passkeys > 0 },
+      user: {
+        ...publicUser(user),
+        passkeyEnabled: user._count.passkeys > 0,
+        isInstanceAdmin: actor.isInstanceAdmin,
+      },
       isInstanceAdmin: actor.isInstanceAdmin,
       memberships: memberships.map((m) => ({
         organizationId: m.organizationId,

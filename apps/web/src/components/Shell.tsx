@@ -570,7 +570,7 @@ export function Shell({ user, children }: { user: UserPublic | null; children: R
           </Link>
         </div>
         <nav className="flex-1 overflow-y-auto p-2" aria-label="Main navigation">
-          {NAV.map((item) => (
+          {NAV.filter((item) => item.to !== '/admin' || user?.isInstanceAdmin).map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -625,7 +625,7 @@ export function Shell({ user, children }: { user: UserPublic | null; children: R
               </button>
             </div>
             <nav className="flex-1 overflow-y-auto py-2">
-              {NAV.map((item) => (
+              {NAV.filter((item) => item.to !== '/admin' || user?.isInstanceAdmin).map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}

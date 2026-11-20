@@ -10,6 +10,9 @@ export interface UserPublic {
   emailVerified: boolean;
   totpEnabled: boolean;
   passkeyEnabled: boolean;
+  /** R2-35: the UI hides the Administration nav and shows the 403 card
+   * on /admin for non-instance-admins. */
+  isInstanceAdmin: boolean;
   timezone: string;
   units: 'metric' | 'imperial';
   theme: string;
