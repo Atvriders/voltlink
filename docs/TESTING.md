@@ -42,11 +42,19 @@ cd apps/api && PORT=3111 node dist/index.cjs
 
 ## Visual regression
 
-`tests/e2e/visual.spec.ts` snapshots 12 pages under `toHaveScreenshot`:
-sign-in, overview (desktop, light theme, mobile), live vehicle, drives,
-charging, automations, fleet, map, public status, admin, settings.
-Baselines live in `tests/e2e/visual.spec.ts-snapshots/` and are reviewed by eye
-before committing; every test asserts its own demo data first.
+`tests/e2e/visual.spec.ts` (desktop project) snapshots: sign-in, overview
+(desktop + light theme), live vehicle, drives, charging, automations, fleet,
+map, public status, settings security, admin (as the instance admin), the
+non-admin 403 card, battery, notifications, providers, vehicles, drive
+detail, showroom (page + viewer element), admin users, status admin and
+onboarding. `tests/e2e/visual-mobile.spec.ts` runs under the real mobile
+(Pixel 7) and tablet (iPad Pro 11) projects: overview and live vehicle.
+Every snapshot is preceded by content assertions on the page's own seeded
+data, dynamic regions (account chip, relative times/counters) are masked,
+and full-page tolerance is `maxDiffPixels: 25` (the WebGL viewer element
+shot uses `maxDiffPixelRatio: 0.01`). Baselines live in
+`tests/e2e/visual.spec.ts-snapshots/` and are regenerated only in R6 with
+`--update-snapshots`, reviewing every diff image before committing.
 
 ## Blender assets
 

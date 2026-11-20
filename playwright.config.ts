@@ -26,11 +26,13 @@ export default defineConfig({
     {
       name: 'desktop',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: /no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts/,
+      testIgnore: /no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts|visual-mobile\.spec\.ts/,
     },
     // Gate 7: every page is exercised at desktop, tablet and mobile sizes.
-    // Visual snapshots are desktop-only (viewport coverage lives in the
-    // acceptance spec, which asserts layout on Pixel 7 and iPad profiles).
+    // Desktop visual snapshots run in the desktop project; the mobile and
+    // tablet snapshots run under their real device projects via
+    // visual-mobile.spec.ts (C-VISUAL / FE-26: never a desktop render with a
+    // fake viewport).
     {
       name: 'tablet',
       use: { ...devices['iPad Pro 11'], defaultBrowserType: 'chromium', browserName: 'chromium' },

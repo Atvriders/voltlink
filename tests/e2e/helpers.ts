@@ -128,3 +128,6 @@ export async function enableDemo(page: Page): Promise<void> {
     )
     .toBe(true);
 }
+
+// The five demo vehicles the enableDemo predicate promises (demo.ts seed).
+export const DEMO_VEHICLES = ['Aurora', 'Comet', 'Terra', 'Atlas', 'Bison'];
