@@ -29,10 +29,11 @@ async function devVerificationToken(email: string): Promise<string> {
     }
     throw new Error(`no verification email for ${email} at ${smtpHttp}`);
   }
-  const log = fs.readFileSync('/tmp/voltlink-api.log', 'utf8');
+  const logPath = process.env.VL_API_LOG ?? '/tmp/voltlink-api.log';
+  const log = fs.readFileSync(logPath, 'utf8');
   const matches = [...log.matchAll(/\[mail:dev\] token echoed \(dev only\): (\S+)/g)];
   const last = matches[matches.length - 1];
-  if (!last) throw new Error('no dev verification token in /tmp/voltlink-api.log');
+  if (!last) throw new Error(`no dev verification token in ${logPath}`);
   return last[1]!;
 }
 
