@@ -82,7 +82,7 @@ export default function ShowroomPage() {
               />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{v.displayName}</p>
-                <p className="text-[11px] text-faint">
+                <p className="text-[11px] text-subtle">
                   {CLASS_LABELS[v.vehicleClass] ?? v.vehicleClass}
                 </p>
               </div>
