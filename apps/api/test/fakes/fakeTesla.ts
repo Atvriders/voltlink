@@ -12,6 +12,7 @@ export interface FakeTesla {
   requests: { method: string; path: string; body?: unknown }[];
   setConnectivity(vin: string, state: 'online' | 'asleep' | 'offline'): void;
   pairKey(vin: string): void;
+  setRegionAnswer(answer: 'ok' | 'mismatch'): void;
   failNext(path: string, status: number, body: string, headers?: Record<string, string>): void;
   close(): Promise<void>;
 }
@@ -26,6 +27,7 @@ export function startFakeTesla(port = 0): Promise<FakeTesla> {
     const requests: FakeTesla['requests'] = [];
     const states = new Map<string, 'online' | 'asleep' | 'offline'>();
     const paired = new Set<string>();
+    let regionAnswer: 'ok' | 'mismatch' = 'mismatch';
     const failures: Array<{
       path: string;
       status: number;
@@ -88,8 +90,14 @@ export function startFakeTesla(port = 0): Promise<FakeTesla> {
       });
     });
 
-    app.get('/api/1/users/region', (_req, res) => {
+    app.get('/api/1/users/region', (req, res) => {
       requests.push({ method: 'GET', path: '/api/1/users/region' });
+      if (regionAnswer === 'ok') {
+        res.json({
+          response: { region: 'EU', fleet_api_base_url: `http://${req.headers.host}` },
+        });
+        return;
+      }
       res.status(421).json({ error: 'Incorrect region' });
     });
 
@@ -289,7 +297,8 @@ export function startFakeTesla(port = 0): Promise<FakeTesla> {
         body: req.body,
       });
       const vin = String(req.params.vin);
-      if (!DOCUMENTED_COMMANDS.has(String(req.params.name))) {
+      const name = String(req.params.name);
+      if (!DOCUMENTED_COMMANDS.has(name)) {
         res.status(404).json({ error: 'unknown_command' });
         return;
       }
@@ -313,6 +322,22 @@ export function startFakeTesla(port = 0): Promise<FakeTesla> {
       if (!paired.has(vin)) {
         res.status(500).send('public key has not been paired');
         return;
+      }
+      // R2-32: the fake checks PINs like the real API — speed-limit steps
+      // carry {pin} and enabling valet carries {password}; anything else is
+      // rejected. The provider must send the stored PIN (step-5 fix).
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      if (name === 'speed_limit_activate' || name === 'speed_limit_deactivate') {
+        if (!/^\d{4}$/.test(String(body.pin ?? ''))) {
+          res.status(400).json({ error: 'invalid pin' });
+          return;
+        }
+      }
+      if (name === 'set_valet_mode' && body.on === true) {
+        if (!/^\d{4}$/.test(String(body.password ?? ''))) {
+          res.status(400).json({ error: 'invalid password' });
+          return;
+        }
       }
       res.json({ response: { result: true, reason: '' } });
     });
@@ -342,6 +367,9 @@ export function startFakeTesla(port = 0): Promise<FakeTesla> {
         requests,
         setConnectivity: (vin, state) => void states.set(vin, state),
         pairKey: (vin) => void paired.add(vin),
+        setRegionAnswer: (answer) => {
+          regionAnswer = answer;
+        },
         failNext: (path, status, body, headers) =>
           void failures.push({ path, status, body, headers }),
         close: () => new Promise((r) => server.close(() => r())),

@@ -239,9 +239,25 @@ describe('commands (P-TESLASIGN)', () => {
 });
 
 describe('region discovery (P-TESLAREGION)', () => {
-  it('skips 421 and falls through to the next region', async () => {
-    // The fake answers 421 from users/region; discovery must classify, not crash.
+  it('classifies the all-regions-421 case', async () => {
+    fake.setRegionAnswer('mismatch');
     await expect(discoverRegion('access-abc')).rejects.toThrow(/421|wrong_region/);
+  });
+
+  it('falls through from NA (421) to EU (ok)', async () => {
+    const eu = await startFakeTesla(0);
+    try {
+      eu.setRegionAnswer('ok');
+      process.env.TESLA_FLEET_BASE_NA = fake.base;
+      process.env.TESLA_FLEET_BASE_EU = eu.base;
+      const out = await discoverRegion('access-abc');
+      expect(out.region).toBe('EU');
+      expect(out.baseUrl).toBe(eu.base);
+    } finally {
+      process.env.TESLA_FLEET_BASE_NA = fake.base;
+      process.env.TESLA_FLEET_BASE_EU = fake.base;
+      await eu.close();
+    }
   });
 });
 
@@ -547,5 +563,64 @@ describe('Tesla provider-level flows', () => {
     expect(unsupported.kind).toBe('unsupported');
     const h = await p.health(ctx);
     expect(h.ok).toBe(true);
+  });
+
+  it('sendCommand sends the stored PIN for speed_limit steps (expected red until step 5)', async () => {
+    const org = await prisma.organization.create({ data: { name: 'Tesla Org PIN' } });
+    const pa = await prisma.providerAccount.create({
+      data: {
+        organizationId: org.id,
+        provider: 'tesla',
+        label: 'Tesla',
+        status: 'connected',
+        demo: false,
+      },
+    });
+    const jwt = `eyJhbGciOiJub25lIn0.${Buffer.from(
+      JSON.stringify({ scp: ['vehicle_cmds'] }),
+    ).toString('base64url')}.sig`;
+    await prisma.providerCredential.create({
+      data: {
+        providerAccountId: pa.id,
+        keyVersion: seal(
+          JSON.stringify({
+            accessToken: jwt,
+            refreshToken: 'rt',
+            expiresAt: Date.now() + 3600_000,
+          }),
+          `provider-credential:${pa.id}`,
+        ).keyVersion,
+        algorithm: 'v1',
+        ciphertext: seal(
+          JSON.stringify({
+            accessToken: jwt,
+            refreshToken: 'rt',
+            expiresAt: Date.now() + 3600_000,
+          }),
+          `provider-credential:${pa.id}`,
+        ).ciphertext,
+      },
+    });
+    fake.pairKey('5YJ3000000NEXUS01');
+    fake.setConnectivity('5YJ3000000NEXUS01', 'online');
+    const ctx = {
+      accountId: pa.id,
+      userId: 'u1',
+      credentials: {},
+      meta: { provider: 'tesla', label: 'T', demo: false, scopes: [] },
+    };
+    const p = new TeslaProviderImpl();
+    const before = fake.requests.length;
+    const out = await p.sendCommand(ctx, '5YJ3000000NEXUS01', 'speed_limit', {
+      speedLimitOn: true,
+      speedLimitKmh: 80,
+      pin: '1234',
+    });
+    expect(out.kind).toBe('accepted');
+    const calls = fake.requests.slice(before).filter((r) => r.path.includes('/command/'));
+    const limit = calls.find((r) => r.path.endsWith('/command/speed_limit_set_limit'));
+    expect(limit?.body).toMatchObject({ limit_mph: 50 });
+    const activate = calls.find((r) => r.path.endsWith('/command/speed_limit_activate'));
+    expect((activate?.body as { pin?: string } | undefined)?.pin).toBe('1234');
   });
 });
