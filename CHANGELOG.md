@@ -4,6 +4,59 @@ All notable changes to VoltLink are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] — 2026-11-20
+
+The round-2 verification release. v1.0.0 could not complete first-run setup
+by following its own docs (no setup token was generated and the web UI had no
+field for one) — that, plus the whole round-2 review corpus, is fixed here.
+
+### Fixed
+
+- **First-run setup (R2-01/R2-20):** the web role now logs the one-time setup
+  token at boot and the Setup UI accepts it, so a fresh install following
+  README/QUICK_START reaches the register page.
+- **Command history (TI-44):** `VehicleCommand.vehicleId` is nullable with
+  `onDelete: SetNull` — deleting a vehicle no longer erases its command
+  history, and orphaned commands are ended `failed` with an audit event.
+- **Automation retries (TI-13):** per-action retry — successful actions run
+  exactly once, only failing actions re-run.
+- **SSE revocations (R2-31):** password change, password reset and admin
+  suspend publish session revocations to live streams.
+- **Admin visibility (R2-35):** non-admin users get a 403 card and a hidden
+  Administration nav; `/auth/me` carries `isInstanceAdmin`.
+- **Tessie/Tesla contracts (R2-32):** documented guide-02 routes, query
+  params, and speed-limit PIN handoff through a one-time encrypted secret.
+- **Asset validation (R2-63):** glTF validation runs before loading; broken
+  GLBs are SPEC_INVALID findings, never crashes.
+- **3D pipeline (R2-15/R2-39):** the charging pulse reaches the connector's
+  descendant meshes (no more per-frame TypeErrors for charging vehicles);
+  the parent-inverse fix + a below-ground validator rule regenerated every
+  GLB so door windows sit above the ground plane.
+- **Viewer (R2-43/R2-61/R2-62):** orbit/zoom no longer snaps back after the
+  first user input; no 404 HEAD fires before the staged manifest resolves;
+  low/medium presets now use the `_lod2`/`_lod` variants and the unused `ao`
+  preset flag is gone.
+- **A11y:** account menu and vehicle switcher names match their visible
+  labels, the Settings link is a 24 px target, passkey empty state lists
+  correctly, showroom class labels clear contrast — axe is green across all
+  five themes on every core page.
+- **Admin health (NEW-10):** migration status resolves across flat and
+  nested dist layouts.
+- **Docs truth:** `SECURITY.md` states the real npm audit figures.
+
+### Changed
+
+- Demo/visual determinism for the e2e visual suite: `VL_DEMO_FROZEN_AT`
+  freezes the demo sim and the seeded demo world, with dynamic-region masks,
+  so the committed pixel baselines are stable across runs.
+- `package-lock.json` after the non-breaking `npm audit fix`.
+
+### Known limitations
+
+- Environments are built and staged but the viewer does not yet load one
+  (R2-41); the LOD0 triangle minimum is still met by flat subdivision
+  (R2-42). Both remain open and tracked in PROGRESS.md.
+
 ## [Unreleased]
 
 ### Added
