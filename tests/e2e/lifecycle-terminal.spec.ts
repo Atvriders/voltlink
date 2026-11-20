@@ -198,7 +198,7 @@ test('R2-17: confirmed lifecycle — Aurora lock reaches confirmed with the full
   // accepts, the confirm stage matches the ingested snapshot and the command
   // ends confirmed (guide 08 s10 / C-E2ENOWORKER).
   const clickTime = Date.now();
-  await page.getByRole('button', { name: /^Lock/ }).click();
+  await page.getByRole('button', { name: 'Lock', exact: true }).click();
 
   const issued = await newestCommand(page, vehicleId, clickTime);
   const final = await waitTerminal(page, issued.id);

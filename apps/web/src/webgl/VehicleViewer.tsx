@@ -201,7 +201,9 @@ function VehicleScene({
   // render and must never re-run the cleanup below).
   useEffect(() => {
     signal.ok = true;
-    onLoadedRef.current?.(sceneRef.current.children.map((c) => c.name));
+    const names: string[] = [];
+    sceneRef.current.traverse((o) => names.push(o.name));
+    onLoadedRef.current?.(names);
     return () => {
       signal.ok = false;
     };
