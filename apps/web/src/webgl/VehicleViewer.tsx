@@ -472,6 +472,7 @@ export default function VehicleViewer({
         style={{ height }}
         data-testid="vehicle-viewer"
         data-asset="fallback"
+        data-webgl="unsupported"
       >
         <p className="text-xs text-faint">3D preview unavailable on this device</p>
       </div>

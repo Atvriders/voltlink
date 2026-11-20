@@ -36,10 +36,18 @@ describe('C-ASSETVALID validator', () => {
       );
       const { status, out } = runValidator(['--staged', dir]);
       expect(status).not.toBe(0);
-      // R2-63: a malformed GLB is a SPEC_INVALID finding — never an uncaught
-      // crash ('Missing required GLB JSON chunk.') and never a config ENOENT.
+      // R2-63: a malformed GLB is a SPEC_INVALID finding from the GLB parse
+      // branch — never the unrelated 'no class spec for file' branch, and
+      // never an uncaught crash. Crash signatures (a stack line, the Node.js
+      // version banner, a config ENOENT) all fail the test; the parser's own
+      // message is REQUIRED as the GLB-level detail (so a correct fix that
+      // quotes it still passes).
       expect(out).toContain('SPEC_INVALID');
-      expect(out).not.toMatch(/ENOENT|Missing required GLB JSON chunk/);
+      expect(out).not.toContain('no class spec');
+      expect(out).toMatch(/Missing required GLB JSON chunk/);
+      expect(out).not.toMatch(/^\s+at /m);
+      expect(out).not.toContain('Node.js v');
+      expect(out).not.toMatch(/ENOENT/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
