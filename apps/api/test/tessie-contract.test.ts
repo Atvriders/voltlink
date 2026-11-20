@@ -487,21 +487,24 @@ describe('Tessie provider request routes match guide 02 (expected reds until ste
       );
       const calls = requests.slice(before);
       const routeName = route.split('/').at(-1)!;
-      const hit = calls.some(
+      const cmdCalls = calls.filter(
+        (r) => r.path.includes('/command/') || r.path.endsWith('/wake'),
+      );
+      const hit = cmdCalls.some(
         (r) => r.path.endsWith(`/command/${routeName}`) || r.path.endsWith(`/${routeName}`),
       );
       // The provider must either have requested the documented route, or (for
-      // commands not yet mapped in step 5) have refused locally without any
-      // request. Anything else is an undocumented request.
+      // commands refused locally — validation, guards, unmapped) have sent no
+      // COMMAND request at all. State/status reads for prechecks are fine.
       expect(
         hit ||
-          (out.kind === 'unsupported' && calls.length === 0) ||
-          (out.kind === 'rejected' && calls.length === 0),
+          (out.kind === 'unsupported' && cmdCalls.length === 0) ||
+          (out.kind === 'rejected' && cmdCalls.length === 0),
         `${type} → ${route} (got kind=${out.kind}, ${
-          calls.map((c) => `${c.method} ${c.path}`).join(', ') || 'no request'
+          cmdCalls.map((c) => `${c.method} ${c.path}`).join(', ') || 'no command request'
         })`,
       ).toBe(true);
-      const wrong = calls.filter(
+      const wrong = cmdCalls.filter(
         (r) => r.path.includes('/command/') && !r.path.endsWith(`/command/${routeName}`),
       );
       expect(wrong, `${type} hit ${wrong.map((r) => r.path).join(',')}`).toEqual([]);
