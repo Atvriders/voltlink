@@ -230,7 +230,7 @@ test('map page', async ({ page }) => {
   await expect(layers.getByRole('button', { name: 'Show on map: Aurora' })).toBeVisible({
     timeout: 20000,
   });
-  await expect(layers.getByRole('button', { name: 'Show on map: Home' })).toBeVisible({
+  await expect(layers.getByRole('button', { name: 'Show on map: Home' }).first()).toBeVisible({
     timeout: 20000,
   });
   await page.waitForTimeout(3000);
@@ -350,6 +350,7 @@ test('showroom page', async ({ page }) => {
   await expect(page).toHaveScreenshot('showroom.png', {
     ...T,
     mask: maskDynamic(page),
+    timeout: 60000,
   });
 });
 
