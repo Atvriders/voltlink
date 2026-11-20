@@ -50,6 +50,10 @@ async function mkWorld() {
       displayName: 'A',
       demo: true,
       addedById: user.id,
+      // TI-13: the vehicle must accept flash_lights so a successful command
+      // action really creates a VehicleCommand row (the old fixture had no
+      // capabilities, so every command action was UNSUPPORTED before any row).
+      capabilities: JSON.parse('["flash_lights"]'),
     },
   });
   const automation = (over: Record<string, unknown> = {}) =>
@@ -129,17 +133,22 @@ describe('automation actions are real (N-ACTIONSTUBS)', { tags: ['automation'] }
     expect(ran.result).toBe('success');
   });
 
-  // TI-13: the spec is per-ACTION retry — only the failing action is
-  // re-run, so notify_app fires ONCE (inbox === 1) and no duplicate commands
-  // are issued. The current engine (engine.ts) re-runs every action on each
-  // attempt; the assertion below documents the defect and the engine fix lands
-  // in step 5 (PROGRESS honesty entry 2026-11-18).
+  // TI-13: the spec is per-ACTION retry — only the FAILING action is re-run.
+  // The successful actions (notify_app, flash_lights) must fire exactly once
+  // and a permanent validation error is attempted once. The current engine
+  // re-runs EVERY action on each attempt (PROGRESS honesty entry 2026-11-20
+  // review part 12), so this test is an expected red until the step-5 engine
+  // fix. The old 'maxRetries retries failed actions up to the configured
+  // count' test asserted the DEFECT (inbox === 3) and was merged here; the old
+  // 'cmds <= 1' check could never fail because set_charge_limit(5) is rejected
+  // by zod before any VehicleCommand row and the fixture vehicle had no
+  // capabilities.
   it('TI-13 maxRetries retries only the failed action, without duplicate side effects', async () => {
     const { vehicle, automation } = await mkWorld();
     const auto = await automation({
       maxRetries: 2,
       actions: JSON.parse(
-        '[{"type":"notify_app","params":{"message":"attempt"}},{"type":"set_charge_limit","params":{"chargeLimitPct":5}}]',
+        '[{"type":"notify_app","params":{"message":"attempt"}},{"type":"flash_lights","params":{}},{"type":"set_charge_limit","params":{"chargeLimitPct":5}}]',
       ),
     });
     const res = await runAutomation(auto.id, {
@@ -147,34 +156,25 @@ describe('automation actions are real (N-ACTIONSTUBS)', { tags: ['automation'] }
       vehicleId: vehicle.id,
     } as never);
     expect(res.result).toBe('failed');
+
+    // notify_app fires once — never once per attempt.
     const inbox = await prisma.appNotification.count({
       where: { userId: auto.userId, event: 'automation_fired' },
     });
     expect(inbox, 'notify_app must fire once, not once per retry').toBe(1);
-    const cmds = await prisma.vehicleCommand.count({ where: { vehicleId: vehicle.id } });
-    expect(cmds, 'the failed action must not be re-issued').toBeLessThanOrEqual(1);
-    expect(res.actionResults.length).toBeGreaterThan(0);
-  });
 
-  it('maxRetries retries failed actions up to the configured count', async () => {
-    const { vehicle, automation } = await mkWorld();
-    const auto = await automation({
-      maxRetries: 2,
-      actions: JSON.parse(
-        '[{"type":"notify_app","params":{"message":"attempt"}},{"type":"set_charge_limit","params":{"chargeLimitPct":5}}]',
-      ),
+    // The successful flash_lights command is issued exactly once.
+    const cmds = await prisma.vehicleCommand.count({
+      where: { vehicleId: vehicle.id, type: 'flash_lights' },
     });
-    const res = await runAutomation(auto.id, {
-      type: 'drive_started',
-      vehicleId: vehicle.id,
-    } as never);
-    expect(res.result).toBe('failed');
-    // notify_app runs once per attempt: 1 + maxRetries = 3 in-app rows.
-    const inbox = await prisma.appNotification.count({
-      where: { userId: auto.userId, event: 'automation_fired' },
-    });
-    expect(inbox).toBe(3);
-    expect(res.actionResults.length).toBeGreaterThan(0);
+    expect(cmds, 'a successful action must not be re-issued').toBe(1);
+
+    // The permanent validation error (chargeLimitPct 5 is outside 50..100) is
+    // attempted once and reported once.
+    const failed = res.actionResults.filter((r) => r.action === 'set_charge_limit');
+    expect(failed).toHaveLength(1);
+    expect(failed[0]!.ok).toBe(false);
+    expect(res.actionResults.length).toBe(3);
   });
 
   it('the hourly budget blocks a runaway automation (loop prevention)', async () => {
