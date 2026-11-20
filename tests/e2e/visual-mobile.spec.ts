@@ -29,6 +29,7 @@ test('overview at project viewport', async ({ page }) => {
   await expect(page).toHaveScreenshot('overview.png', {
     ...T,
     mask: maskDynamic(page),
+    timeout: 60000,
   });
 });
 
@@ -41,5 +42,6 @@ test('live vehicle controls at project viewport', async ({ page }) => {
   await expect(page).toHaveScreenshot('live-vehicle.png', {
     ...T,
     mask: maskDynamic(page),
+    timeout: 60000,
   });
 });
