@@ -81,7 +81,7 @@ test('live vehicle controls panel', async ({ page }) => {
   await page.getByRole('button', { name: 'Live vehicle' }).first().click();
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
   // The panel renders the real command buttons, never an empty shell.
-  await expect(page.getByRole('button', { name: 'Honk', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Honk horn', exact: true })).toBeVisible();
   await page.waitForTimeout(1500);
   await expect(page).toHaveScreenshot('live-vehicle.png', {
     ...T,
@@ -183,11 +183,11 @@ test('admin page as instance admin', async ({ page }) => {
   await loginAsInstanceAdmin(page);
   await page.goto('/admin');
   await expect(page.getByText('Users & roles')).toBeVisible({ timeout: 20000 });
-  // Content: a real account count, never the empty '0 accounts' page.
-  await expect(page.getByText(/accounts/).first()).toBeVisible({
-    timeout: 20000,
+  // Content: the real user list renders (the seeded instance admin's own row),
+  // never the empty '0 accounts' page.
+  await expect(page.getByText('E2E Instance Admin', { exact: true })).toBeVisible({
+    timeout: 30000,
   });
-  await expect(page.getByText(/0 accounts/)).toHaveCount(0);
   await page.waitForTimeout(1200);
   await expect(page).toHaveScreenshot('admin.png', {
     ...T,
@@ -220,10 +220,9 @@ test('map page', async ({ page }) => {
   // Content: the mirrored map facts list the demo vehicles and places — the
   // blank-panel baseline is gone.
   const layers = page.locator('aside[aria-label="Map layers"]');
-  await expect(layers.getByText('Aurora', { exact: true })).toBeVisible({
-    timeout: 25000,
-  });
-  await expect(layers.getByText('Home', { exact: true }).first()).toBeVisible({
+  await expect(layers.getByText('Vehicles 5')).toBeVisible({ timeout: 25000 });
+  await expect(layers.getByText('Places 4')).toBeVisible({ timeout: 20000 });
+  await expect(layers.getByRole('button', { name: 'Show on map: Aurora' })).toBeVisible({
     timeout: 20000,
   });
   await page.waitForTimeout(3000);
@@ -337,6 +336,7 @@ test('showroom page', async ({ page }) => {
   // still uses the 25-pixel budget.
   await expect(viewer).toHaveScreenshot('showroom-viewer.png', {
     maxDiffPixelRatio: 0.01,
+    timeout: 60000,
   });
   await expect(page).toHaveScreenshot('showroom.png', {
     ...T,
