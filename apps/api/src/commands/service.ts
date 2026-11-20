@@ -390,7 +390,7 @@ function sanitizeParams(type: CommandType, params: CommandParams): CommandParams
 
 function serializeCommand(c: {
   id: string;
-  vehicleId: string;
+  vehicleId: string | null;
   vehicleName: string;
   providerAccountId: string;
   type: string;
@@ -450,6 +450,16 @@ export async function processCommandJob(payload: {
   const stage = payload.stage ?? 'dispatch';
   const command = await prisma.vehicleCommand.findUnique({ where: { id: payload.commandId } });
   if (!command) return;
+
+  // TI-44 (P-FAILED): the vehicle may have been removed while queued — the
+  // command row survives (SetNull) and ends 'failed' with an audit event.
+  if (!command.vehicleId) {
+    await transitionStatus(command.id, ['queued', 'submitted'], 'failed', {
+      errorMessage: 'Vehicle no longer exists.',
+    });
+    await auditEvent(command.id, 'failed', 'worker', 'Vehicle removed before dispatch.');
+    return;
+  }
 
   if (stage === 'dispatch') {
     // Per-vehicle lock: delivery is at-least-once, so never send twice.
@@ -740,7 +750,13 @@ export async function recoverStuckCommands(): Promise<number> {
 }
 
 async function notifyCommandFinished(
-  command: { id: string; userId: string; vehicleId: string; vehicleName: string; type: string },
+  command: {
+    id: string;
+    userId: string;
+    vehicleId: string | null;
+    vehicleName: string;
+    type: string;
+  },
   outcome: 'success' | 'failed',
 ): Promise<void> {
   const { notify } = await import('../notifications/service');

@@ -131,7 +131,7 @@ const RESOURCE_LOADERS: Record<
       where: { id },
       select: { id: true, vehicleId: true },
     });
-    return r;
+    return r ? { id: r.id, vehicleId: r.vehicleId ?? undefined } : null;
   },
   automation: async (id) => {
     const r = await prisma.automation.findUnique({

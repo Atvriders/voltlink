@@ -779,8 +779,10 @@ model VehiclePollState {
 
 model VehicleCommand {
   id                String             @id @default(cuid())
-  vehicleId         String
-  vehicle           Vehicle            @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  // TI-44 (P-FAILED): command HISTORY must survive vehicle removal — the
+  // FK is SetNull, and dispatch ends the orphaned command 'failed'.
+  vehicleId         String?
+  vehicle           Vehicle?           @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
   organizationId    String
   vehicleName       String             @default("")
   providerAccountId String

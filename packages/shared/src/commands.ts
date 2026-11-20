@@ -297,7 +297,8 @@ export interface CommandParams {
 
 export interface VehicleCommand {
   id: string;
-  vehicleId: string;
+  // TI-44: history rows survive vehicle removal, so vehicleId is nullable.
+  vehicleId: string | null;
   vehicleName: string;
   providerAccountId: string;
   type: CommandType;
