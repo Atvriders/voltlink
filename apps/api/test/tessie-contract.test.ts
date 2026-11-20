@@ -464,7 +464,7 @@ describe('Tessie provider request routes match guide 02 (expected reds until ste
     const params: Partial<Record<CommandType, Record<string, unknown>>> = {
       set_temperature: { temperatureC: 20 },
       defrost: { defrostOn: true },
-      seat_heater: { seat: 'front_left', seatLevel: 2 },
+      seat_heater: { seatPosition: 'front_left', seatLevel: 2 },
       steering_heater: { steeringOn: true },
       set_charge_limit: { chargeLimitPct: 80 },
       set_charging_amps: { chargingAmps: 32 },

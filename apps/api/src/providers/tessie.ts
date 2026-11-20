@@ -63,11 +63,12 @@ const one = (
     idempotent?: boolean;
     wakeOnly?: boolean;
     preWake?: boolean;
+    maxAttempts?: number;
     guard?: (s: Record<string, unknown>) => string | null;
   } = {},
 ): Plan => ({
   kind: 'ok',
-  steps: [{ name, query }],
+  steps: [{ name, query, maxAttempts: extra.maxAttempts }],
   idempotent: extra.idempotent !== false,
   ...extra,
 });
@@ -87,14 +88,31 @@ function planTessieCommand(type: CommandType, p: CommandParams): Plan {
       return one('stop_climate', {}, { preWake: true });
     case 'set_temperature':
       return typeof p.temperatureC === 'number' && p.temperatureC >= 15 && p.temperatureC <= 28
-        ? one('set_temperature', { temperature: p.temperatureC }, { preWake: true })
+        ? one('set_temperatures', { temperature: p.temperatureC }, { preWake: true })
         : bad('temperatureC must be 15–28 °C.');
     case 'defrost':
-      return one('start_defrost', {}, { preWake: true });
-    case 'seat_heater':
-      return one('set_seat_heat', { seat: 0, level: p.seatLevel ?? 1 }, { preWake: true });
+      return one(
+        p.defrostOn === false ? 'stop_max_defrost' : 'start_max_defrost',
+        {},
+        {
+          preWake: true,
+        },
+      );
+    case 'seat_heater': {
+      const seat = String(p.seatPosition ?? 'front_left');
+      if (!['front_left', 'front_right', 'rear_left', 'rear_right'].includes(seat))
+        return bad('seatPosition must be front_left, front_right, rear_left or rear_right.');
+      const level = p.seatLevel ?? 1;
+      if (typeof level !== 'number' || level < 0 || level > 3 || !Number.isInteger(level))
+        return bad('seatLevel must be an integer 0–3.');
+      return one('set_seat_heat', { seat, level }, { preWake: true });
+    }
     case 'steering_heater':
-      return one('set_steering_wheel_heat', { on: p.steeringOn !== false }, { preWake: true });
+      return one(
+        p.steeringOn === false ? 'stop_steering_wheel_heater' : 'start_steering_wheel_heater',
+        {},
+        { preWake: true },
+      );
     case 'charge_start':
       return one('start_charging', {}, { preWake: true });
     case 'charge_stop':
@@ -117,6 +135,7 @@ function planTessieCommand(type: CommandType, p: CommandParams): Plan {
         'open_charge_port',
         {},
         {
+          maxAttempts: 1,
           guard: (s) =>
             obj(s.charge_state).charge_port_door_open === true
               ? 'Charge port is already open.'
@@ -126,9 +145,9 @@ function planTessieCommand(type: CommandType, p: CommandParams): Plan {
     case 'charge_port_close':
       return one('close_charge_port');
     case 'open_trunk':
-      return one('activate_rear_trunk', {}, { idempotent: false });
+      return one('activate_rear_trunk', {}, { idempotent: false, maxAttempts: 1 });
     case 'open_frunk':
-      return one('activate_front_trunk', {}, { idempotent: false });
+      return one('activate_front_trunk', {}, { idempotent: false, maxAttempts: 1 });
     case 'window_vent':
       return one('vent_windows');
     case 'window_close':
@@ -142,7 +161,7 @@ function planTessieCommand(type: CommandType, p: CommandParams): Plan {
     case 'honk_horn':
       return one('honk', {}, { idempotent: false });
     case 'homelink':
-      return one('trigger_homelink', {}, { idempotent: false });
+      return one('trigger_homelink', {}, { idempotent: false, maxAttempts: 1 });
     case 'remote_start':
       return one('remote_start', {}, { idempotent: false });
     case 'valet_mode':
@@ -167,10 +186,9 @@ function planTessieCommand(type: CommandType, p: CommandParams): Plan {
     case 'send_navigation': {
       const d = p.destination;
       // R2-14: 0,0 means "no coordinates" — fall back to the typed address.
-      const hasCoords = d && Number.isFinite(d.lat) && Number.isFinite(d.lon) && (d.lat !== 0 || d.lon !== 0);
-      const value = hasCoords
-        ? `${d!.lat!.toFixed(6)},${d!.lon!.toFixed(6)}`
-        : d?.name?.trim();
+      const hasCoords =
+        d && Number.isFinite(d.lat) && Number.isFinite(d.lon) && (d.lat !== 0 || d.lon !== 0);
+      const value = hasCoords ? `${d!.lat!.toFixed(6)},${d!.lon!.toFixed(6)}` : d?.name?.trim();
       return value
         ? one('share', { value: value.slice(0, 300), locale: 'en-US' }, { idempotent: false })
         : bad('destination is required.');
@@ -234,12 +252,21 @@ class TessieClient {
     vin: string,
     name: string,
     query: Record<string, unknown>,
-    maxAttempts = 1,
+    maxAttempts = 3,
   ): Promise<{ result: boolean; reason?: string }> {
+    // Guide 02 §2.4: parameters go in the QUERY string; always send
+    // wait_for_completion=true and the per-command max_attempts (1 for
+    // toggles, 3 otherwise). retry_duration is not in the OpenAPI.
+    const qs = new URLSearchParams({
+      wait_for_completion: 'true',
+      max_attempts: String(maxAttempts),
+    });
+    for (const [k, v] of Object.entries(query)) {
+      if (v !== undefined && v !== null) qs.set(k, String(v));
+    }
     for (let i = 0; i < maxAttempts; i++) {
-      const res = await this.req(`/${vin}/command/${name}`, {
+      const res = await this.req(`/${vin}/command/${name}?${qs.toString()}`, {
         method: 'POST',
-        body: JSON.stringify(query),
       });
       if (res.status === 401) throw new ProviderError('AUTH', 'Tessie rejected the API token.');
       if (res.status === 402)
@@ -296,7 +323,7 @@ class TessieProviderImpl implements VehicleProvider {
     ];
     if (process.env.TESSIE_API_KEY) {
       try {
-        const res = await fetch(`${base}/vins`, {
+        const res = await fetch(`${base}/vehicles?only_active=true`, {
           signal: AbortSignal.timeout(15_000),
           headers: { Authorization: `Bearer ${process.env.TESSIE_API_KEY}` },
         });
@@ -320,32 +347,40 @@ class TessieProviderImpl implements VehicleProvider {
   }
 
   async listVehicles(ctx: ProviderContext): Promise<ProviderVehicleDescriptor[]> {
-    const c = this.client(ctx);
-    const res = await fetch(`${this.baseUrl()}/vins`, {
+    // Guide 02 §2.2/2.3: GET /vehicles?only_active=true →
+    // { results: [{ vin, is_active, last_state }] }; display name lives in
+    // last_state.display_name.
+    const res = await fetch(`${this.baseUrl()}/vehicles?only_active=true`, {
       signal: AbortSignal.timeout(20_000),
       headers: { Authorization: `Bearer ${this.token(ctx)}` },
     });
     if (!res.ok) throw new ProviderError('AUTH', `Tessie vehicle list failed (${res.status}).`);
-    const vins =
-      ((await res.json()) as { results?: string[]; vins?: string[] }).results ??
-      ((await res.json().catch(() => ({}))) as { vins?: string[] }).vins ??
-      [];
+    const rows =
+      (
+        (await res.json()) as {
+          results?: {
+            vin: string;
+            is_active: boolean;
+            last_state: Record<string, unknown> | null;
+          }[];
+        }
+      ).results ?? [];
     const out: ProviderVehicleDescriptor[] = [];
-    for (const vin of vins) {
-      const raw = await c.getState(vin).catch(() => ({}));
-      const state = obj(raw);
-      const config = obj(state.vehicle_config);
+    for (const row of rows) {
+      const vin = row.vin;
+      const last = obj(row.last_state ?? {});
+      const config = obj(last.vehicle_config);
       const carType = String(config.car_type ?? '');
       out.push({
         providerVehicleId: vin,
-        displayName: String(state.display_name ?? state.vehicle_name ?? `Tessie ${vin.slice(-4)}`),
+        displayName: String(last.display_name ?? `Tessie ${vin.slice(-4)}`),
         make: 'Tesla',
         model: modelNameFromCarType(carType),
         year: modelYearFromVin(vin),
         vehicleClass: vehicleClassFromCarType(carType),
-        exteriorColor: colorHexFromTesla(state.exterior_color ?? state.color),
+        exteriorColor: colorHexFromTesla(last.exterior_color ?? last.color),
         vinLast4: vin.slice(-4),
-        capabilities: deriveHardwareCapabilities(state),
+        capabilities: deriveHardwareCapabilities(last),
       });
     }
     return out;
@@ -452,7 +487,7 @@ class TessieProviderImpl implements VehicleProvider {
 
   async health(ctx: ProviderContext): Promise<{ ok: boolean; detail: string }> {
     try {
-      const res = await fetch(`${this.baseUrl()}/vins`, {
+      const res = await fetch(`${this.baseUrl()}/vehicles?only_active=true`, {
         signal: AbortSignal.timeout(15_000),
         headers: { Authorization: `Bearer ${this.token(ctx)}` },
       });
