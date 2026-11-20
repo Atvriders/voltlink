@@ -19,19 +19,24 @@ test('PL-02: /api/v1/realtime delivers a command event to the signed-in user', a
     timeout: 30000,
   });
 
-  // Same-origin EventSource carries the session cookie.
+  // Same-origin EventSource carries the session cookie. The hub sends named
+  // events (`event: command`), so listen for the command type specifically.
   await page.evaluate(() => {
     window.__voltlinkSseEvents = [];
     const es = new EventSource('/api/v1/realtime');
-    es.onmessage = (m) => {
-      try {
-        window.__voltlinkSseEvents!.push(JSON.parse(m.data) as { type?: string; data?: unknown });
-      } catch {
-        // ignore non-JSON frames (e.g. keepalive comments)
-      }
-    };
+    for (const name of ['command', 'heartbeat', 'resync']) {
+      es.addEventListener(name, (m) => {
+        try {
+          window.__voltlinkSseEvents!.push({
+            type: name,
+            data: JSON.parse((m as MessageEvent<string>).data) as unknown,
+          });
+        } catch {
+          // ignore non-JSON frames
+        }
+      });
+    }
     es.onerror = () => {
-      // record errors so the poll below can fail with detail
       window.__voltlinkSseEvents!.push({ type: '__error' });
     };
   });
