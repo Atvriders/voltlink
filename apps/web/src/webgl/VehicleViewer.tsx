@@ -31,6 +31,7 @@ function meshoptLoader(): GLTFLoader {
 import type { VehicleState, VehicleWithState } from '@voltlink/shared';
 import { lodBaseFor, resolveAssetUrl } from './vehicleAssets';
 import { rigShouldFollow } from './cameraRig';
+import { collectEmissiveMaterials } from './emissivePulse';
 
 import { PRESETS, autoPreset, type GraphicsPreset } from './preset';
 export { PRESETS, autoPreset };
@@ -299,14 +300,12 @@ function VehicleScene({
     if (conn) {
       conn.visible = s.plugConnected || s.chargingState === 'charging';
       if (s.chargingState === 'charging') {
-        const m = conn as THREE.Mesh;
-        const mat = m.material as
-          THREE.MeshStandardMaterial | THREE.MeshStandardMaterial[] | undefined;
-        const mats = (Array.isArray(mat) ? mat : [mat]).filter(
-          (x): x is THREE.MeshStandardMaterial => !!x && 'emissive' in x,
-        );
-        const intensity = 0.5 + Math.sin(t * 3) * 0.5;
-        for (const mm of mats) mm.emissive = new THREE.Color('#22d3ee').multiplyScalar(intensity);
+        // R2-15: the connector is an Object3D pivot — pulse the emissive
+        // materials of its DESCENDANT meshes, never the pivot's own
+        // (missing) material (the old write crashed for charging vehicles).
+        const mats = collectEmissiveMaterials(conn);
+        const pulse = new THREE.Color('#22d3ee').multiplyScalar(0.5 + Math.sin(t * 3) * 0.5);
+        for (const mm of mats) (mm.emissive as THREE.Color).set(pulse);
       }
     }
     // Security alert flash (red hazard pulse).
