@@ -64,6 +64,30 @@ test('showroom renders the right GLB per vehicle class, with zero page errors', 
     console.log(`glb asset ${cls} rendered for ${name}`);
   }
 
+  // C-WEBGLTEST keying proof (NEW-18): when the NEXT class's GLB is held
+  // unanswered (HEAD fulfilled, GET aborted), a later vehicle must recover
+  // to its own GLB. The viewer is keyed by vehicle id, so the failed load
+  // never sticks to the following vehicles.
+  await page.route('**/sport_sedan.glb', (route) => {
+    if (route.request().method() === 'HEAD') route.fulfill({ status: 200, body: '' });
+    else route.abort();
+  });
+  await page.getByRole('button', { name: /Comet/ }).first().click();
+  await expect
+    .poll(() => page.locator('[data-testid="vehicle-viewer"]').first().getAttribute('data-asset'), {
+      timeout: 30000,
+    })
+    .toBe('fallback');
+  await page.unroute('**/sport_sedan.glb');
+  await page.getByRole('button', { name: /Terra/ }).first().click();
+  await expect
+    .poll(
+      async () =>
+        page.locator('[data-testid="vehicle-viewer"]').first().getAttribute('data-asset-url'),
+      { timeout: 30000 },
+    )
+    .toContain('compact_crossover.');
+
   // Context loss (guide 06 s12 / guide 08 s12): lose the context, restore it,
   // and the viewer must keep rendering without a page error.
   const lose = await page.evaluate(() => {
