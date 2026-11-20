@@ -197,17 +197,34 @@ for (const file of readdirSync(STAGED).filter((f) => f.endsWith('.glb') && !f.in
     continue;
   }
   const spec = SPEC.classes[cls]!;
-  const doc = await load(full);
-  const nodes = collectNodes(doc);
 
-  // SPEC_INVALID — glTF structure (staged files are uncompressed)
+  // SPEC_INVALID — glTF structure (staged files are uncompressed). Run the
+  // validator FIRST so a malformed GLB is reported as a SPEC_INVALID finding
+  // with the validator's own message, never an uncaught parse crash.
   const { default: validator } = await import('gltf-validator');
   const report = await validator.validateBytes(new Uint8Array(readFileSync(full)), {
     uri: file,
     externalResourceFunction: async () => ({ status: 404, error: {} }),
   });
-  if (report.issues.numErrors > 0)
-    fail(full, 'SPEC_INVALID', `gltf-validator: ${report.issues.numErrors} errors`);
+  if (report.issues.numErrors > 0) {
+    const messages = report.issues.messages
+      .map((m: { code: string; message: string }) => `${m.code}: ${m.message}`)
+      .slice(0, 5)
+      .join('; ');
+    fail(full, 'SPEC_INVALID', `gltf-validator: ${messages}`);
+    continue;
+  }
+
+  let doc: import('@gltf-transform/core').Document;
+  try {
+    doc = await load(full);
+  } catch (err) {
+    // A GLB the validator accepts but the loader cannot parse is still a
+    // SPEC_INVALID finding, reported cleanly — never an uncaught crash.
+    fail(full, 'SPEC_INVALID', `gltf parse failed: ${(err as Error).message.slice(0, 200)}`);
+    continue;
+  }
+  const nodes = collectNodes(doc);
 
   // BIN_EMPTY
   const buf = readFileSync(full);
