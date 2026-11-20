@@ -18,7 +18,9 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-RUN_DIR="${RUN_DIR:-$SCRIPT_DIR/run}"
+# R2-24: the run directory (cookie jar, logs, setup token) must live OUTSIDE
+# the repo so evidence like the setup token can never be committed.
+RUN_DIR="${RUN_DIR:-$HOME/voltlink-verify/stack-run}"
 PID_FILE="$RUN_DIR/pids"
 LOG_DIR="$RUN_DIR/logs"
 export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
@@ -42,6 +44,8 @@ stop_stack() {
 
 if [ "${1:-}" = "stop" ]; then
   stop_stack
+  # Remove the run directory (cookie jar + logs hold the setup token).
+  rm -rf "$RUN_DIR"
   exit 0
 fi
 
