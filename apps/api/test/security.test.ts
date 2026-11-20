@@ -6,6 +6,7 @@ import type { Server } from 'node:http';
 import crypto from 'node:crypto';
 import { buildApp } from '../src/app';
 import { prisma } from '../src/core/db';
+import { initRedis } from '../src/core/redis';
 
 process.env.NODE_ENV = 'test';
 if (!process.env.JWT_SECRET) process.env.JWT_SECRET = crypto.randomBytes(32).toString('hex');
@@ -15,6 +16,9 @@ let port = 0;
 const base = () => `http://127.0.0.1:${port}`;
 
 beforeAll(async () => {
+  // /readyz answers 200 only when the queue pings (queue_unavailable -> 503)
+  // and no migration is pending — initialize Redis like every api-int run.
+  await initRedis();
   server = buildApp({ serveSpa: false }).listen(0);
   await new Promise<void>((resolve) => server.once('listening', resolve));
   port = (server.address() as AddressInfo).port;
@@ -30,7 +34,10 @@ describe('authentication enforcement', () => {
     '/api/v1/vehicles',
     '/api/v1/commands',
     '/api/v1/drives',
-    '/api/v1/charging/sessions',
+    // C-NOTESTS weak check #1: '/api/v1/charging/sessions' was not a route —
+    // the global 401 answered for it, so the check proved nothing. The real
+    // charging list route is '/api/v1/charging'.
+    '/api/v1/charging',
     '/api/v1/automations',
     '/api/v1/notifications',
     '/api/v1/fleet/overview',
@@ -57,7 +64,9 @@ describe('authentication enforcement', () => {
   });
 
   it('healthz/readyz stay public', async () => {
+    // C-NOTESTS weak check #2: the old test fetched only /healthz.
     expect((await fetch(`${base()}/healthz`)).status).toBe(200);
+    expect((await fetch(`${base()}/readyz`)).status).toBe(200);
   });
 });
 

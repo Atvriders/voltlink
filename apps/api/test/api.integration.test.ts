@@ -306,7 +306,10 @@ describe('demo + vehicles + commands', () => {
     const issue = await api.post('/api/v1/commands', { type: 'honk_horn', vehicleId: vid });
     expect(issue.status).toBeLessThan(300);
     const cmd = (await issue.json()) as { data: { status: string; id: string } };
-    expect(['queued', 'submitted', 'accepted', 'confirmed']).toContain(cmd.data.status);
+    // C-NOTESTS weak check #3: accepting queued|submitted|accepted|confirmed
+    // proved nothing about the issue contract. The spec is: a freshly issued
+    // command is created 'queued' (the worker picks it up from there).
+    expect(cmd.data.status).toBe('queued');
     const list = await api.get(`/api/v1/commands?vehicleId=${vid}`);
     const listBody = (await list.json()) as { data: { items: { id: string }[]; total: number } };
     expect(listBody.data.total).toBeGreaterThanOrEqual(1);
