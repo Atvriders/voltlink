@@ -41,8 +41,12 @@ async function waitTerminal(page: Page, commandId: string): Promise<Cmd> {
     };
     const detail = (body.data ?? {}) as { command?: Cmd; events?: { event: string }[] };
     const cmd = (detail.command ?? detail) as Cmd;
-    if (cmd.status && TERMINAL.includes(cmd.status)) {
-      return { ...cmd, events: detail.events ?? cmd.events };
+    const events = detail.events ?? cmd.events ?? [];
+    // R2-18 (review 1b): the worker writes the status and the audit event in
+    // two writes — poll until BOTH the status is terminal AND the terminal
+    // event exists, so the caller never reads the chain mid-write.
+    if (cmd.status && TERMINAL.includes(cmd.status) && events.some((e) => e.event === cmd.status)) {
+      return { ...cmd, events };
     }
     await page.waitForTimeout(500);
   }

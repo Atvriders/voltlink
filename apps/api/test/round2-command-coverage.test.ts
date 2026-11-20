@@ -22,7 +22,9 @@ import {
   sweepStuckCommands,
 } from '../src/commands/service';
 import { scriptMockVehicle, clearMockScripts } from '../src/providers/mock';
+import { queue } from '../src/jobs/queues';
 import { sha256hex } from '../src/core/crypto';
+import type { CommandType } from '@voltlink/shared';
 import type { ApiKeyActor, AutomationActor } from '../src/authz/types';
 import type { SessionActor } from '../src/authz/types';
 
@@ -862,3 +864,205 @@ describe('processCommandJob dispatch and confirm (M4)', () => {
     void requestHash;
   });
 });
+
+describe(
+  'R2-18 confirm stage evaluates the per-type predicate (M4b)',
+  { tags: ['command-validation'] },
+  () => {
+    // R2-18 fix text: "unlock with locked:true must stay accepted" is confirm-
+    // stage behaviour, and commands.predicate.test.ts only calls the predicate
+    // directly. Per observable command type with a named predicate, an accepted
+    // command inside the 90 s window with an online, NON-matching snapshot must
+    // stay accepted and re-enqueue a confirm job; the matching snapshot must
+    // confirm it. Red is M4b (commands/service.ts:673 becomes
+    // Object.keys(state).length > 0): the mutant confirms on the non-matching
+    // snapshot and these tests fail.
+    const PREDICATE_CASES: {
+      type: CommandType;
+      params: Record<string, unknown>;
+      match: Record<string, unknown>;
+      mismatch: Record<string, unknown>;
+    }[] = [
+      { type: 'lock', params: {}, match: { locked: true }, mismatch: { locked: false } },
+      { type: 'unlock', params: {}, match: { locked: false }, mismatch: { locked: true } },
+      {
+        type: 'climate_start',
+        params: {},
+        match: { climateOn: true },
+        mismatch: { climateOn: false },
+      },
+      {
+        type: 'climate_stop',
+        params: {},
+        match: { climateOn: false },
+        mismatch: { climateOn: true },
+      },
+      {
+        type: 'charge_start',
+        params: {},
+        match: { chargingState: 'Charging' },
+        mismatch: { chargingState: 'Stopped' },
+      },
+      {
+        type: 'charge_stop',
+        params: {},
+        match: { chargingState: 'Stopped' },
+        mismatch: { chargingState: 'Charging' },
+      },
+      {
+        type: 'set_charge_limit',
+        params: { chargeLimitPct: 80 },
+        match: { chargeLimitPct: 80 },
+        mismatch: { chargeLimitPct: 90 },
+      },
+      {
+        type: 'charge_port_open',
+        params: {},
+        match: { chargePortDoorOpen: true },
+        mismatch: { chargePortDoorOpen: false },
+      },
+      {
+        type: 'charge_port_close',
+        params: {},
+        match: { chargePortDoorOpen: false },
+        mismatch: { chargePortDoorOpen: true },
+      },
+      {
+        type: 'window_vent',
+        params: {},
+        match: { windowsVented: true },
+        mismatch: { windowsVented: false },
+      },
+      {
+        type: 'window_close',
+        params: {},
+        match: { windowsVented: false },
+        mismatch: { windowsVented: true },
+      },
+      {
+        type: 'open_trunk',
+        params: {},
+        match: { trunkOpen: true },
+        mismatch: { trunkOpen: false },
+      },
+      {
+        type: 'open_frunk',
+        params: {},
+        match: { frunkOpen: true },
+        mismatch: { frunkOpen: false },
+      },
+      { type: 'defrost', params: {}, match: { defrostOn: true }, mismatch: { defrostOn: false } },
+      {
+        type: 'set_charging_amps',
+        params: { chargingAmps: 32 },
+        match: { chargeCurrentRequestAmps: 32 },
+        mismatch: { chargeCurrentRequestAmps: 16 },
+      },
+      {
+        type: 'remote_start',
+        params: {},
+        match: { remoteStartActive: true },
+        mismatch: { remoteStartActive: false },
+      },
+      { type: 'wake', params: {}, match: { status: 'online' }, mismatch: { status: 'asleep' } },
+    ];
+
+    for (const row of PREDICATE_CASES) {
+      it(`${row.type}: a non-matching online snapshot stays accepted and re-enqueues; the matching snapshot confirms`, async () => {
+        clearMockScripts();
+        const vehicle = await prisma.vehicle.create({
+          data: {
+            organizationId: world.org.id,
+            providerAccountId: world.provider.id,
+            provider: 'mock',
+            providerVehicleId: `m4b-${row.type}`,
+            displayName: `M4b ${row.type}`,
+            demo: false,
+            capabilities: JSON.parse(JSON.stringify(PREDICATE_CASES.map((r) => r.type))),
+          },
+        });
+        scriptMockVehicle(`m4b-${row.type}`, { status: 'online' });
+        const { command } = await issueCommand(world.actor, vehicle.id, row.type, row.params);
+        await processCommandJob({ commandId: command.id, stage: 'dispatch', n: 1 });
+        expect(
+          (await prisma.vehicleCommand.findUniqueOrThrow({ where: { id: command.id } })).status,
+        ).toBe('accepted');
+
+        const snapshot = (state: Record<string, unknown>) =>
+          prisma.vehicleSnapshot.upsert({
+            where: { vehicleId: vehicle.id },
+            update: {
+              state: JSON.parse(JSON.stringify({ status: 'online', ...state })),
+              fetchedAt: new Date(),
+            },
+            create: {
+              vehicleId: vehicle.id,
+              state: JSON.parse(JSON.stringify({ status: 'online', ...state })),
+              fetchedAt: new Date(),
+            },
+          });
+
+        // Non-matching online snapshot: stays accepted, and a confirm job is
+        // re-enqueued for the next attempt.
+        await snapshot(row.mismatch);
+        const delayedBefore = (await queue('vehicle-commands').getJobCounts('delayed')).delayed;
+        await processCommandJob({ commandId: command.id, stage: 'confirm', n: 1 });
+        expect(
+          (await prisma.vehicleCommand.findUniqueOrThrow({ where: { id: command.id } })).status,
+        ).toBe('accepted');
+        const delayedAfter = (await queue('vehicle-commands').getJobCounts('delayed')).delayed;
+        expect(
+          delayedAfter,
+          'confirm must be re-enqueued after a non-matching snapshot',
+        ).toBeGreaterThan(delayedBefore);
+
+        // Matching online snapshot: confirmed via state_match.
+        await snapshot(row.match);
+        await processCommandJob({ commandId: command.id, stage: 'confirm', n: 2 });
+        const confirmed = await prisma.vehicleCommand.findUniqueOrThrow({
+          where: { id: command.id },
+        });
+        expect(confirmed.status).toBe('confirmed');
+        expect(confirmed.confirmation).toBe('state_match');
+        await prisma.vehicle.delete({ where: { id: vehicle.id } });
+      });
+    }
+
+    // seat_heater / steering_heater: constant-true predicates (acceptance is the
+    // observable step) — ANY online snapshot confirms, even an EMPTY one. M4b
+    // (Object.keys(state).length > 0) re-enqueues on the empty snapshot.
+    for (const type of ['seat_heater', 'steering_heater'] as const) {
+      it(`${type}: the constant-true predicate confirms on an empty online snapshot`, async () => {
+        clearMockScripts();
+        const vehicle = await prisma.vehicle.create({
+          data: {
+            organizationId: world.org.id,
+            providerAccountId: world.provider.id,
+            provider: 'mock',
+            providerVehicleId: `m4b-${type}`,
+            displayName: `M4b ${type}`,
+            demo: false,
+            capabilities: JSON.parse(JSON.stringify([type])),
+          },
+        });
+        scriptMockVehicle(`m4b-${type}`, { status: 'online' });
+        const { command } = await issueCommand(world.actor, vehicle.id, type, {});
+        await processCommandJob({ commandId: command.id, stage: 'dispatch', n: 1 });
+        expect(
+          (await prisma.vehicleCommand.findUniqueOrThrow({ where: { id: command.id } })).status,
+        ).toBe('accepted');
+
+        await prisma.vehicleSnapshot.upsert({
+          where: { vehicleId: vehicle.id },
+          update: { state: JSON.parse('{}'), fetchedAt: new Date() },
+          create: { vehicleId: vehicle.id, state: JSON.parse('{}'), fetchedAt: new Date() },
+        });
+        await processCommandJob({ commandId: command.id, stage: 'confirm', n: 1 });
+        expect(
+          (await prisma.vehicleCommand.findUniqueOrThrow({ where: { id: command.id } })).status,
+        ).toBe('confirmed');
+        await prisma.vehicle.delete({ where: { id: vehicle.id } });
+      });
+    }
+  },
+);
