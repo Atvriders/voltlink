@@ -181,7 +181,7 @@ function VehicleSwitcher() {
         aria-label={
           selected
             ? `Vehicle: ${selected.displayName}. ${list.length} vehicles. Change vehicle`
-            : 'Choose vehicle'
+            : `Choose vehicle. Fleet. ${list.length} vehicles`
         }
       >
         <Car size={15} className="text-accent" />
