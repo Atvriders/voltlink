@@ -293,7 +293,9 @@ test('notifications page', async ({ page }) => {
   await page.waitForTimeout(1000);
   await expect(page).toHaveScreenshot('notifications.png', {
     ...T,
-    mask: maskDynamic(page),
+    // notification createdAt is wall-clock by design (runtime events + the
+    // per-run welcome mail); the content itself is asserted above
+    mask: [...maskDynamic(page), page.getByText(/^Nov \d{1,2}, \d{4}, /)],
   });
 });
 
