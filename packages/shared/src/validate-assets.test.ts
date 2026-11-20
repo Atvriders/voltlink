@@ -67,8 +67,14 @@ describe('C-ASSETVALID validator', () => {
   });
 
   it('fails ENVELOPE when a mesh node is exported below the ground plane (R2-39)', async () => {
-    const { NodeIO } = await import('@gltf-transform/core');
-    const io = new NodeIO();
+    const [{ NodeIO }, { ALL_EXTENSIONS }, { MeshoptDecoder }] = await Promise.all([
+      import('@gltf-transform/core'),
+      import('@gltf-transform/extensions'),
+      import('meshoptimizer'),
+    ]);
+    const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({
+      'meshopt.decoder': MeshoptDecoder,
+    });
     const src = path.join(root, 'assets', 'models', 'processed', 'compact_sedan.glb');
     const doc = await io.read(src);
     const target = doc
@@ -82,6 +88,13 @@ describe('C-ASSETVALID validator', () => {
     target!.setTranslation([t[0], t[1] - 5, t[2]]);
     const dir = mkdtempSync(path.join(tmpdir(), 'voltlink-ground-'));
     try {
+      // Write back uncompressed (we registered the decoder for reading only;
+      // the encoder is not a dependency of the test).
+      const meshopt = doc
+        .getRoot()
+        .listExtensionsUsed()
+        .find((e) => e.extensionName === 'EXT_meshopt_compression');
+      meshopt?.dispose();
       const data = await io.writeBinary(doc);
       writeFileSync(path.join(dir, 'compact_sedan.glb'), data);
       const { status, out } = runValidator(['--staged', dir]);

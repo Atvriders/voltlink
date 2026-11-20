@@ -48,10 +48,14 @@
 
 ## Dependency scanning
 
-- `npm audit` (2026-11-02): **0 critical, 0 high, 3 moderate** advisories —
-  all three are dev-only tooling (`@eslint-community/eslint-utils`,
-  `@eslint/config-array`, `@donmccurdy/caporal` used by the gltfpack CLI);
-  no runtime dependency is affected.
+- `npm audit` (2026-11-20, after `npm audit fix` on the non-breaking set):
+  **0 critical, 3 high, 7 moderate** across 10 advisories. The 3 high
+  findings travel through the Prisma CLI's build-time dependency chain
+  (`prisma` → `@prisma/config` → `effect`); they affect `prisma` tooling,
+  not VoltLink's runtime request path. The 7 moderate findings are dev-only
+  tooling (typescript-eslint, glob via eslint, gltfpack CLI deps). A Prisma
+  major upgrade (7/8) is the patched path and is scheduled separately —
+  tracked here rather than force-bumped mid-release.
 - CI runs a container image scan (Trivy) with an expiry-checked ignore file
   and a full-history secret scan (gitleaks) on every push.
 
