@@ -23,11 +23,14 @@ export async function seedDemoWorld(
   userId: string,
   vehicles: { id: string; providerVehicleId: string }[],
 ): Promise<void> {
-  const rng = seededRng(hashString(organizationId) ^ 0x9e3779b9);
-  // Visual-regression determinism (R2-35/C-VISUAL): when VL_DEMO_FROZEN_AT
-  // is set, the 30-day demo history (drives, charges, telemetry) is anchored
-  // to a fixed instant so baselines never drift with the wall clock.
-  const now = process.env.VL_DEMO_FROZEN_AT ? new Date(process.env.VL_DEMO_FROZEN_AT) : new Date();
+  // Visual-regression determinism (R2-35/C-VISUAL): when VL_DEMO_FROZEN_AT is
+  // set, the demo world (drives, charges, telemetry) is generated from a FIXED
+  // rng seed instead of the per-organization hash, and the 30-day history is
+  // anchored to a fixed instant — so every e2e-visual user sees identical
+  // history and pixel baselines hold across runs.
+  const frozen = process.env.VL_DEMO_FROZEN_AT;
+  const rng = seededRng(frozen ? 0x5eedf00d : hashString(organizationId) ^ 0x9e3779b9);
+  const now = frozen ? new Date(frozen) : new Date();
 
   // ---- Places ----
   const placeHome = await prisma.place.create({
