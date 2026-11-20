@@ -176,6 +176,13 @@ adminRouter.patch(
           ]
         : []),
     ]);
+    if (suspended) {
+      // A-SSEREVOKE: suspension ends every session and every open stream.
+      void (await import('../realtime/bus')).publishSessionRevocation({
+        userId: target.id,
+        allExcept: null,
+      });
+    }
     res.json({ data: { ok: true } });
   },
 );

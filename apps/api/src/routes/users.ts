@@ -162,6 +162,12 @@ usersRouter.post(
       where: { userId: user.id, id: { not: actor.sessionId }, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    // A-SSEREVOKE: end every other session's SSE stream immediately; the
+    // acting session survives (guide 04 allExcept: current).
+    void (await import('../realtime/bus')).publishSessionRevocation({
+      userId: user.id,
+      allExcept: actor.sessionId,
+    });
     await audit({
       actorId: user.id,
       action: 'user.change_password',

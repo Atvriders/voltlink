@@ -644,6 +644,12 @@ export async function resetPassword(token: string, newPassword: string): Promise
     }),
   ]);
   await clearFailures(`user:${row.userId}`);
+  // A-SSEREVOKE: a password reset revokes EVERY session, so every open
+  // stream ends now.
+  void (await import('../realtime/bus')).publishSessionRevocation({
+    userId: row.userId,
+    allExcept: null,
+  });
   await audit({
     actorId: row.userId,
     action: 'auth.password_reset',
