@@ -10,7 +10,13 @@ import { enableDemo, register } from './helpers';
 
 const TERMINAL = ['confirmed', 'accepted', 'not_observable', 'rejected', 'failed', 'timed_out'];
 
-type Cmd = { id: string; status?: string; createdAt?: string; events?: { event: string }[] };
+type Cmd = {
+  id: string;
+  status?: string;
+  confirmation?: string;
+  createdAt?: string;
+  events?: { event: string }[];
+};
 
 async function newestCommand(page: Page, vehicleId: string, afterMs: number): Promise<Cmd> {
   const deadline = Date.now() + 15_000;
@@ -74,7 +80,7 @@ async function waitForStatus(page: Page, commandId: string, status: string): Pro
   throw new Error(`command did not reach ${status} within 90s (last: ${last.status})`);
 }
 
-test('R2-17: honk reaches accepted/not_observable with the full event chain (API + UI)', async ({
+test('@lifecycle R2-17: honk reaches accepted/not_observable with the full event chain (API + UI)', async ({
   page,
 }) => {
   test.setTimeout(240_000);
@@ -99,18 +105,19 @@ test('R2-17: honk reaches accepted/not_observable with the full event chain (API
 
   // API: terminal + event chain queued -> submitted -> accepted.
   const final = await waitTerminal(page, issued.id);
-  expect(final.status, 'honk terminal status').toMatch(/^(accepted|not_observable)$/);
+  // commands-12: honk is not_observable — the spec is accepted AND the
+  // confirmation field is not_observable, never the other way round.
+  expect(final.status, 'honk terminal status').toBe('accepted');
+  expect(final.confirmation, 'honk confirmation').toBe('not_observable');
   const events = (final.events ?? []).map((e) => e.event);
   const chain = ['queued', 'submitted'];
   for (const step of chain) {
     expect(events, `event chain must contain ${step}`).toContain(step);
   }
-  expect(events, 'event chain must contain accepted or not_observable').toContain(
-    final.status ?? 'accepted',
-  );
+  expect(events, 'event chain must contain accepted').toContain('accepted');
   const q = events.indexOf('queued');
   const s = events.indexOf('submitted');
-  const a = events.indexOf(final.status ?? 'accepted');
+  const a = events.indexOf('accepted');
   expect(q, 'queued before submitted').toBeGreaterThanOrEqual(0);
   expect(s, 'submitted after queued').toBeGreaterThan(q);
   expect(a, 'accepted after submitted').toBeGreaterThan(s);
@@ -120,19 +127,23 @@ test('R2-17: honk reaches accepted/not_observable with the full event chain (API
     page.locator(`[data-command-id="${issued.id}"][data-status]`).first(),
     'lifecycle modal with the issued command id',
   ).toBeVisible({ timeout: 15000 });
+  // UI: the modal for THIS command shows accepted + not_observable.
+  const modal = page.locator(`[data-command-id="${issued.id}"]`).first();
   await expect
-    .poll(
-      async () =>
-        (await page
-          .locator(`[data-command-id="${issued.id}"]`)
-          .first()
-          .getAttribute('data-status')) ?? '',
-      { timeout: 15000 },
-    )
-    .toMatch(/^(accepted|not_observable)$/);
+    .poll(async () => (await modal.getAttribute('data-status')) ?? '', {
+      timeout: 15000,
+    })
+    .toBe('accepted');
+  await expect
+    .poll(async () => (await modal.getAttribute('data-confirmation')) ?? '', {
+      timeout: 15000,
+    })
+    .toBe('not_observable');
 });
 
-test('R2-17: rejected lifecycle — Bison open_trunk is refused end to end', async ({ page }) => {
+test('@lifecycle R2-17: rejected lifecycle — Bison open_trunk is refused end to end', async ({
+  page,
+}) => {
   test.setTimeout(240_000);
   await register(page, `e2e-lc-rej-${Date.now()}@voltlink.test`);
   await enableDemo(page);
@@ -165,7 +176,9 @@ test('R2-17: rejected lifecycle — Bison open_trunk is refused end to end', asy
     .toBe('rejected');
 });
 
-test('R2-17: timed_out lifecycle — Bison window_vent times out end to end', async ({ page }) => {
+test('@lifecycle R2-17: timed_out lifecycle — Bison window_vent times out end to end', async ({
+  page,
+}) => {
   test.setTimeout(240_000);
   await register(page, `e2e-lc-to-${Date.now()}@voltlink.test`);
   await enableDemo(page);
@@ -198,7 +211,7 @@ test('R2-17: timed_out lifecycle — Bison window_vent times out end to end', as
     .toBe('timed_out');
 });
 
-test('R2-17: confirmed lifecycle — Aurora lock reaches confirmed with the full event chain', async ({
+test('@lifecycle R2-17: confirmed lifecycle — Aurora lock reaches confirmed with the full event chain', async ({
   page,
 }) => {
   test.setTimeout(240_000);

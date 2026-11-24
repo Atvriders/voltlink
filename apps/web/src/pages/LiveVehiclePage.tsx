@@ -666,7 +666,12 @@ function CommandModal({
         )
       }
     >
-      <div className="space-y-4" data-command-id={command.id} data-status={command.status}>
+      <div
+        className="space-y-4"
+        data-command-id={command.id}
+        data-status={command.status}
+        data-confirmation={command.confirmation}
+      >
         <ol className="space-y-2">
           {steps.map((label, i) => {
             const done = lastStage >= i;
