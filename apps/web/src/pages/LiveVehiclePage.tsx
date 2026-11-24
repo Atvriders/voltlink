@@ -147,6 +147,15 @@ export default function LiveVehiclePage() {
 
   return (
     <div className="space-y-4">
+      {state &&
+        ['stale', 'last_known'].includes(computeFreshness(state, Date.now())) && (
+          <div
+            data-outage-banner
+            className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn"
+          >
+            Stale data — the provider is degraded; telemetry may not be current.
+          </div>
+        )}
       <div className="flex flex-wrap items-center gap-2">
         <Link to="/" className="text-sm text-subtle hover:text-accent">
           Overview

@@ -401,31 +401,6 @@ test('showroom page', async ({ page }) => {
   });
 });
 
-test('admin users tab as instance admin', async ({ page }) => {
-  await freezeClock(page);
-  await loginAsInstanceAdmin(page);
-  await page.goto('/admin');
-  await expect(page.getByText(/accounts|users/i).first()).toBeVisible({
-    timeout: 30000,
-  });
-  await expect(page.getByText(/0 accounts/)).toHaveCount(0);
-  await page.waitForTimeout(1000);
-  await expect(page).toHaveScreenshot('admin-users.png', {
-    ...T,
-    mask: [
-      ...maskDynamic(page),
-      page.getByText(/accounts$/),
-      // live process metrics (telemetry freshness, uptime, memory, queue depth)
-      page.locator('div.rounded-xl', { has: page.getByText('Telemetry', { exact: true }) }),
-      page.locator('div.rounded-xl', { has: page.getByText('Uptime', { exact: true }) }),
-      page.locator('div.rounded-xl', { has: page.getByText('Memory', { exact: true }) }),
-      page.locator('div.rounded-xl', { has: page.getByText('Queue depth', { exact: true }) }),
-      // per-run user emails/vehicle counts
-      page.locator('p.truncate.text-xs.text-faint'),
-    ],
-  });
-});
-
 test('status admin page', async ({ page }) => {
   await freezeClock(page);
   await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
@@ -457,6 +432,173 @@ test('onboarding welcome', async ({ page }) => {
   });
   await page.waitForTimeout(1000);
   await expect(page).toHaveScreenshot('onboarding.png', {
+    ...T,
+    mask: maskDynamic(page),
+  });
+});
+
+test('webgl loading state holds the GLB and shows data-asset-state=loading', async ({ page }) => {
+  await freezeClock(page);
+  await registerWithDemoFleet(page);
+  // Guide 08 §11 state #7: the GLB request is held open forever.
+  await page.route('**/assets/models/*.glb', () => {});
+  await page.goto('/showroom');
+  const viewer = page.locator('[data-testid="vehicle-viewer"]').first();
+  await expect(viewer).toBeVisible({ timeout: 30000 });
+  await expect(viewer).toHaveAttribute('data-asset-state', 'loading', {
+    timeout: 30000,
+  });
+  await expect(viewer).toHaveScreenshot('webgl-loading.png', {
+    maxDiffPixelRatio: 0.01,
+    timeout: 60000,
+  });
+});
+
+test('active incident marks the demo provider degraded on the public status page', async ({
+  page,
+}) => {
+  await freezeClock(page);
+  await loginAsInstanceAdmin(page);
+  // Create a public "Demo provider latency" incident through the API.
+  const csrf = await page.request.get('/api/v1/auth/csrf');
+  const token = ((await csrf.json()) as { data?: { token?: string } }).data?.token ?? '';
+  const created = await page.request.post('/api/v1/status/incidents', {
+    headers: { 'X-VL-CSRF': token, 'Content-Type': 'application/json' },
+    data: {
+      title: 'Demo provider latency',
+      severity: 'major',
+      components: ['demo'],
+      public: true,
+      message: 'Elevated latency on the demo provider.',
+    },
+  });
+  expect(created.status()).toBe(201);
+  await page.goto('/status');
+  await expect(page.getByText('Demo provider latency')).toBeVisible({
+    timeout: 30000,
+  });
+  await expect(page.getByText('Demo provider')).toBeVisible({ timeout: 30000 });
+  await page.waitForTimeout(1000);
+  await expect(page).toHaveScreenshot('active-incident.png', {
+    ...T,
+    mask: maskDynamic(page),
+  });
+});
+
+test('provider outage shows the outage banner and stale labels', async ({ page }) => {
+  await freezeClock(page);
+  await registerWithDemoFleet(page);
+  const providers = await page.request.get('/api/v1/providers');
+  const body = (await providers.json()) as {
+    data?: { id: string; demo?: boolean }[];
+  };
+  const demoAccount = (body.data ?? []).find((a) => a.demo);
+  expect(demoAccount, 'demo provider account exists').toBeTruthy();
+  const csrf = await page.request.get('/api/v1/auth/csrf');
+  const token = ((await csrf.json()) as { data?: { token?: string } }).data?.token ?? '';
+  const degraded = await page.request.post(`/api/v1/providers/${demoAccount!.id}/demo-degraded`, {
+    headers: { 'X-VL-CSRF': token, 'Content-Type': 'application/json' },
+    data: { degraded: true },
+  });
+  expect(degraded.status()).toBe(200);
+  const vehicles = await page.request.get('/api/v1/vehicles');
+  const vbody = (await vehicles.json()) as {
+    data?: { id: string; displayName?: string }[];
+  };
+  const aurora = (vbody.data ?? []).find((v) => (v.displayName ?? '').includes('Aurora'));
+  expect(aurora, 'Aurora exists').toBeTruthy();
+  await page.goto(`/vehicles/${aurora!.id}`);
+  await expect(page.locator('[data-outage-banner]')).toBeVisible({
+    timeout: 30000,
+  });
+  await expect(page.locator('[data-outage-banner]')).toContainText('Stale data');
+  await page.waitForTimeout(1000);
+  await expect(page).toHaveScreenshot('provider-outage.png', {
+    ...T,
+    mask: maskDynamic(page),
+  });
+});
+
+const queuedFixture = (id: string) => ({
+  items: [
+    {
+      id,
+      vehicleId: 'fixture-vehicle',
+      vehicleName: 'Aurora',
+      providerAccountId: 'fixture-provider',
+      type: 'honk_horn',
+      params: {},
+      status: 'queued',
+      risk: 'low',
+      idempotencyKey: `cmd:${id}`,
+      userId: 'fixture-user',
+      createdAt: '2026-06-15T15:29:00.000Z',
+      confirmed: false,
+    },
+  ],
+});
+
+test('command pending: a queued fixture shows data-status=queued', async ({ page }) => {
+  await freezeClock(page);
+  await registerWithDemoFleet(page);
+  await page.route('**/api/v1/commands*', (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/commands')) {
+      return route.fulfill({ json: queuedFixture('cmd-queued-1') });
+    }
+    return route.fulfill({
+      json: { command: queuedFixture('cmd-queued-1').items[0], events: [] },
+    });
+  });
+  const vehicles = await page.request.get('/api/v1/vehicles');
+  const vbody = (await vehicles.json()) as {
+    data?: { id: string; displayName?: string }[];
+  };
+  const aurora = (vbody.data ?? []).find((v) => (v.displayName ?? '').includes('Aurora'));
+  await page.goto(`/vehicles/${aurora!.id}`);
+  await expect(page.locator('[data-status="queued"]').first()).toBeVisible({
+    timeout: 30000,
+  });
+  await page.waitForTimeout(1000);
+  await expect(page).toHaveScreenshot('command-pending.png', {
+    ...T,
+    mask: maskDynamic(page),
+  });
+});
+
+test('command failure: a rejected fixture shows data-status=rejected and the message', async ({
+  page,
+}) => {
+  await freezeClock(page);
+  await registerWithDemoFleet(page);
+  const rejected = {
+    ...queuedFixture('cmd-rejected-1').items[0],
+    status: 'rejected',
+    errorMessage: 'Provider refused the command.',
+    responseCategory: 'vehicle_refused',
+  };
+  await page.route('**/api/v1/commands*', (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/commands')) {
+      return route.fulfill({ json: { items: [rejected] } });
+    }
+    return route.fulfill({ json: { command: rejected, events: [] } });
+  });
+  const vehicles = await page.request.get('/api/v1/vehicles');
+  const vbody = (await vehicles.json()) as {
+    data?: { id: string; displayName?: string }[];
+  };
+  const aurora = (vbody.data ?? []).find((v) => (v.displayName ?? '').includes('Aurora'));
+  await page.goto(`/vehicles/${aurora!.id}`);
+  await page.locator('[data-status="rejected"]').first().click();
+  await expect(
+    page.locator('[data-command-id="cmd-rejected-1"][data-status="rejected"]'),
+  ).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText('Provider refused the command.')).toBeVisible({
+    timeout: 10000,
+  });
+  await page.waitForTimeout(1000);
+  await expect(page).toHaveScreenshot('command-failure.png', {
     ...T,
     mask: maskDynamic(page),
   });

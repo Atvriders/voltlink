@@ -35,7 +35,8 @@ export default defineConfig({
     {
       name: 'desktop',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: /no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts|visual-mobile\.spec\.ts/,
+      testIgnore:
+        /no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts|visual-mobile\.spec\.ts|visual-no-webgl\.spec\.ts|visual-reduced-motion\.spec\.ts/,
     },
     // Gate 7: every page is exercised at desktop, tablet and mobile sizes.
     // Desktop visual snapshots run in the desktop project; the mobile and
@@ -45,12 +46,14 @@ export default defineConfig({
     {
       name: 'tablet',
       use: { ...devices['iPad Pro 11'], defaultBrowserType: 'chromium', browserName: 'chromium' },
-      testIgnore: /visual\.spec\.ts|no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts/,
+      testIgnore:
+        /visual\.spec\.ts|no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts|visual-no-webgl\.spec\.ts|visual-reduced-motion\.spec\.ts/,
     },
     {
       name: 'mobile',
       use: { ...devices['Pixel 7'] },
-      testIgnore: /visual\.spec\.ts|no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts/,
+      testIgnore:
+        /visual\.spec\.ts|no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts|visual-no-webgl\.spec\.ts|visual-reduced-motion\.spec\.ts/,
     },
     // Tesla spec runs only through scripts/e2e/tesla-e2e.sh (fake Fleet
     // API + seeded user); the device projects above ignore it.
@@ -75,6 +78,25 @@ export default defineConfig({
         launchOptions: { args: ['--disable-webgl', '--disable-gpu'] },
       },
       testMatch: /no-webgl\.spec\.ts/,
+      testIgnore: /visual-no-webgl\.spec\.ts/,
+    },
+    // Guide 08 §11 state #8: the WebGL fallback visual baseline.
+    {
+      name: 'visual-no-webgl',
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: { args: ['--disable-webgl', '--disable-gpu'] },
+      },
+      testMatch: /visual-no-webgl\.spec\.ts/,
+    },
+    // Guide 08 §11 state #21: reduced-motion visual baseline.
+    {
+      name: 'visual-reduced-motion',
+      use: {
+        ...devices['Desktop Chrome'],
+        contextOptions: { reducedMotion: 'reduce' },
+      },
+      testMatch: /visual-reduced-motion\.spec\.ts/,
     },
   ],
 });

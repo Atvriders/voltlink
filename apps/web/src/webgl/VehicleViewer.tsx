@@ -490,6 +490,7 @@ export default function VehicleViewer({
         style={{ height }}
         data-testid="vehicle-viewer"
         data-asset="fallback"
+        data-asset-state="fallback"
         data-webgl="unsupported"
       >
         <p className="text-xs text-faint">3D preview unavailable on this device</p>
@@ -503,6 +504,7 @@ export default function VehicleViewer({
       style={{ height }}
       data-testid="vehicle-viewer"
       data-asset={useGlb && glbLoaded ? 'glb' : 'fallback'}
+      data-asset-state={useGlb ? (glbLoaded ? 'glb' : 'loading') : 'fallback'}
       data-asset-url={useGlb && glbLoaded ? asset : undefined}
       data-parts={useGlb && glbLoaded ? partNames.join(',') : undefined}
     >

@@ -328,6 +328,13 @@ export async function publicStatusBundle(): Promise<unknown> {
     uptimePct(30),
     uptimeSeries(90),
   ]);
+  // Guide 08 §11 state #16: a component with an ACTIVE incident renders
+  // degraded on the public page.
+  const degraded = new Set(
+    incidents
+      .filter((i) => i.status === 'investigating')
+      .flatMap((i) => (i.components ?? []) as string[]),
+  );
   return {
     overall: overallStatus(statuses),
     components: components.map((c) => ({
@@ -336,7 +343,7 @@ export async function publicStatusBundle(): Promise<unknown> {
       name: c.name,
       group: c.group,
       description: c.description ?? undefined,
-      status: c.status,
+      status: degraded.has(c.key) ? 'degraded' : c.status,
       manualOverride: c.manualOverride,
       updatedAt: c.updatedAt.toISOString(),
       uptime90dPct: uptime90.get(c.key) ?? 100,
