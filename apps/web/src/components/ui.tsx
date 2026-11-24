@@ -233,7 +233,9 @@ export function Modal({
     >
       <div className="max-h-[92vh] w-full overflow-auto rounded-t-2xl border border-line bg-panel p-0 shadow-2xl sm:max-w-lg sm:rounded-2xl">
         <header className="sticky top-0 flex items-center justify-between border-b border-line bg-panel px-5 py-3">
-          <h2 id={titleId} className="text-base font-bold">{title}</h2>
+          <h2 id={titleId} className="text-base font-bold">
+            {title}
+          </h2>
           <button
             onClick={onClose}
             className="rounded-md p-1 text-subtle hover:bg-panel2 hover:text-ink"

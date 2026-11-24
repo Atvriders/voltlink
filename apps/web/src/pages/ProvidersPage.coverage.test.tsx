@@ -273,9 +273,7 @@ describe('ProvidersPage', () => {
     const user = userEvent.setup();
     renderPage('/providers', <ProvidersPage />);
 
-    await user.click(
-      await screen.findByRole('button', { name: /Connect with Tessie token/i }),
-    );
+    await user.click(await screen.findByRole('button', { name: /Connect with Tessie token/i }));
     expect(await screen.findByText('Connect Tessie (optional)')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -285,16 +283,12 @@ describe('ProvidersPage', () => {
 
     await user.click(screen.getByRole('button', { name: /Connect with Tessie token/i }));
 
-    const tokenInput = document.querySelector(
-      'input[type="password"]',
-    ) as HTMLInputElement | null;
+    const tokenInput = document.querySelector('input[type="password"]') as HTMLInputElement | null;
     expect(tokenInput).not.toBeNull();
 
     expect(screen.getByRole('button', { name: 'Connect' })).toBeDisabled();
     await user.type(tokenInput!, 'token-123');
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled(),
-    );
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled());
 
     await user.click(screen.getByRole('button', { name: 'Connect' }));
 
@@ -320,9 +314,7 @@ describe('ProvidersPage', () => {
 
     await user.click(screen.getByRole('button', { name: /Connect with Tesla/i }));
 
-    await waitFor(() =>
-      expect(apiMock).toHaveBeenCalledWith('/api/v1/providers/tesla/authorize'),
-    );
+    await waitFor(() => expect(apiMock).toHaveBeenCalledWith('/api/v1/providers/tesla/authorize'));
     expect(await screen.findByRole('alert')).toHaveTextContent(
       /Tesla isn.t configured on this server/,
     );

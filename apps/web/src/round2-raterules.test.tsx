@@ -44,7 +44,16 @@ vi.mock('./auth/AuthContext', () => ({
 }));
 
 const rules = [
-  { id: 'r1', name: 'Night rate', type: 'location', pricePerKwh: 0.2, currency: 'USD', enabled: true, placeId: null, periods: [] },
+  {
+    id: 'r1',
+    name: 'Night rate',
+    type: 'location',
+    pricePerKwh: 0.2,
+    currency: 'USD',
+    enabled: true,
+    placeId: null,
+    periods: [],
+  },
 ];
 
 beforeEach(() => {
@@ -52,8 +61,15 @@ beforeEach(() => {
     if (path === '/api/v1/charging/rates/list') return rules;
     if (path === '/api/v1/vehicles') return [{ id: 'v1', displayName: 'Aurora' }];
     if (path === '/api/v1/status')
-      return { overall: 'operational', components: [], incidents: [], maintenance: [], updatedAt: new Date().toISOString() };
-    if (path === '/api/v1/auth/setup-status') return { needsSetup: false, registrationMode: 'invite' };
+      return {
+        overall: 'operational',
+        components: [],
+        incidents: [],
+        maintenance: [],
+        updatedAt: new Date().toISOString(),
+      };
+    if (path === '/api/v1/auth/setup-status')
+      return { needsSetup: false, registrationMode: 'invite' };
     if (path === '/api/v1/vehicles/places/all')
       return [{ id: 'p1', name: 'Home', type: 'home', lat: 40, lon: -100 }];
     if (path.startsWith('/api/v1/charging')) return { items: [], total: 0 };

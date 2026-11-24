@@ -68,7 +68,9 @@ describe('buildTeslaSteps', () => {
     expect(buildTeslaSteps('window_vent', {}, ctx)[0]).toMatchObject({ name: 'window_control' });
     const close = buildTeslaSteps('window_close', {}, ctx)[0]!;
     expect(close.body).toEqual({ command: 'close', lat: 47.6, lon: -122.3 });
-    expect(buildTeslaSteps('window_close', {}, { ...ctx, userLocation: undefined })[0]!.body).toEqual({
+    expect(
+      buildTeslaSteps('window_close', {}, { ...ctx, userLocation: undefined })[0]!.body,
+    ).toEqual({
       command: 'close',
     });
   });
@@ -91,7 +93,9 @@ describe('buildTeslaSteps', () => {
 
   it('builds sentry, valet and speed-limit step sequences', () => {
     expect(buildTeslaSteps('sentry_mode', {}, ctx)[0]!.body).toEqual({ on: true });
-    expect(buildTeslaSteps('sentry_mode', { sentryOn: false }, ctx)[0]!.body).toEqual({ on: false });
+    expect(buildTeslaSteps('sentry_mode', { sentryOn: false }, ctx)[0]!.body).toEqual({
+      on: false,
+    });
     expect(buildTeslaSteps('valet_mode', { valetOn: true }, ctx)[0]!.body).toEqual({
       on: true,
       password: '1234',
@@ -135,41 +139,43 @@ describe('buildTeslaSteps', () => {
   });
 });
 
-  it('covers remaining parameter defaults and nullish branches', () => {
-    expect(buildTeslaSteps('set_charging_amps', {}, ctx)[0]!.body).toEqual({ charging_amps: 32 });
-    expect(buildTeslaSteps('set_charge_limit', {}, ctx)[0]!.body).toEqual({ percent: 80 });
-    expect(buildTeslaSteps('steering_heater', { steeringOn: false }, ctx)[0]!.body).toEqual({
-      on: false,
-    });
-    expect(buildTeslaSteps('seat_heater', {}, ctx)[0]!.body.level).toBe(1);
-    const noDest = buildTeslaSteps('send_navigation', { destination: undefined as never }, ctx)[0]!;
-    expect((noDest.body.value as Record<string, string>)['android.intent.extra.TEXT']).toBe('');
-    expect(buildTeslaSteps('schedule_update', { updateDelaySec: 0 }, ctx)[0]!.body).toEqual({
-      offset_sec: 0,
-    });
-    expect(buildTeslaSteps('set_charging_amps', { chargingAmps: 0 }, ctx)[0]!.body).toEqual({
-      charging_amps: 1,
-    });
-    expect(buildTeslaSteps('speed_limit', { speedLimitKmh: 50, speedLimitOn: true }, ctx)[0]!.body).toEqual({
-      limit_mph: 50,
-    });
-    expect(buildTeslaSteps('sentry_mode', { sentryOn: true }, ctx)[0]!.body).toEqual({ on: true });
+it('covers remaining parameter defaults and nullish branches', () => {
+  expect(buildTeslaSteps('set_charging_amps', {}, ctx)[0]!.body).toEqual({ charging_amps: 32 });
+  expect(buildTeslaSteps('set_charge_limit', {}, ctx)[0]!.body).toEqual({ percent: 80 });
+  expect(buildTeslaSteps('steering_heater', { steeringOn: false }, ctx)[0]!.body).toEqual({
+    on: false,
   });
+  expect(buildTeslaSteps('seat_heater', {}, ctx)[0]!.body.level).toBe(1);
+  const noDest = buildTeslaSteps('send_navigation', { destination: undefined as never }, ctx)[0]!;
+  expect((noDest.body.value as Record<string, string>)['android.intent.extra.TEXT']).toBe('');
+  expect(buildTeslaSteps('schedule_update', { updateDelaySec: 0 }, ctx)[0]!.body).toEqual({
+    offset_sec: 0,
+  });
+  expect(buildTeslaSteps('set_charging_amps', { chargingAmps: 0 }, ctx)[0]!.body).toEqual({
+    charging_amps: 1,
+  });
+  expect(
+    buildTeslaSteps('speed_limit', { speedLimitKmh: 50, speedLimitOn: true }, ctx)[0]!.body,
+  ).toEqual({
+    limit_mph: 50,
+  });
+  expect(buildTeslaSteps('sentry_mode', { sentryOn: true }, ctx)[0]!.body).toEqual({ on: true });
+});
 
-  it('covers nullish context fallbacks', () => {
-    const bare: CmdCtx = {};
-    expect(buildTeslaSteps('set_temperature', {}, bare)[0]!.body).toEqual({
-      driver_temp: 21,
-      passenger_temp: 21,
-    });
-    expect(buildTeslaSteps('homelink', {}, bare)[0]!.body).toEqual({ lat: 0, lon: 0 });
-    expect(buildTeslaSteps('valet_mode', { valetOn: true }, bare)[0]!.body).toEqual({
-      on: true,
-      password: '',
-    });
-    const off = buildTeslaSteps('speed_limit', { speedLimitOn: false }, bare);
-    expect(off[0]!.body).toEqual({ pin: '' });
-    const on = buildTeslaSteps('speed_limit', { speedLimitOn: true }, bare);
-    expect(on[0]!.body).toEqual({ limit_mph: 68 });
-    expect(on[1]!.body).toEqual({ pin: '' });
+it('covers nullish context fallbacks', () => {
+  const bare: CmdCtx = {};
+  expect(buildTeslaSteps('set_temperature', {}, bare)[0]!.body).toEqual({
+    driver_temp: 21,
+    passenger_temp: 21,
   });
+  expect(buildTeslaSteps('homelink', {}, bare)[0]!.body).toEqual({ lat: 0, lon: 0 });
+  expect(buildTeslaSteps('valet_mode', { valetOn: true }, bare)[0]!.body).toEqual({
+    on: true,
+    password: '',
+  });
+  const off = buildTeslaSteps('speed_limit', { speedLimitOn: false }, bare);
+  expect(off[0]!.body).toEqual({ pin: '' });
+  const on = buildTeslaSteps('speed_limit', { speedLimitOn: true }, bare);
+  expect(on[0]!.body).toEqual({ limit_mph: 68 });
+  expect(on[1]!.body).toEqual({ pin: '' });
+});

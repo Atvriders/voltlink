@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import prettier from 'prettier';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -18,7 +19,11 @@ async function main(): Promise<void> {
   await import('../apps/api/src/app');
   const { buildOpenApiSpec } = await import('../apps/api/src/docs/openapi');
   const spec = buildOpenApiSpec();
-  const json = `${JSON.stringify(spec, null, 2)}\n`;
+  // R2-68: the committed snapshot must satisfy the CI format gate, so run it
+  // through the repo's prettier config before writing.
+  const json = await prettier.format(`${JSON.stringify(spec, null, 2)}\n`, {
+    filepath: 'apps/api/openapi.json',
+  });
 
   const targets = [path.join(root, 'apps/api/openapi.json'), path.join(root, 'docs/openapi.json')];
   for (const target of targets) {

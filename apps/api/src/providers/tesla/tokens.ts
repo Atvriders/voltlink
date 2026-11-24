@@ -24,9 +24,7 @@ async function readCreds(
 ): Promise<Cred> {
   const row = await db.providerCredential.findUnique({ where: { providerAccountId: accountId } });
   if (!row) throw new Error(`No credentials stored for Tesla account ${accountId}`);
-  const creds = JSON.parse(
-    open(row.ciphertext, `provider-credential:${accountId}`),
-  ) as TeslaTokens;
+  const creds = JSON.parse(open(row.ciphertext, `provider-credential:${accountId}`)) as TeslaTokens;
   return { version: row.keyVersion, creds };
 }
 

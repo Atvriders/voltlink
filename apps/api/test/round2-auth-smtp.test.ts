@@ -15,7 +15,6 @@ vi.mock('nodemailer', () => ({
 
 import { describe, expect, it, vi } from 'vitest';
 import { sendMail } from '../src/auth/service';
-import { prisma } from '../src/core/db';
 
 describe('sendMail smtp branch', () => {
   it('delivers via the configured transporter and reports smtp', async () => {

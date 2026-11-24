@@ -1,12 +1,12 @@
 {
-  "commit": "826c48d58ea1634a26ef228927a0f3bf78344bb9",
+  "commit": "72459cd0869a0d9bcf54ac3efe0aa39655c93016",
   "vitest": {
-    "total": 2453,
-    "passed": 2450,
+    "total": 2517,
+    "passed": 2517,
     "failed": 0
   },
   "playwright": {
-    "total": 8,
+    "total": 1,
     "skipped": 0
   },
   "byTag": {
@@ -17,26 +17,26 @@
     "authn": 1,
     "queue": 2,
     "automation": 4,
-    "command-validation": 4,
+    "command-validation": 23,
     "telemetry": 6,
     "notification": 3,
     "scheduler": 1,
     "security": 1,
     "retention": 1,
-    "realtime": 1,
+    "realtime": 6,
     "status-page": 2,
     "rate-limit": 1
   },
   "categories": {
     "authz": 1756,
     "authn": 1,
-    "command-validation": 4,
+    "command-validation": 23,
     "telemetry": 6,
     "automation": 4,
     "notification": 3,
     "rate-limit": 1,
     "retention": 1,
-    "realtime": 1,
+    "realtime": 6,
     "status-page": 2,
     "incident": 3,
     "scheduler": 1,
@@ -45,5 +45,5 @@
     "observability": 4,
     "security": 1
   },
-  "generatedAt": "2026-11-19T01:28:58.670Z"
+  "generatedAt": "2026-11-24T20:53:37.944Z"
 }

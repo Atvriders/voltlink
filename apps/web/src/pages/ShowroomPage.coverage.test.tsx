@@ -186,7 +186,8 @@ beforeEach(() => {
     window.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
   }
   if (!window.IntersectionObserver) {
-    window.IntersectionObserver = IntersectionObserverStub as unknown as typeof IntersectionObserver;
+    window.IntersectionObserver =
+      IntersectionObserverStub as unknown as typeof IntersectionObserver;
   }
 
   apiMock.mockReset();

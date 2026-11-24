@@ -95,7 +95,10 @@ beforeEach(() => {
       return { needsSetup: false, registrationMode: 'invite' };
     if (path === '/api/v1/fleet/overview') return { vehicles: [vehicle], groups: [] };
     if (path === '/api/v1/config/client')
-      return { map: { mode: 'demo', assetsUrl: '/assets' }, geocoder: { enabled: false, autocomplete: false } };
+      return {
+        map: { mode: 'demo', assetsUrl: '/assets' },
+        geocoder: { enabled: false, autocomplete: false },
+      };
     if (path === '/api/v1/fleet/assignments') return { items: [] };
     if (path === '/api/v1/fleet/drivers') return [];
     if (path === '/api/v1/status/incidents') return [];
@@ -154,9 +157,7 @@ vi.mock('../components/map/GeocodeSearch', () => ({
   }) => (
     <button
       type="button"
-      onClick={() =>
-        onChoose({ label: 'Geocoded Place', lat: 47.6, lon: -122.3, kind: 'charger' })
-      }
+      onClick={() => onChoose({ label: 'Geocoded Place', lat: 47.6, lon: -122.3, kind: 'charger' })}
     >
       Choose geocode result
     </button>
@@ -180,10 +181,7 @@ vi.mock('../components/MapView', () => {
       onReady,
       onPointPick,
     }: {
-      onReady?: (map: {
-        flyTo: () => void;
-        getCenter: () => { lat: number; lng: number };
-      }) => void;
+      onReady?: (map: { flyTo: () => void; getCenter: () => { lat: number; lng: number } }) => void;
       onPointPick?: (lat: number, lon: number) => void;
     }) => (
       <div data-testid="map-view">
@@ -271,137 +269,135 @@ describe('MapPage', () => {
       { id: 'z1', name: 'Home Zone', lat: 47.64, lon: -122.34, radiusM: 300, enabled: true },
     ];
 
-    apiMock.mockImplementation(
-      async (path: string, init?: { method?: string; body?: unknown }) => {
-        const method = init?.method ?? 'GET';
+    apiMock.mockImplementation(async (path: string, init?: { method?: string; body?: unknown }) => {
+      const method = init?.method ?? 'GET';
 
-        if (path === '/api/v1/vehicles') return [vehicle];
-        if (path === `/api/v1/vehicles/${vehicle.id}`) return vehicle;
+      if (path === '/api/v1/vehicles') return [vehicle];
+      if (path === `/api/v1/vehicles/${vehicle.id}`) return vehicle;
 
-        if (path === '/api/v1/vehicles/places/all' && method === 'GET') {
-          if (failPlaces) throw new Error('places failed');
-          return places;
+      if (path === '/api/v1/vehicles/places/all' && method === 'GET') {
+        if (failPlaces) throw new Error('places failed');
+        return places;
+      }
+      if (path === '/api/v1/vehicles/places/all' && method === 'POST') {
+        const body = init?.body as {
+          name: string;
+          type: string;
+          lat: number;
+          lon: number;
+          radiusM: number;
+        };
+        const created: PlaceFixture = { id: `p${places.length + 1}`, ...body };
+        places.push(created);
+        return created;
+      }
+      if (path.startsWith('/api/v1/vehicles/places/all/')) {
+        const id = path.split('/').pop() ?? '';
+        if (method === 'PATCH') {
+          const body = init?.body as { name: string; type: string; radiusM: number };
+          places = places.map((p) => (p.id === id ? { ...p, ...body } : p));
+          return {};
         }
-        if (path === '/api/v1/vehicles/places/all' && method === 'POST') {
+        if (method === 'DELETE') {
+          places = places.filter((p) => p.id !== id);
+          return {};
+        }
+      }
+
+      if (path === '/api/v1/vehicles/geofences/all' && method === 'GET') return geofences;
+      if (path === '/api/v1/vehicles/geofences/all' && method === 'POST') {
+        const body = init?.body as {
+          name: string;
+          lat: number;
+          lon: number;
+          radiusM: number;
+          enabled: boolean;
+          alertOn: string;
+        };
+        const created: GeofenceFixture = { id: `g${geofences.length + 1}`, ...body };
+        geofences.push(created);
+        return created;
+      }
+      if (path.startsWith('/api/v1/vehicles/geofences/all/')) {
+        const id = path.split('/').pop() ?? '';
+        if (method === 'PATCH') {
           const body = init?.body as {
             name: string;
-            type: string;
-            lat: number;
-            lon: number;
-            radiusM: number;
-          };
-          const created: PlaceFixture = { id: `p${places.length + 1}`, ...body };
-          places.push(created);
-          return created;
-        }
-        if (path.startsWith('/api/v1/vehicles/places/all/')) {
-          const id = path.split('/').pop() ?? '';
-          if (method === 'PATCH') {
-            const body = init?.body as { name: string; type: string; radiusM: number };
-            places = places.map((p) => (p.id === id ? { ...p, ...body } : p));
-            return {};
-          }
-          if (method === 'DELETE') {
-            places = places.filter((p) => p.id !== id);
-            return {};
-          }
-        }
-
-        if (path === '/api/v1/vehicles/geofences/all' && method === 'GET') return geofences;
-        if (path === '/api/v1/vehicles/geofences/all' && method === 'POST') {
-          const body = init?.body as {
-            name: string;
-            lat: number;
-            lon: number;
             radiusM: number;
             enabled: boolean;
-            alertOn: string;
           };
-          const created: GeofenceFixture = { id: `g${geofences.length + 1}`, ...body };
-          geofences.push(created);
-          return created;
+          geofences = geofences.map((g) => (g.id === id ? { ...g, ...body } : g));
+          return {};
         }
-        if (path.startsWith('/api/v1/vehicles/geofences/all/')) {
-          const id = path.split('/').pop() ?? '';
-          if (method === 'PATCH') {
-            const body = init?.body as {
-              name: string;
-              radiusM: number;
-              enabled: boolean;
-            };
-            geofences = geofences.map((g) => (g.id === id ? { ...g, ...body } : g));
-            return {};
-          }
-          if (method === 'DELETE') {
-            geofences = geofences.filter((g) => g.id !== id);
-            return {};
-          }
+        if (method === 'DELETE') {
+          geofences = geofences.filter((g) => g.id !== id);
+          return {};
         }
+      }
 
-        if (path === '/api/v1/vehicles/privacy-zones' && method === 'GET') return zones;
-        if (path === '/api/v1/vehicles/privacy-zones' && method === 'POST') {
-          const body = init?.body as {
-            name: string;
-            lat: number;
-            lon: number;
-            radiusM: number;
-          };
-          const created: ZoneFixture = {
-            id: `z${zones.length + 1}`,
-            ...body,
-            enabled: true,
-          };
-          zones.push(created);
-          return created;
+      if (path === '/api/v1/vehicles/privacy-zones' && method === 'GET') return zones;
+      if (path === '/api/v1/vehicles/privacy-zones' && method === 'POST') {
+        const body = init?.body as {
+          name: string;
+          lat: number;
+          lon: number;
+          radiusM: number;
+        };
+        const created: ZoneFixture = {
+          id: `z${zones.length + 1}`,
+          ...body,
+          enabled: true,
+        };
+        zones.push(created);
+        return created;
+      }
+      if (path.startsWith('/api/v1/vehicles/privacy-zones/')) {
+        const id = path.split('/').pop() ?? '';
+        if (method === 'PATCH') {
+          const body = init?.body as { name: string; radiusM: number };
+          zones = zones.map((z) => (z.id === id ? { ...z, ...body } : z));
+          return {};
         }
-        if (path.startsWith('/api/v1/vehicles/privacy-zones/')) {
-          const id = path.split('/').pop() ?? '';
-          if (method === 'PATCH') {
-            const body = init?.body as { name: string; radiusM: number };
-            zones = zones.map((z) => (z.id === id ? { ...z, ...body } : z));
-            return {};
-          }
-          if (method === 'DELETE') {
-            zones = zones.filter((z) => z.id !== id);
-            return {};
-          }
+        if (method === 'DELETE') {
+          zones = zones.filter((z) => z.id !== id);
+          return {};
         }
+      }
 
-        if (path === '/api/v1/charging?pageSize=50') {
-          return {
-            items: [
-              {
-                id: 'c1',
-                lat: 47.6,
-                lon: -122.3,
-                locationName: 'Volt Charger',
-                vehicleName: 'Aurora',
-              },
-            ],
-          };
-        }
-
-        if (path === '/api/v1/drives/d1?route=true') {
-          return {
-            data: {
-              route: [
-                { lat: 47.6, lon: -122.3 },
-                { lat: 47.61, lon: -122.31 },
-              ],
+      if (path === '/api/v1/charging?pageSize=50') {
+        return {
+          items: [
+            {
+              id: 'c1',
+              lat: 47.6,
+              lon: -122.3,
+              locationName: 'Volt Charger',
+              vehicleName: 'Aurora',
             },
-          };
-        }
-        if (path.startsWith('/api/v1/drives?')) {
-          return { items: [{ id: 'd1' }], total: 1, page: 1, pageSize: 1 };
-        }
-        if (path.startsWith('/api/v1/drives')) {
-          return { items: [], total: 0, page: 1, pageSize: 20 };
-        }
+          ],
+        };
+      }
 
-        if (path.includes('/geocode')) return [];
-        return {};
-      },
-    );
+      if (path === '/api/v1/drives/d1?route=true') {
+        return {
+          data: {
+            route: [
+              { lat: 47.6, lon: -122.3 },
+              { lat: 47.61, lon: -122.31 },
+            ],
+          },
+        };
+      }
+      if (path.startsWith('/api/v1/drives?')) {
+        return { items: [{ id: 'd1' }], total: 1, page: 1, pageSize: 1 };
+      }
+      if (path.startsWith('/api/v1/drives')) {
+        return { items: [], total: 0, page: 1, pageSize: 20 };
+      }
+
+      if (path.includes('/geocode')) return [];
+      return {};
+    });
   });
 
   it('renders the map, demo basemap notice, vehicle and saved layers', async () => {
@@ -436,9 +432,7 @@ describe('MapPage', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(/place the place/i);
 
     fireEvent.keyDown(window, { key: 'Escape' });
-    await waitFor(() =>
-      expect(screen.queryByRole('status')).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
   });
 
   it('creates a place from a geocode result', async () => {
@@ -474,9 +468,7 @@ describe('MapPage', () => {
     renderPage('/map', <MapPage />);
     await screen.findByRole('heading', { name: 'Map' });
 
-    await user.click(
-      within(getSection('Geofences')).getByRole('button', { name: /Add/i }),
-    );
+    await user.click(within(getSection('Geofences')).getByRole('button', { name: /Add/i }));
     expect(await screen.findByRole('status')).toHaveTextContent(/place the geofence/i);
 
     await user.click(screen.getByRole('button', { name: 'Pick map point' }));
@@ -510,9 +502,7 @@ describe('MapPage', () => {
     renderPage('/map', <MapPage />);
     await screen.findByRole('heading', { name: 'Map' });
 
-    await user.click(
-      within(getSection('Privacy zones')).getByRole('button', { name: /Add/i }),
-    );
+    await user.click(within(getSection('Privacy zones')).getByRole('button', { name: /Add/i }));
     expect(await screen.findByRole('status')).toHaveTextContent(/place the privacy/i);
 
     await user.click(screen.getByRole('button', { name: 'Pick map point' }));
@@ -612,9 +602,7 @@ describe('MapPage', () => {
       }),
     );
     await waitFor(() =>
-      expect(
-        screen.queryByRole('button', { name: 'Delete Home Zone' }),
-      ).not.toBeInTheDocument(),
+      expect(screen.queryByRole('button', { name: 'Delete Home Zone' })).not.toBeInTheDocument(),
     );
   });
 

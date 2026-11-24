@@ -113,7 +113,9 @@ describe('places + privacy-zone updates (G-15)', () => {
         enabled: true,
       },
     });
-    const beforeDepth = await getQueue().depth('privacy-redaction').catch(() => 0);
+    const beforeDepth = await getQueue()
+      .depth('privacy-redaction')
+      .catch(() => 0);
     const res = await putJson(agent, token, 'patch', `/api/v1/vehicles/privacy-zones/${zone.id}`, {
       name: 'Zone B',
       lat: 41,
@@ -126,7 +128,9 @@ describe('places + privacy-zone updates (G-15)', () => {
     expect(row.lat).toBe(41);
     expect(row.lon).toBe(-101);
     expect(row.radiusM).toBe(800);
-    const afterDepth = await getQueue().depth('privacy-redaction').catch(() => 0);
+    const afterDepth = await getQueue()
+      .depth('privacy-redaction')
+      .catch(() => 0);
     expect(afterDepth).toBeGreaterThan(beforeDepth);
   });
 });

@@ -61,6 +61,15 @@ export default defineConfig({
           include: ['test/**/*.test.ts'],
           globalSetup: ['./test/setup/global-db.ts'],
           setupFiles: ['./test/setup/worker-db.ts'],
+          // R2-24 (4b): cap the workers on the integration project only.
+          // Each worker opens Prisma (connection_limit=5) plus the pg.Pool
+          // in src/core/db.ts (max 10; node-postgres ignores
+          // connection_limit), so the previous default of 35 workers meant
+          // up to ~525 connections against max_connections=100 on a server
+          // other projects share. Own sequence group so the cap never
+          // collides with the other projects in CI's combined command.
+          maxWorkers: Number(process.env.VL_TEST_MAX_WORKERS ?? 2),
+          sequence: { groupOrder: 1 },
         },
       },
       {

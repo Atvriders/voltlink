@@ -75,7 +75,11 @@ export default function CommandHistoryPage() {
               <span className="text-xs text-faint">
                 Page {page} of {pages}
               </span>
-              <Button variant="secondary" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>
+              <Button
+                variant="secondary"
+                disabled={page >= pages}
+                onClick={() => setPage((p) => p + 1)}
+              >
                 Older <ChevronRight size={14} />
               </Button>
             </div>

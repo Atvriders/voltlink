@@ -132,6 +132,10 @@ jobs:
       - run: npx prisma generate --schema apps/api/prisma/schema.prisma
       - run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
       - name: Full vitest suite with JSON report (coverage thresholds enforced)
+        env:
+          DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink
+          TEST_DATABASE_ADMIN_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/postgres
+          REDIS_URL: redis://127.0.0.1:6379
         run: npx vitest run --maxWorkers=4 --coverage --reporter=default --reporter=json --outputFile.json=test-results/vitest.json
       - name: Test inventory (every required category non-zero)
         run: npx tsx scripts/test-inventory.ts
@@ -159,6 +163,9 @@ jobs:
       - run: npm -w @voltlink/shared run build
       - run: npx prisma generate --schema apps/api/prisma/schema.prisma
       - name: Migration tests (throwaway databases)
+        env:
+          DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink
+          CHECKPOINT_DISABLE: '1'
         run: npx vitest run test/migration.test.ts test/migrations.test.ts
         working-directory: apps/api
 

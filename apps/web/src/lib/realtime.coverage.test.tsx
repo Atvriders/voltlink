@@ -1,8 +1,6 @@
-// Page render test (coverage harness).
+// Module test for the realtime hub wrapper.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { cleanup } from '@testing-library/react';
 
 const apiMock = vi.fn();
 const csvMock = vi.fn().mockResolvedValue('a,b');
@@ -105,21 +103,6 @@ beforeEach(() => {
     return {};
   });
 });
-
-function renderPage(path: string, ui: React.ReactNode) {
-  const qc = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route path="*" element={ui as React.ReactElement} />
-        </Routes>
-      </MemoryRouter>
-    </QueryClientProvider>,
-  );
-}
 
 afterEach(cleanup);
 

@@ -62,7 +62,9 @@ export async function loadCredentials(providerAccountId: string): Promise<Stored
   // v2 envelopes open with the ring; legacy v1 envelopes fall back to the
   // single-master-key format. A decrypt failure is an error, never an empty
   // credential (A-KEYROT).
-  return JSON.parse(open(row.ciphertext, `provider-credential:${row.providerAccountId}`)) as StoredCredential;
+  return JSON.parse(
+    open(row.ciphertext, `provider-credential:${row.providerAccountId}`),
+  ) as StoredCredential;
 }
 
 export async function removeCredentials(providerAccountId: string): Promise<void> {

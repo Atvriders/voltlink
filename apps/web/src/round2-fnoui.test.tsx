@@ -70,12 +70,18 @@ beforeEach(() => {
     if (path === '/api/v1/fleet/cost-centers') return [];
     if (path === '/api/v1/fleet/assignments') return [];
     if (path === '/api/v1/fleet/groups') return [];
-    if (path === '/api/v1/fleet/overview')
-      return { vehicles: [], groups: [] };
+    if (path === '/api/v1/fleet/overview') return { vehicles: [], groups: [] };
     if (path === '/api/v1/vehicles') return [];
     if (path === '/api/v1/status')
-      return { overall: 'operational', components: [], incidents: [], maintenance: [], updatedAt: new Date().toISOString() };
-    if (path === '/api/v1/auth/setup-status') return { needsSetup: false, registrationMode: 'invite' };
+      return {
+        overall: 'operational',
+        components: [],
+        incidents: [],
+        maintenance: [],
+        updatedAt: new Date().toISOString(),
+      };
+    if (path === '/api/v1/auth/setup-status')
+      return { needsSetup: false, registrationMode: 'invite' };
     return {};
   });
 });
@@ -131,7 +137,9 @@ describe('missing UI capabilities (F-NOUI)', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /drivers/i })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /drivers/i }));
     fireEvent.click(await screen.findByRole('button', { name: /add cost center/i }));
-    fireEvent.change(await screen.findByLabelText('Cost center name'), { target: { value: 'CC-1' } });
+    fireEvent.change(await screen.findByLabelText('Cost center name'), {
+      target: { value: 'CC-1' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /create cost center/i }));
     await waitFor(() =>
       expect(apiMock).toHaveBeenCalledWith(
@@ -172,7 +180,8 @@ describe('missing UI capabilities (F-NOUI)', () => {
           },
         ];
       if (path === '/api/v1/vehicles/v1') return { id: 'v1', displayName: 'Aurora' };
-      if (path === '/api/v1/vehicles/v1/shares' && init?.method === 'POST') return { status: 'invited' };
+      if (path === '/api/v1/vehicles/v1/shares' && init?.method === 'POST')
+        return { status: 'invited' };
       if (path === '/api/v1/vehicles/v1/shares')
         return [{ id: 's1', userEmail: 'b@test.dev', level: 'viewer', allowHighRisk: false }];
       if (path.startsWith('/api/v1/vehicles/v1/shares/s1')) return { ok: true };
@@ -181,8 +190,15 @@ describe('missing UI capabilities (F-NOUI)', () => {
       if (path.includes('/drives/totals')) return { count: 0, distanceKm: 0, energyKwh: 0 };
       if (path.startsWith('/api/v1/charging')) return { items: [], total: 0 };
       if (path === '/api/v1/status')
-        return { overall: 'operational', components: [], incidents: [], maintenance: [], updatedAt: new Date().toISOString() };
-      if (path === '/api/v1/auth/setup-status') return { needsSetup: false, registrationMode: 'invite' };
+        return {
+          overall: 'operational',
+          components: [],
+          incidents: [],
+          maintenance: [],
+          updatedAt: new Date().toISOString(),
+        };
+      if (path === '/api/v1/auth/setup-status')
+        return { needsSetup: false, registrationMode: 'invite' };
       return {};
     });
     renderPage('/vehicles/v1', <LiveVehiclePage />, '/vehicles/:id');

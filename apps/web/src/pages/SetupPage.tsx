@@ -65,9 +65,7 @@ export default function SetupPage() {
         <div className="mb-6 flex flex-col items-center gap-2">
           <img src="/logo.svg" alt="VoltLink" className="h-14 w-14 rounded-2xl" />
           <h1 className="text-xl font-extrabold">Welcome to VoltLink</h1>
-          <p className="text-sm text-subtle">
-            First run: create the instance administrator.
-          </p>
+          <p className="text-sm text-subtle">First run: create the instance administrator.</p>
         </div>
         <form onSubmit={submit} className="card space-y-4 p-5">
           {error && (
@@ -79,7 +77,12 @@ export default function SetupPage() {
             </div>
           )}
           <Field label="Your name">
-            <Input autoComplete="name" required value={name} onChange={(e) => setName(e.target.value)} />
+            <Input
+              autoComplete="name"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </Field>
           <Field label="Email">
             <Input

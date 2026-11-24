@@ -55,7 +55,10 @@ describe('Teams Adaptive Card (N-TEAMS)', () => {
     expect(call).toBeDefined();
     const body = JSON.parse(String(call!.init.body)) as {
       type?: string;
-      attachments?: { contentType?: string; content?: { type?: string; body?: { text?: string }[] } }[];
+      attachments?: {
+        contentType?: string;
+        content?: { type?: string; body?: { text?: string }[] };
+      }[];
     };
     expect(body.type).toBe('message');
     expect(body.attachments?.[0]?.contentType).toBe('application/vnd.microsoft.card.adaptive');

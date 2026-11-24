@@ -4,7 +4,6 @@
 
 import express from 'express';
 import { cspExtraOrigins, securityHeaders } from './core/securityHeaders';
-import path from 'node:path';
 import fs from 'node:fs';
 import { env, validateEnv } from './core/env';
 import { prisma } from './core/db';

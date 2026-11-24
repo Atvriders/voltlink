@@ -41,10 +41,34 @@ describe('status uptime truth (N-STATUSMISC)', () => {
     await prisma.statusCheck.createMany({
       data: [
         { componentKey: comp.key, ok: false, latencyMs: null, detail: 'down', at: sixtyDaysAgo },
-        { componentKey: comp.key, ok: false, latencyMs: null, detail: 'down', at: new Date(sixtyDaysAgo.getTime() + 3600_000) },
-        { componentKey: comp.key, ok: true, latencyMs: 5, detail: 'ok', at: new Date(Date.now() - 86400000) },
-        { componentKey: comp.key, ok: true, latencyMs: 5, detail: 'ok', at: new Date(Date.now() - 7200_000) },
-        { componentKey: comp.key, ok: true, latencyMs: 5, detail: 'ok', at: new Date(Date.now() - 3600_000) },
+        {
+          componentKey: comp.key,
+          ok: false,
+          latencyMs: null,
+          detail: 'down',
+          at: new Date(sixtyDaysAgo.getTime() + 3600_000),
+        },
+        {
+          componentKey: comp.key,
+          ok: true,
+          latencyMs: 5,
+          detail: 'ok',
+          at: new Date(Date.now() - 86400000),
+        },
+        {
+          componentKey: comp.key,
+          ok: true,
+          latencyMs: 5,
+          detail: 'ok',
+          at: new Date(Date.now() - 7200_000),
+        },
+        {
+          componentKey: comp.key,
+          ok: true,
+          latencyMs: 5,
+          detail: 'ok',
+          at: new Date(Date.now() - 3600_000),
+        },
       ],
     });
 

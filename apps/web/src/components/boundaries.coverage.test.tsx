@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, cleanup } from '@testing-library/react';
 
 const apiMock = vi.fn();
 const csvMock = vi.fn().mockResolvedValue('a,b');
@@ -149,9 +149,7 @@ describe('ErrorBoundary', () => {
     renderPage(
       '/overview',
       <ErrorBoundary
-        fallback={(error, reset) => (
-          <RouteErrorFallback error={error} resetErrorBoundary={reset} />
-        )}
+        fallback={(error, reset) => <RouteErrorFallback error={error} resetErrorBoundary={reset} />}
       >
         <Boom />
       </ErrorBoundary>,
@@ -168,7 +166,10 @@ describe('ErrorBoundary', () => {
   it('calls resetErrorBoundary when Try again is clicked', async () => {
     const reset = vi.fn();
 
-    renderPage('/overview', <RouteErrorFallback error={new Error('kaput')} resetErrorBoundary={reset} />);
+    renderPage(
+      '/overview',
+      <RouteErrorFallback error={new Error('kaput')} resetErrorBoundary={reset} />,
+    );
 
     const tryAgain = await screen.findByRole('button', { name: 'Try again' });
     tryAgain.click();

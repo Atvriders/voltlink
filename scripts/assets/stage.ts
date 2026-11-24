@@ -12,14 +12,12 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import prettier from 'prettier';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const src = path.join(root, 'assets', 'models', 'processed');
 const outDir = path.join(root, 'apps', 'web', 'public', '3d');
 const oldModels = path.join(root, 'apps', 'web', 'public', 'assets', 'models');
-
-rmSync(outDir, { recursive: true, force: true });
-mkdirSync(outDir, { recursive: true });
 
 function walk(rel: string): string[] {
   const dir = path.join(src, rel);
@@ -30,27 +28,41 @@ function walk(rel: string): string[] {
     .map((f) => path.join(rel, f));
 }
 
-const files: Record<string, { url: string; bytes: number; sha256: string }> = {};
-for (const file of walk('')) {
-  const data = readFileSync(path.join(src, file));
-  const sha = createHash('sha256').update(data).digest('hex');
-  const ext = path.extname(file);
-  const base = path.basename(file, ext);
-  const outName = `${base}.${sha.slice(0, 10)}${ext}`;
-  copyFileSync(path.join(src, file), path.join(outDir, outName));
-  files[base] = { url: `/3d/${outName}`, bytes: data.length, sha256: sha };
+async function main(): Promise<void> {
+  rmSync(outDir, { recursive: true, force: true });
+  mkdirSync(outDir, { recursive: true });
+
+  const files: Record<string, { url: string; bytes: number; sha256: string }> = {};
+  for (const file of walk('')) {
+    const data = readFileSync(path.join(src, file));
+    const sha = createHash('sha256').update(data).digest('hex');
+    const ext = path.extname(file);
+    const base = path.basename(file, ext);
+    const outName = `${base}.${sha.slice(0, 10)}${ext}`;
+    copyFileSync(path.join(src, file), path.join(outDir, outName));
+    files[base] = { url: `/3d/${outName}`, bytes: data.length, sha256: sha };
+  }
+  for (const file of walk('env')) {
+    const data = readFileSync(path.join(src, file));
+    const sha = createHash('sha256').update(data).digest('hex');
+    const ext = path.extname(file);
+    const base = path.basename(file, ext);
+    const outName = `${base}.${sha.slice(0, 10)}${ext}`;
+    copyFileSync(path.join(src, file), path.join(outDir, outName));
+    files[base] = { url: `/3d/${outName}`, bytes: data.length, sha256: sha };
+  }
+  // R2-68: the committed manifest must satisfy the CI format gate.
+  const manifest = await prettier.format(JSON.stringify({ version: 1, files }, null, 2), {
+    filepath: 'apps/web/public/3d/manifest.json',
+  });
+  writeFileSync(path.join(outDir, 'manifest.json'), manifest);
+  if (statSync(oldModels, { throwIfNoEntry: false })) {
+    rmSync(oldModels, { recursive: true, force: true });
+  }
+  console.log(`staged ${Object.keys(files).length} assets into public/3d`);
 }
-for (const file of walk('env')) {
-  const data = readFileSync(path.join(src, file));
-  const sha = createHash('sha256').update(data).digest('hex');
-  const ext = path.extname(file);
-  const base = path.basename(file, ext);
-  const outName = `${base}.${sha.slice(0, 10)}${ext}`;
-  copyFileSync(path.join(src, file), path.join(outDir, outName));
-  files[base] = { url: `/3d/${outName}`, bytes: data.length, sha256: sha };
-}
-writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify({ version: 1, files }, null, 2));
-if (statSync(oldModels, { throwIfNoEntry: false })) {
-  rmSync(oldModels, { recursive: true, force: true });
-}
-console.log(`staged ${Object.keys(files).length} assets into public/3d`);
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

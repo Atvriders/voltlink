@@ -18,7 +18,9 @@ export default function VehiclesPage() {
 
   if (isLoading) return <LoadingState label="Loading vehicles…" />;
   if (error || !data)
-    return <ErrorState error={error ?? new Error('No vehicles found')} onRetry={() => void refetch()} />;
+    return (
+      <ErrorState error={error ?? new Error('No vehicles found')} onRetry={() => void refetch()} />
+    );
 
   return (
     <div className="space-y-4">

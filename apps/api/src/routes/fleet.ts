@@ -432,7 +432,8 @@ fleetRouter.patch(
       string,
       string | null | undefined
     >;
-    const data: { departmentId?: string | null; costCenterId?: string | null; toAt?: Date | null } = {};
+    const data: { departmentId?: string | null; costCenterId?: string | null; toAt?: Date | null } =
+      {};
     if (departmentId !== undefined) data.departmentId = departmentId || null;
     if (costCenterId !== undefined) data.costCenterId = costCenterId || null;
     if (toAt !== undefined) data.toAt = toAt === null ? null : new Date(String(toAt));
@@ -677,7 +678,7 @@ fleetRouter.get('/report', fleetManage, async (req, res) => {
     }
   }
   const rows = vehicles.map((v) => ({
-    ...({
+    ...{
       id: v.id,
       displayName: v.displayName,
       demo: v.demo,
@@ -688,7 +689,7 @@ fleetRouter.get('/report', fleetManage, async (req, res) => {
         chargeEnergyKwh: 0,
         chargeCost: 0,
       }),
-    }),
+    },
   }));
 
   // N-FLEETRPT: the report download is real CSV, not JSON masquerading as one.

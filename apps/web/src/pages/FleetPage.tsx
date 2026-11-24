@@ -601,7 +601,8 @@ function DepartmentForms() {
   const [showDept, setShowDept] = useState(false);
   const [showCc, setShowCc] = useState(false);
   const createDept = useMutation({
-    mutationFn: () => api('/api/v1/fleet/departments', { method: 'POST', body: { name: deptName } }),
+    mutationFn: () =>
+      api('/api/v1/fleet/departments', { method: 'POST', body: { name: deptName } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['departments'] });
       setDeptName('');

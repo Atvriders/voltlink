@@ -160,8 +160,7 @@ describe('StepUpDialogHost', () => {
     const calls = vi.mocked(setStepUpHandler).mock.calls;
     const lastCall = calls[calls.length - 1];
     const handler = lastCall?.[0] as unknown as
-      | ((methodsToUse: string[]) => Promise<boolean>)
-      | undefined;
+      ((methodsToUse: string[]) => Promise<boolean>) | undefined;
     expect(handler).toBeTruthy();
 
     let promise: Promise<boolean> = Promise.resolve(false);

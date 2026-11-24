@@ -1,7 +1,7 @@
 // R6: F-CONTRAST — interactive control boundaries (inputs, selects, secondary
 // buttons) must use the 3:1 border token, and status-tone text in the light and
 // colorblind-safe themes must clear 4.5:1 on panels.
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
 import { Input, Select, Button } from './ui';
 import { readFileSync } from 'node:fs';
@@ -58,13 +58,21 @@ describe('contrast boundaries (F-CONTRAST)', () => {
     expect(input.className).not.toContain('border-line');
     expect(select.className).toContain('border-control');
     expect(select.className).not.toContain('border-line');
-    const secondary = Array.from(c1.querySelectorAll('button')).find((b) => b.textContent === 'secondary')!;
+    const secondary = Array.from(c1.querySelectorAll('button')).find(
+      (b) => b.textContent === 'secondary',
+    )!;
     expect(secondary.className).toContain('border-control');
   });
 
   it('accent, faint and danger-button pairs clear 4.5:1 in all themes', () => {
     const css = readFileSync(path.resolve('apps/web/src/index.css'), 'utf8');
-    for (const theme of ['voltlink-dark', 'voltlink-light', 'fleet-ops', 'high-contrast', 'colorblind-safe']) {
+    for (const theme of [
+      'voltlink-dark',
+      'voltlink-light',
+      'fleet-ops',
+      'high-contrast',
+      'colorblind-safe',
+    ]) {
       const t = themeTokens(css, theme);
       expect(t['accent'], theme).toBeTruthy();
       expect(t['onaccent'], theme).toBeTruthy();

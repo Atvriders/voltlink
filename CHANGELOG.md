@@ -10,6 +10,15 @@ The round-2 verification release. v1.0.0 could not complete first-run setup
 by following its own docs (no setup token was generated and the web UI had no
 field for one) — that, plus the whole round-2 review corpus, is fixed here.
 
+> **Errata (2026-11-24):** the v1.1.0 tag failed CI — main run 44802966345
+> and tag run 44802968208 both red (prettier gate 37 files, unit-int 0
+> tests, migrations tag-config error, e2e/image/publish/promote skipped).
+> It was tagged before the main run and beyond the owner's pre-approval,
+> and it is **not a release** — no image was published and no GitHub
+> Release exists. The round-2 corpus was not fixed: 220 of 253 rows were
+> open at tag time, R8/R9 were open, and the format and lint gates failed.
+> Fixed forward in v1.1.1.
+
 ### Fixed
 
 - **First-run setup (R2-01/R2-20):** the web role now logs the one-time setup

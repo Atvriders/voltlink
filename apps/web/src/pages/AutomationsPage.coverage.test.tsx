@@ -167,7 +167,10 @@ const executionFixtures = [
 
 describe('AutomationsPage', () => {
   beforeEach(() => {
-    vi.stubGlobal('confirm', vi.fn(() => true));
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    );
     apiMock.mockClear();
     apiMock.mockImplementation(async (path: string, options?: { method?: string }) => {
       const method = options?.method ?? 'GET';

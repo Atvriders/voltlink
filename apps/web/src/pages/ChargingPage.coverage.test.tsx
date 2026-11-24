@@ -252,9 +252,7 @@ describe('ChargingPage', () => {
     const sourceSelect = screen.getByLabelText('Source');
     fireEvent.change(sourceSelect, { target: { value: 'home' } });
     await waitFor(() =>
-      expect(apiMock.mock.calls.some((call) => String(call[0]).includes('source=home'))).toBe(
-        true,
-      ),
+      expect(apiMock.mock.calls.some((call) => String(call[0]).includes('source=home'))).toBe(true),
     );
   });
 
@@ -303,9 +301,11 @@ describe('ChargingPage', () => {
           (call[1] as { method?: string })?.method === 'POST',
       );
       expect(post).toBeTruthy();
-      const body = (post![1] as {
-        body: { name: string; type: string; periods: unknown[] };
-      }).body;
+      const body = (
+        post![1] as {
+          body: { name: string; type: string; periods: unknown[] };
+        }
+      ).body;
       expect(body.name).toBe('My TOU');
       expect(body.type).toBe('tou');
       expect(body.periods).toHaveLength(4);
@@ -320,9 +320,7 @@ describe('ChargingPage', () => {
       value: createObjectURL,
       configurable: true,
     });
-    const anchorClick = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(() => {});
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 
     renderPage('/charging', <ChargingPage />);
     await screen.findByText(/2 sessions/);

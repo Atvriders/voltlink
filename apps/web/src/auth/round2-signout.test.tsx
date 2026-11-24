@@ -83,7 +83,9 @@ describe('sign out (F-SIGNOUT)', () => {
     await act(async () => {
       screen.getByTestId('logout').click();
     });
-    await waitFor(() => expect(apiMock).toHaveBeenCalledWith('/api/v1/auth/logout', expect.anything()));
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith('/api/v1/auth/logout', expect.anything()),
+    );
     await waitFor(() => expect(qc.getQueryData(['user-preferences'])).toBeUndefined());
     await waitFor(() => expect(screen.getByTestId('path').textContent).toBe('/login'));
   });

@@ -37,12 +37,20 @@ describe('freshness at read time (F-FRESH)', () => {
         webauthnUserId: randomId(),
       },
     });
-    const org = await prisma.organization.create({ data: { name: `org-${randomId().slice(0, 8)}` } });
+    const org = await prisma.organization.create({
+      data: { name: `org-${randomId().slice(0, 8)}` },
+    });
     await prisma.membership.create({
       data: { userId: u.id, organizationId: org.id, role: 'OWNER', status: 'ACTIVE' },
     });
     const acct = await prisma.providerAccount.create({
-      data: { label: 'demo', provider: 'demo', demo: true, status: 'active', organizationId: org.id },
+      data: {
+        label: 'demo',
+        provider: 'demo',
+        demo: true,
+        status: 'active',
+        organizationId: org.id,
+      },
     });
     const v = await prisma.vehicle.create({
       data: {

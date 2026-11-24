@@ -19,11 +19,17 @@ async function zonesMapFor(rows: { vehicle: { organizationId: string } }[]): Pro
   return map;
 }
 
-function redactDrive<T extends {
-  vehicle: { organizationId: string };
-  startLat: number | null; startLon: number | null; startAddress: string | null;
-  endLat: number | null; endLon: number | null; endAddress: string | null;
-}>(d: T, map: ZoneMap): T {
+function redactDrive<
+  T extends {
+    vehicle: { organizationId: string };
+    startLat: number | null;
+    startLon: number | null;
+    startAddress: string | null;
+    endLat: number | null;
+    endLon: number | null;
+    endAddress: string | null;
+  },
+>(d: T, map: ZoneMap): T {
   const zones = map.get(d.vehicle.organizationId) ?? [];
   const s = zoneAt(zones, d.startLat, d.startLon);
   const e = zoneAt(zones, d.endLat, d.endLon);

@@ -97,13 +97,34 @@ beforeEach(() => {
     if (path === '/api/v1/vehicles') return [vehicle];
     if (path === `/api/v1/vehicles/${vehicle.id}`) return vehicle;
     if (path.startsWith('/api/v1/commands?vehicleId='))
-      return { items: [{ id: 'c1', vehicleId: 'v1', type: 'honk_horn', status: 'confirmed', createdAt: new Date().toISOString(), params: {} }], total: 1, page: 1, pageSize: 20 };
+      return {
+        items: [
+          {
+            id: 'c1',
+            vehicleId: 'v1',
+            type: 'honk_horn',
+            status: 'confirmed',
+            createdAt: new Date().toISOString(),
+            params: {},
+          },
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      };
     if (path.startsWith('/api/v1/drives')) return { items: [], total: 0, page: 1, pageSize: 20 };
-    if (path === '/api/v1/auth/setup-status') return { needsSetup: false, registrationMode: 'invite' };
+    if (path === '/api/v1/auth/setup-status')
+      return { needsSetup: false, registrationMode: 'invite' };
     if (path === '/api/v1/notifications') return { items: [] };
     if (path === '/api/v1/notifications/preferences') return [];
     if (path === '/api/v1/status')
-      return { overall: 'operational', components: [], incidents: [], maintenance: [], updatedAt: new Date().toISOString() };
+      return {
+        overall: 'operational',
+        components: [],
+        incidents: [],
+        maintenance: [],
+        updatedAt: new Date().toISOString(),
+      };
     return {};
   });
   vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);

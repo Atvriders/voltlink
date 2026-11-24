@@ -73,7 +73,8 @@ async function main() {
   const demo = await fetch(`${base}/api/v1/providers/demo/connect`, { method: 'POST', headers: h });
   if (!demo.ok && demo.status !== 409 && demo.status !== 400) {
     const text = await demo.text();
-    if (!/already|exists|created/i.test(text)) throw new Error(`demo connect ${demo.status}: ${text}`);
+    if (!/already|exists|created/i.test(text))
+      throw new Error(`demo connect ${demo.status}: ${text}`);
   }
   console.log('demo connect ok');
 

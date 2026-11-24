@@ -13,7 +13,7 @@ void envs;
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { prisma } from '../src/core/db';
 import { initRedis } from '../src/core/redis';
-import { hashPassword, randomId, sha256hex } from '../src/core/crypto';
+import { randomId, sha256hex } from '../src/core/crypto';
 import {
   bootstrapInstanceAdmin,
   registerUser,
@@ -114,7 +114,6 @@ describe('setup token DB row path', () => {
       }),
     ).rejects.toMatchObject({ code: 'REGISTRATION_UNAVAILABLE' });
   });
-
 
   it('rejects bootstrap with an email that already exists', async () => {
     await prisma.appSetting.upsert({

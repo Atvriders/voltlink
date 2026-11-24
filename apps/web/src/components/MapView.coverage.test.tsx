@@ -183,9 +183,7 @@ const layers: MapLayer[] = [
 describe('MapView', () => {
   beforeEach(() => {
     vi.mocked(hasWebGL2).mockReturnValue(true);
-    vi.mocked(createMap).mockReturnValue(
-      makeFakeMap() as unknown as ReturnType<typeof createMap>,
-    );
+    vi.mocked(createMap).mockReturnValue(makeFakeMap() as unknown as ReturnType<typeof createMap>);
   });
 
   it('renders the fallback card when WebGL2 is unavailable', async () => {
@@ -197,9 +195,7 @@ describe('MapView', () => {
 
   it('creates the map, draws layers, and calls onReady', async () => {
     const fakeMap = makeFakeMap();
-    vi.mocked(createMap).mockReturnValue(
-      fakeMap as unknown as ReturnType<typeof createMap>,
-    );
+    vi.mocked(createMap).mockReturnValue(fakeMap as unknown as ReturnType<typeof createMap>);
     const onReady = vi.fn();
     renderPage('/map', <MapView layers={layers} onReady={onReady} />);
     await waitFor(() => {
@@ -223,9 +219,7 @@ describe('MapView', () => {
 
   it('renders the map container with an empty layer set', async () => {
     const fakeMap = makeFakeMap();
-    vi.mocked(createMap).mockReturnValue(
-      fakeMap as unknown as ReturnType<typeof createMap>,
-    );
+    vi.mocked(createMap).mockReturnValue(fakeMap as unknown as ReturnType<typeof createMap>);
     renderPage('/map', <MapView layers={[]} />);
     await waitFor(() => {
       expect(document.querySelector('[aria-label="Map"]')).toBeTruthy();

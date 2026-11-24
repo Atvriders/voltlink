@@ -116,10 +116,7 @@ describe('R2-28 inbound webhook dispatch is bound to its automation', () => {
     const unrelatedId = await mkAuto('R228 unrelated');
 
     const hookRes = await withCsrf(agent, (csrf) =>
-      agent
-        .post(`/api/v1/automations/${boundId}/inbound-webhook`)
-        .set('x-vl-csrf', csrf)
-        .send({}),
+      agent.post(`/api/v1/automations/${boundId}/inbound-webhook`).set('x-vl-csrf', csrf).send({}),
     );
     expect(hookRes.status).toBe(201);
     const { url, secret } = hookRes.body.data as { url: string; secret: string };
@@ -127,10 +124,7 @@ describe('R2-28 inbound webhook dispatch is bound to its automation', () => {
     const body = JSON.stringify({ hello: 'world' });
     const msgId = 'msg_r228_bound';
     const headers = outgoingHeaders([secret], msgId, body);
-    const delivered = await request(base)
-      .post(new URL(url).pathname)
-      .set(headers)
-      .send(body);
+    const delivered = await request(base).post(new URL(url).pathname).set(headers).send(body);
     expect(delivered.status).toBe(200);
 
     const bound = await prisma.automation.findUniqueOrThrow({
@@ -185,10 +179,7 @@ describe('R2-29 target-none write routes reject read-only members', () => {
     expect(autoRes.body.error.code).toBe('FORBIDDEN');
 
     const demoRes = await withCsrf(agent, (csrf) =>
-      agent
-        .post('/api/v1/providers/demo/connect')
-        .set('x-vl-csrf', csrf)
-        .send({}),
+      agent.post('/api/v1/providers/demo/connect').set('x-vl-csrf', csrf).send({}),
     );
     expect(demoRes.status).toBe(403);
     expect(demoRes.body.error.code).toBe('FORBIDDEN');
@@ -246,7 +237,9 @@ describe('R2-30 re-authentication gates', () => {
 
     // After step-up all three succeed.
     await prisma.userSession.update({
-      where: { id: (await prisma.userSession.findFirstOrThrow({ where: { userId: owner.id } })).id },
+      where: {
+        id: (await prisma.userSession.findFirstOrThrow({ where: { userId: owner.id } })).id,
+      },
       data: { stepUpAt: new Date(), stepUpMethod: 'password' },
     });
 

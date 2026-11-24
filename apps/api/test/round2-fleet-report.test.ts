@@ -45,7 +45,13 @@ describe('fleet report CSV (N-FLEETRPT)', () => {
       },
     });
     const pa = await prisma.providerAccount.create({
-      data: { organizationId: org.id, provider: 'demo', label: 'Demo', status: 'connected', demo: true },
+      data: {
+        organizationId: org.id,
+        provider: 'demo',
+        label: 'Demo',
+        status: 'connected',
+        demo: true,
+      },
     });
     const veh = await prisma.vehicle.create({
       data: {

@@ -198,7 +198,10 @@ describe('ErrorStates / QueryState', () => {
   });
 
   it('renders a standalone error state without a retry button when no handler is given', async () => {
-    renderPage('/status-admin', <ErrorState error={new Error('nope')} title="Couldn’t load status" />);
+    renderPage(
+      '/status-admin',
+      <ErrorState error={new Error('nope')} title="Couldn’t load status" />,
+    );
 
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.getByText('Couldn’t load status')).toBeTruthy();

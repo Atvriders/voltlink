@@ -98,9 +98,9 @@ describe('access: operator org lookup and instance admin', () => {
   it('returns null without an operator org and denies operator-only checks', async () => {
     expect(await getOperatorOrgId()).toBeNull();
     await expect(assertOperator(systemActor, 'status.manage')).resolves.toBeUndefined();
-    await expect(
-      assertOperator(sessionActor('nobody'), 'status.manage'),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(assertOperator(sessionActor('nobody'), 'status.manage')).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
     expect(() => assertInstanceAdmin(sessionActor('nobody'))).toThrow(/Instance administrator/);
     expect(() => assertInstanceAdmin(apiKeyActor('nobody', 'o', []))).toThrow(
       /Instance administrator/,
@@ -118,7 +118,6 @@ describe('access: effective vehicle permissions', () => {
 
   it('membership role, vehicle scope, grants, expiry and key scopes', async () => {
     const u1 = await mkUser(`a1.${Date.now()}@t.dev`);
-    const u2 = await mkUser(`a2.${Date.now()}@t.dev`);
     const org = await mkOrg('OrgA');
     const pa = await mkProvider(org.id);
     const veh = await mkVehicle(org.id, pa.id);
@@ -173,7 +172,9 @@ describe('access: effective vehicle permissions', () => {
     expect(cmdPerms.has('vehicles.manage')).toBe(false);
     // API key: history_edit via history:write.
     const keyHist = apiKeyActor(u1.id, org.id, ['history:write']);
-    expect((await effectiveVehiclePermissions(keyHist, veh)).has('vehicles.history_edit')).toBe(true);
+    expect((await effectiveVehiclePermissions(keyHist, veh)).has('vehicles.history_edit')).toBe(
+      true,
+    );
 
     // Automation outside its org -> nothing.
     const autoOther = automationActor(u1.id, 'other-org');
@@ -215,7 +216,9 @@ describe('access: provider account access', () => {
     await expect(
       assertProviderAccountAccess(sessionActor(u.id), pa, 'command'),
     ).resolves.toBeUndefined();
-    await expect(assertProviderAccountAccess(sessionActor(u.id), pa, 'manage')).resolves.toBeUndefined();
+    await expect(
+      assertProviderAccountAccess(sessionActor(u.id), pa, 'manage'),
+    ).resolves.toBeUndefined();
     const keyCmd = apiKeyActor(u.id, org.id, ['commands:write']);
     await expect(assertProviderAccountAccess(keyCmd, pa, 'command')).resolves.toBeUndefined();
 
@@ -232,9 +235,15 @@ describe('access: provider account access', () => {
       assertProviderAccountAccess(sessionActor(v.id), pa, 'command'),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     await prisma.providerAccountGrant.create({
-      data: { providerAccountId: pa.id, membershipId: (await prisma.membership.findUniqueOrThrow({
-        where: { organizationId_userId: { organizationId: org.id, userId: v.id } },
-      })).id, canCommand: true },
+      data: {
+        providerAccountId: pa.id,
+        membershipId: (
+          await prisma.membership.findUniqueOrThrow({
+            where: { organizationId_userId: { organizationId: org.id, userId: v.id } },
+          })
+        ).id,
+        canCommand: true,
+      },
     });
     await expect(
       assertProviderAccountAccess(sessionActor(v.id), pa, 'command'),
@@ -301,9 +310,9 @@ describe('access: vehicle access assertions', () => {
       data: { organizationId: org.id, userId: u.id, role: 'VIEWER' },
     });
 
-    await expect(assertVehicleAccess(sessionActor(u.id), 'missing', 'vehicles.read')).rejects.toThrow(
-      /Vehicle not found/,
-    );
+    await expect(
+      assertVehicleAccess(sessionActor(u.id), 'missing', 'vehicles.read'),
+    ).rejects.toThrow(/Vehicle not found/);
     // Non-member: existence is never disclosed.
     await expect(
       assertVehicleAccess(sessionActor(stranger.id), veh.id, 'vehicles.read'),
@@ -454,7 +463,9 @@ describe('access: vehicle reader ids', () => {
     await prisma.membership.create({
       data: { organizationId: org.id, userId: u.id, role: 'VIEWER' },
     });
-    await prisma.vehicleGrant.create({ data: { vehicleId: veh.id, userId: g.id, level: 'VIEWER' } });
+    await prisma.vehicleGrant.create({
+      data: { vehicleId: veh.id, userId: g.id, level: 'VIEWER' },
+    });
     const readers = await vehicleReaderIds(veh.id);
     expect(readers).toEqual(expect.arrayContaining([u.id, g.id]));
   });
