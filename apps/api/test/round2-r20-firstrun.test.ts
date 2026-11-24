@@ -53,6 +53,13 @@ function spawnBoot(repoRoot: string, freePort: number): ReturnType<typeof spawn>
   });
   bootChildren.push(child);
   console.log('[r20-boot] child pid', child.pid);
+  // The run wrapper appends `ps -p <pid>` to every log from this file: the
+  // pid is mirrored to VL_BOOT_PID_FILE so the wrapper can read it back.
+  if (process.env.VL_BOOT_PID_FILE) {
+    import('node:fs').then((fs) =>
+      fs.appendFileSync(process.env.VL_BOOT_PID_FILE!, `${child.pid}\n`),
+    );
+  }
   return child;
 }
 
