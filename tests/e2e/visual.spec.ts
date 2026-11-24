@@ -497,9 +497,10 @@ test('active incident marks the demo provider degraded on the public status page
         ...maskDynamic(page),
         // live instance status: the incident 'Updated' stamp, the rolling
         // 30-day uptime figures and the incident update's wall-clock stamp
+        // (DOM text is lowercase before the CSS capitalize)
         page.getByText(/^Updated /),
         page.getByText(/uptime/i),
-        page.getByText(/^Investigating · /),
+        page.getByText(/investigating · /i),
       ],
     });
   } finally {
