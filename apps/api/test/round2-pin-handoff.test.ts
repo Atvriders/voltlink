@@ -44,7 +44,12 @@ afterAll(async () => {
 
 const VIN = '5YJ3000000NEXUS01';
 
-async function mkWorld(): Promise<{ actor: SessionActor; vehicleId: string }> {
+async function mkWorld(): Promise<{
+  actor: SessionActor;
+  vehicleId: string;
+  orgId: string;
+  userId: string;
+}> {
   const user = await prisma.user.create({
     data: {
       email: `pin-${Date.now()}-${randomId()}@test.dev`,
@@ -116,6 +121,8 @@ async function mkWorld(): Promise<{ actor: SessionActor; vehicleId: string }> {
       stepUpAt: new Date(),
     } as SessionActor,
     vehicleId: vehicle.id,
+    orgId: org.id,
+    userId: user.id,
   };
 }
 
@@ -162,15 +169,30 @@ describe('R2-32 PIN handoff end to end (P-TESLAMAP)', () => {
   });
 
   it('an unreadable secret fails the command instead of dispatching without the PIN', async () => {
-    const { actor, vehicleId } = await mkWorld();
-    const { command } = await issueCommand(actor, vehicleId, 'speed_limit', {
-      speedLimitOn: true,
-      speedLimitKmh: 80,
-      pin: '1234',
+    const { actor, vehicleId, orgId } = await mkWorld();
+    // Build the command row directly so this test depends only on the
+    // decrypt policy, not on issueCommand's seal (the seal has its own test).
+    const command = await prisma.vehicleCommand.create({
+      data: {
+        vehicleId,
+        organizationId: orgId,
+        vehicleName: 'PIN car',
+        providerAccountId: (await prisma.vehicle.findUniqueOrThrow({ where: { id: vehicleId } }))
+          .providerAccountId,
+        userId: actor.userId,
+        actorKind: 'user',
+        type: 'speed_limit',
+        params: JSON.parse('{}'),
+        status: 'queued',
+        risk: 'high',
+      },
     });
-    await prisma.vehicleCommandSecret.update({
-      where: { commandId: command.id },
-      data: { ciphertext: '{"ciphertext":"garbage-not-a-seal"}' },
+    await prisma.vehicleCommandSecret.create({
+      data: {
+        commandId: command.id,
+        ciphertext: '{"ciphertext":"garbage-not-a-seal"}',
+        expiresAt: new Date(Date.now() + 3600_000),
+      },
     });
     const before = fake.requests.length;
     await processCommandJob({ commandId: command.id, stage: 'dispatch', n: 1 });
@@ -184,27 +206,24 @@ describe('R2-32 PIN handoff end to end (P-TESLAMAP)', () => {
   });
 
   it('retention prunes expired PIN secrets and keeps unexpired ones', async () => {
-    const { actor, vehicleId } = await mkWorld();
-    const { command } = await issueCommand(actor, vehicleId, 'speed_limit', {
-      speedLimitOn: true,
-      speedLimitKmh: 80,
-      pin: '1234',
+    const expired = await prisma.vehicleCommandSecret.create({
+      data: {
+        commandId: `pin-expired-${Date.now()}`,
+        ciphertext: 'sealed',
+        expiresAt: new Date(Date.now() - 60_000),
+      },
     });
-    const expired = await prisma.vehicleCommandSecret.update({
-      where: { commandId: command.id },
-      data: { expiresAt: new Date(Date.now() - 60_000) },
-    });
-    expect(expired.commandId).toBe(command.id);
+    expect(expired.commandId).toContain('pin-expired');
     const keep = await prisma.vehicleCommandSecret.create({
       data: {
-        commandId: command.id + '-keep',
+        commandId: `pin-keep-${Date.now()}`,
         ciphertext: 'sealed',
         expiresAt: new Date(Date.now() + 3600_000),
       },
     });
     await runRetention();
     expect(
-      await prisma.vehicleCommandSecret.findUnique({ where: { commandId: command.id } }),
+      await prisma.vehicleCommandSecret.findUnique({ where: { commandId: expired.commandId } }),
       'expired secret must be pruned',
     ).toBeNull();
     expect(
