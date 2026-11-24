@@ -439,9 +439,9 @@ describe('processCommandJob dispatch and confirm (M4)', () => {
 
   // TI-44: P-FAILED's spec keeps command HISTORY when a vehicle is
   // removed — the row must survive (SetNull/soft delete) and end 'failed'
-  // with an audit event. Today's schema still cascades (onDelete: Cascade),
-  // so the spec assertion fails; the schema/product fix lands in step 5
-  // (PROGRESS honesty entry 2026-11-18).
+  // with an audit event and a failure notification. The assertion set runs
+  // whatever processCommandJob does (commands-3: a crashing worker is still
+  // a failure of the spec assertions, never a red that hides them).
   it('TI-44 a command for a removed vehicle keeps its history and ends failed', async () => {
     const ghost = await prisma.vehicle.create({
       data: {
@@ -456,12 +456,51 @@ describe('processCommandJob dispatch and confirm (M4)', () => {
     });
     const { command } = await issueCommand(world.actor, ghost.id, 'honk_horn', {});
     await prisma.vehicle.delete({ where: { id: ghost.id } });
-    await processCommandJob({ commandId: command.id, stage: 'dispatch', n: 1 });
+    await processCommandJob({ commandId: command.id, stage: 'dispatch', n: 1 }).catch(
+      () => undefined,
+    );
     const row = await prisma.vehicleCommand.findUnique({ where: { id: command.id } });
     expect(row, 'history must survive vehicle removal').toBeTruthy();
     expect(row!.status).toBe('failed');
     const events = await prisma.commandAuditEvent.findMany({ where: { commandId: command.id } });
     expect(events.map((e) => e.event)).toContain('failed');
+  });
+
+  // TI-44 confirm-stage orphan (commands-4): an ACCEPTED command whose
+  // vehicle is deleted while waiting for confirmation must end 'failed' with
+  // exactly one 'failed' audit event and a failure notification — never a
+  // stale 'failed' event over a row that stays 'accepted', and never a
+  // later 'timed_out' from the sweeper on top.
+  it('TI-44 an accepted command for a removed vehicle ends failed with one event and a notification', async () => {
+    const ghost = await prisma.vehicle.create({
+      data: {
+        organizationId: world.org.id,
+        providerAccountId: world.provider.id,
+        provider: 'demo',
+        providerVehicleId: randomId(),
+        displayName: 'Ghost2',
+        demo: true,
+        capabilities: JSON.parse(JSON.stringify(['honk_horn'])),
+      },
+    });
+    const { command } = await issueCommand(world.actor, ghost.id, 'honk_horn', {});
+    await prisma.vehicleCommand.update({
+      where: { id: command.id },
+      data: { status: 'accepted', submittedAt: new Date() },
+    });
+    await prisma.vehicle.delete({ where: { id: ghost.id } });
+    await processCommandJob({ commandId: command.id, stage: 'confirm', n: 1 }).catch(
+      () => undefined,
+    );
+    const row = await prisma.vehicleCommand.findUniqueOrThrow({ where: { id: command.id } });
+    expect(row.status).toBe('failed');
+    const events = await prisma.commandAuditEvent.findMany({ where: { commandId: command.id } });
+    expect(events.filter((e) => e.event === 'failed')).toHaveLength(1);
+    expect(events.map((e) => e.event)).not.toContain('timed_out');
+    const notified = await prisma.appNotification.count({
+      where: { userId: world.user.id, event: 'command_failed' },
+    });
+    expect(notified, 'a failure notification must be sent').toBeGreaterThan(0);
   });
 
   it('idempotency keys replay the original and reject reuse with new params', async () => {

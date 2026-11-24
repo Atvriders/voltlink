@@ -467,12 +467,26 @@ export async function processCommandJob(payload: {
   if (!command) return;
 
   // TI-44 (P-FAILED): the vehicle may have been removed while queued — the
-  // command row survives (SetNull) and ends 'failed' with an audit event.
+  // command row survives (SetNull) and ends 'failed' with an audit event and
+  // a failure notification. The transition is stage-aware: an accepted row
+  // waiting on confirmation transitions from 'accepted', anything earlier
+  // from queued/submitted. The event and notification fire ONLY when the
+  // transition really happened, so an already-terminal row never gets a
+  // second 'failed' event (commands-4).
   if (!command.vehicleId) {
-    await transitionStatus(command.id, ['queued', 'submitted'], 'failed', {
-      errorMessage: 'Vehicle no longer exists.',
-    });
-    await auditEvent(command.id, 'failed', 'worker', 'Vehicle removed before dispatch.');
+    const ended = await transitionStatus(
+      command.id,
+      command.status === 'accepted' ? ['accepted'] : ['queued', 'submitted'],
+      'failed',
+      {
+        errorMessage: 'Vehicle no longer exists.',
+        ...(command.status === 'accepted' ? { confirmation: 'timeout' } : {}),
+      },
+    );
+    if (ended) {
+      await auditEvent(command.id, 'failed', 'worker', 'Vehicle removed before dispatch.');
+      await notifyCommandFinished(command, 'failed');
+    }
     return;
   }
 
@@ -751,7 +765,7 @@ export async function sweepStuckCommands(): Promise<number> {
     {
       id: string;
       userId: string;
-      vehicleId: string;
+      vehicleId: string | null;
       vehicleName: string;
       status: string;
       type: string;
