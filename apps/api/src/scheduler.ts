@@ -24,27 +24,32 @@ async function main(): Promise<void> {
   if (env.POLLER_ENABLED) poller.start();
   console.log('[voltlink] scheduler started');
 
-  // Scheduled automations: evaluate each minute.
-  const minute = setInterval(async () => {
-    try {
-      // Expiring heartbeat (spec L1217): the health check accepts beats < 5 min old.
-      await setSetting('schedulerBeat', String(Date.now()));
-      const rows = await prisma.automation.findMany({
-        where: { enabled: true, triggerType: 'scheduled' },
-      });
-      for (const row of rows) {
-        void dispatchTrigger({
-          type: 'scheduled',
-          userId: row.userId,
-          vehicleId: row.vehicleId ?? undefined,
-          data: {},
+  // Scheduled automations: evaluate each minute. Also gated on
+  // VL_POLLER_ENABLED=false so the scripted visual stack keeps the demo world
+  // frozen — an executed scheduled automation would bump runCount mid-snapshot
+  // and make the visual baselines order- and time-dependent (guide 08 §11.2).
+  if (env.POLLER_ENABLED) {
+    const minute = setInterval(async () => {
+      try {
+        // Expiring heartbeat (spec L1217): the health check accepts beats < 5 min old.
+        await setSetting('schedulerBeat', String(Date.now()));
+        const rows = await prisma.automation.findMany({
+          where: { enabled: true, triggerType: 'scheduled' },
         });
+        for (const row of rows) {
+          void dispatchTrigger({
+            type: 'scheduled',
+            userId: row.userId,
+            vehicleId: row.vehicleId ?? undefined,
+            data: {},
+          });
+        }
+      } catch (err) {
+        console.error('scheduled automation tick failed:', (err as Error).message);
       }
-    } catch (err) {
-      console.error('scheduled automation tick failed:', (err as Error).message);
-    }
-  }, 60_000);
-  minute.unref();
+    }, 60_000);
+    minute.unref();
+  }
 
   // Status checks hourly (offset from the web role's hourly check).
   const statusTimer = setInterval(async () => {

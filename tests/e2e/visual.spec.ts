@@ -485,10 +485,22 @@ test('active incident marks the demo provider degraded on the public status page
     await expect(page.getByText('Demo provider', { exact: true })).toBeVisible({
       timeout: 30000,
     });
+    // Guide 08 §11 state #16 content gate: the investigating update is on the
+    // page with its real message.
+    await expect(page.getByText('Elevated latency on the demo provider.')).toBeVisible({
+      timeout: 30000,
+    });
     await page.waitForTimeout(1000);
     await expect(page).toHaveScreenshot('active-incident.png', {
       ...T,
-      mask: maskDynamic(page),
+      mask: [
+        ...maskDynamic(page),
+        // live instance status: the incident 'Updated' stamp, the rolling
+        // 30-day uptime figures and the incident update's wall-clock stamp
+        page.getByText(/^Updated /),
+        page.getByText(/uptime/i),
+        page.getByText(/^Investigating · /),
+      ],
     });
   } finally {
     // Order-independence: the created incident must never leak into the

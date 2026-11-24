@@ -847,6 +847,11 @@ export async function seedDemoWorld(
 }
 
 export async function seedStatusContent(): Promise<void> {
+  // R2-35/C-VISUAL determinism: every seeded timestamp comes from the demo
+  // clock (frozen under NODE_ENV=test via VL_TEST_FROZEN_NOW, real time in
+  // production), so the maintenance window and check history never drift
+  // with the wall-clock moment the first user enables the demo fleet.
+  const now = demoClockNow();
   const components = [
     {
       key: 'web',
@@ -878,7 +883,6 @@ export async function seedStatusContent(): Promise<void> {
   }
   const existing = await prisma.incident.count();
   if (existing === 0) {
-    const now = new Date();
     const active = await prisma.incident.create({
       data: {
         title: 'Demo provider sync delays',
@@ -958,8 +962,8 @@ export async function seedStatusContent(): Promise<void> {
       data: {
         title: 'Database maintenance',
         description: 'Routine index optimization.',
-        startsAt: new Date(Date.now() + 3 * DAY),
-        endsAt: new Date(Date.now() + 3 * DAY + 2 * 3600000),
+        startsAt: new Date(now.getTime() + 3 * DAY),
+        endsAt: new Date(now.getTime() + 3 * DAY + 2 * 3600000),
         components: JSON.parse(JSON.stringify(['postgres'])),
         status: 'scheduled',
       },
@@ -967,17 +971,20 @@ export async function seedStatusContent(): Promise<void> {
   }
   // status check history (last 24h, hourly)
   const checkCount = await prisma.statusCheck.count({
-    where: { at: { gt: new Date(Date.now() - DAY) } },
+    where: { at: { gt: new Date(now.getTime() - DAY) } },
   });
   if (checkCount === 0) {
     const rows = [];
+    // Deterministic latencies (same constant hash as the demo world) so the
+    // status admin "Response times (24h)" chart is pixel-stable.
+    const rng = seededRng(hashString('voltlink-demo-v1'));
     for (const c of components) {
       for (let h = 24; h >= 0; h--) {
         rows.push({
           componentKey: c.key,
-          at: new Date(Date.now() - h * 3600000),
+          at: new Date(now.getTime() - h * 3600000),
           ok: c.key !== 'demo' || h > 1,
-          latencyMs: 40 + Math.round(Math.random() * 160),
+          latencyMs: 40 + Math.floor(rng() * 160),
           detail: c.key === 'demo' && h <= 1 ? 'Simulated sync delay' : 'OK',
         });
       }

@@ -25,7 +25,11 @@ test('reduced motion stops animations on the live vehicle page', async ({ page }
   await page.waitForTimeout(1000);
   await expect(page).toHaveScreenshot('reduced-motion.png', {
     fullPage: true,
-    mask: [page.locator('[data-relative-time]')],
+    mask: [
+      page.locator('[data-relative-time]'),
+      // the per-run account email renders in the sidebar
+      page.getByRole('button', { name: /Account menu/ }),
+    ],
     timeout: 60000,
   });
 });

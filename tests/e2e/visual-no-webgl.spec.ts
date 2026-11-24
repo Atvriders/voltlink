@@ -22,7 +22,11 @@ test('webgl fallback shows data-webgl=unsupported with the nav visible', async (
   await page.waitForTimeout(1000);
   await expect(page).toHaveScreenshot('webgl-fallback.png', {
     fullPage: true,
-    mask: [page.locator('[data-relative-time]')],
+    mask: [
+      page.locator('[data-relative-time]'),
+      // the per-run account email renders in the sidebar
+      page.getByRole('button', { name: /Account menu/ }),
+    ],
     timeout: 60000,
   });
 });
