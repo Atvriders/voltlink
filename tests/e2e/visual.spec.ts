@@ -476,7 +476,7 @@ test('active incident marks the demo provider degraded on the public status page
   });
   expect(created.status()).toBe(201);
   await page.goto('/status');
-  await expect(page.getByText('Demo provider latency')).toBeVisible({
+  await expect(page.getByText('Demo provider latency').first()).toBeVisible({
     timeout: 30000,
   });
   await expect(page.getByText('Demo provider', { exact: true })).toBeVisible({
