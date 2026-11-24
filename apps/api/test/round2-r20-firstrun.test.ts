@@ -129,7 +129,7 @@ afterAll(async () => {
           name: 'R20 Admin',
           passwordHash: sha256hex(`r20-password-123:${uniq()}`),
           isInstanceAdmin: true,
-          emailVerified: true,
+          emailVerifiedAt: new Date(),
         },
       });
     }
