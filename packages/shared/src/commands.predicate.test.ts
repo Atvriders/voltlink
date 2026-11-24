@@ -20,6 +20,12 @@ const rows: Row[] = [
   { type: 'climate_stop', params: {}, match: { climateOn: false }, mismatch: { climateOn: true } },
   {
     type: 'set_temperature',
+    params: { temperatureC: 21 },
+    match: { driverTempSettingC: 21 },
+    mismatch: { driverTempSettingC: 24 },
+  },
+  {
+    type: 'set_temperature',
     params: { driverTempC: 21 },
     match: { driverTempSettingC: 21 },
     mismatch: { driverTempSettingC: 24 },
@@ -65,6 +71,36 @@ const rows: Row[] = [
     params: { on: true },
     match: { sentryMode: true },
     mismatch: { sentryMode: false },
+  },
+  {
+    type: 'sentry_mode',
+    params: { sentryOn: true },
+    match: { sentryMode: true },
+    mismatch: { sentryMode: false },
+  },
+  {
+    type: 'valet_mode',
+    params: { valetOn: true },
+    match: { valetMode: true },
+    mismatch: { valetMode: false },
+  },
+  {
+    type: 'speed_limit',
+    params: { speedLimitKmh: 80 },
+    match: { speedLimitMode: { limitKmh: 80 } },
+    mismatch: { speedLimitMode: { limitKmh: 120 } },
+  },
+  {
+    type: 'schedule_update',
+    params: { updateDelaySec: 60 },
+    match: { softwareUpdate: { status: 'scheduled' } },
+    mismatch: { softwareUpdate: { status: 'available' } },
+  },
+  {
+    type: 'cancel_update',
+    params: {},
+    match: { softwareUpdate: { status: 'available' } },
+    mismatch: { softwareUpdate: { status: 'scheduled' } },
   },
   {
     type: 'window_vent',

@@ -427,9 +427,13 @@ export function commandStatePredicate(
     case 'climate_stop':
       return state.climateOn === false;
     case 'set_temperature': {
-      const want = params.driverTempC ?? params.passengerTempC;
+      // issueCommand validates {temperatureC} (schema below); the legacy
+      // driver/passenger names remain as provider-level fallbacks.
+      const want = params.temperatureC ?? params.driverTempC ?? params.passengerTempC;
       const got =
-        params.driverTempC !== undefined ? state.driverTempSettingC : state.passengerTempSettingC;
+        params.temperatureC !== undefined || params.driverTempC !== undefined
+          ? state.driverTempSettingC
+          : state.passengerTempSettingC;
       return typeof want === 'number' && typeof got === 'number' && Math.abs(got - want) <= 0.5;
     }
     case 'charge_start':
@@ -445,7 +449,8 @@ export function commandStatePredicate(
     case 'charge_port_close':
       return state.chargePortDoorOpen === false;
     case 'sentry_mode':
-      return state.sentryMode === params.on;
+      // issueCommand validates {sentryOn}; 'on' is the legacy provider name.
+      return state.sentryMode === (params.sentryOn ?? params.on);
     case 'window_vent':
       return state.windowsVented === true;
     case 'window_close':
@@ -468,9 +473,30 @@ export function commandStatePredicate(
     case 'remote_start':
       return state.remoteStartActive === true;
     case 'valet_mode':
-      return state.valetMode === params.on;
-    case 'speed_limit':
-      return typeof params.limitMph === 'number' && state.speedLimitMph === params.limitMph;
+      // issueCommand validates {valetOn}; 'on' is the legacy provider name.
+      return state.valetMode === (params.valetOn ?? params.on);
+    case 'speed_limit': {
+      // issueCommand validates {speedLimitKmh}; the snapshot carries
+      // speedLimitMode.limitKmh. The legacy limitMph name converts to km/h.
+      const wantKmh =
+        typeof params.speedLimitKmh === 'number'
+          ? params.speedLimitKmh
+          : typeof params.limitMph === 'number'
+            ? Math.round(params.limitMph * 1.609344)
+            : undefined;
+      const got = (state.speedLimitMode as { limitKmh?: number } | undefined)?.limitKmh;
+      return typeof wantKmh === 'number' && typeof got === 'number' && got === wantKmh;
+    }
+    case 'schedule_update':
+      // P-SCHED decision (2026-11-24): scheduling is observable only once the
+      // car reports a scheduled update.
+      return (state.softwareUpdate as { status?: string } | undefined)?.status === 'scheduled';
+    case 'cancel_update': // P-SCHED decision (2026-11-24): a cancel is observable when the car no
+    // longer reports a pending or installing update.
+    {
+      const s = (state.softwareUpdate as { status?: string } | undefined)?.status;
+      return s !== undefined && s !== 'scheduled' && s !== 'installing';
+    }
     case 'wake':
       return state.status === 'online';
     default:
