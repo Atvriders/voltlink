@@ -105,7 +105,6 @@ beforeAll(async () => {
 }, 30_000);
 
 afterAll(async () => {
-  await new Promise<void>((resolve) => server.close(() => resolve()));
   // Kill every boot child this file spawned (SIGTERM, wait, then SIGKILL).
   // The shutdown handler of the child needs a moment to close the DB.
   for (const child of bootChildren) {
@@ -113,7 +112,8 @@ afterAll(async () => {
     await stopChild(child);
   }
   // Leave a bootstrapped instance behind so later test files see the suite's
-  // usual state (admin + operator org + bootstrapped marker).
+  // usual state (admin + operator org + bootstrapped marker). The in-process
+  // server is still up here, so the restore can go through the real routes.
   const admin = await prisma.user.findFirst({ where: { isInstanceAdmin: true } });
   if (!admin) {
     const res = await csrfAndPost('/api/v1/auth/register', {
@@ -144,6 +144,7 @@ afterAll(async () => {
     },
   });
   await prisma.appSetting.deleteMany({ where: { key: 'instance.setupTokenHash' } });
+  await new Promise<void>((resolve) => server.close(() => resolve()));
   await prisma.$disconnect();
 });
 
