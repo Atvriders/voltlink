@@ -48,14 +48,20 @@
 
 ## Dependency scanning
 
-- `npm audit` (2026-11-20, after `npm audit fix` on the non-breaking set):
-  **0 critical, 3 high, 7 moderate** across 10 advisories. The 3 high
-  findings travel through the Prisma CLI's build-time dependency chain
-  (`prisma` → `@prisma/config` → `effect`); they affect `prisma` tooling,
-  not VoltLink's runtime request path. The 7 moderate findings are dev-only
-  tooling (typescript-eslint, glob via eslint, gltfpack CLI deps). A Prisma
-  major upgrade (7/8) is the patched path and is scheduled separately —
-  tracked here rather than force-bumped mid-release.
+- `npm audit --omit=dev` (2026-11-24, after the effect/deepmerge-ts overrides):
+  **0 high, 0 critical, 0 moderate — 0 production advisories.** The two
+  previous high advisories travelled the Prisma CLI chain
+  (`prisma` → `@prisma/config` → `effect`, `deepmerge-ts`); since `prisma`
+  runs inside the production image (`prisma migrate deploy` at boot, see
+  `apps/api/src/core/cli/migrate.ts`), they are fixed with pinned
+  `overrides` in the root package.json: `effect` 3.22.5 (CVE-2026-121707
+  ReDoS, patched in 3.22.1) and `deepmerge-ts` 8.0.0 (CVE-2026-40345 stack
+  exhaustion, patched in 8.0.0). The Prisma drift gate and the migration
+  tests run green with the overrides (evidence: `green/C-AUDIT.audit-full.log`,
+  `green/R2-68.ci-combined-vitest.log`, the migrations job logs).
+- `npm audit` (dev included): 0 high, 0 critical, 7 moderate — all dev-only
+  tooling (`@vitest/mocker` ×3, `vitest`, `glob` via eslint, `minimatch`
+  via the gltfpack CLI). None ship in the image.
 - CI runs a container image scan (Trivy) with an expiry-checked ignore file
   and a full-history secret scan (gitleaks) on every push.
 
