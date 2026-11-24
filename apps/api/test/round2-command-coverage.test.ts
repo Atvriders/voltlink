@@ -489,6 +489,9 @@ describe('processCommandJob dispatch and confirm (M4)', () => {
       data: { status: 'accepted', submittedAt: new Date() },
     });
     await prisma.vehicle.delete({ where: { id: ghost.id } });
+    const notifiedBefore = await prisma.appNotification.count({
+      where: { userId: world.user.id, event: 'command_failed' },
+    });
     await processCommandJob({ commandId: command.id, stage: 'confirm', n: 1 }).catch(
       () => undefined,
     );
@@ -497,10 +500,12 @@ describe('processCommandJob dispatch and confirm (M4)', () => {
     const events = await prisma.commandAuditEvent.findMany({ where: { commandId: command.id } });
     expect(events.filter((e) => e.event === 'failed')).toHaveLength(1);
     expect(events.map((e) => e.event)).not.toContain('timed_out');
-    const notified = await prisma.appNotification.count({
+    const notifiedAfter = await prisma.appNotification.count({
       where: { userId: world.user.id, event: 'command_failed' },
     });
-    expect(notified, 'a failure notification must be sent').toBeGreaterThan(0);
+    expect(notifiedAfter, 'a failure notification must be sent for this command').toBe(
+      notifiedBefore + 1,
+    );
   });
 
   it('idempotency keys replay the original and reject reuse with new params', async () => {
