@@ -3,8 +3,9 @@
 // credentials. R2-32: the fake rejects anything the OpenAPI does not
 // document, and every command type is driven through the real provider's
 // sendCommand with its request asserted against the documented route.
-// The provider-side route fixes land in step 5 — the request assertions
-// below are expected reds until then.
+// commands-8: every command is given a fixture state in which it is allowed
+// (charge port closed for charge_port_open) and must hit its documented
+// route; the only exceptions are the named local-refusal entries.
 
 process.env.NODE_ENV = 'test';
 
@@ -407,7 +408,7 @@ describe('Tessie fake strictness (guide 02 documented surface)', () => {
   });
 });
 
-describe('Tessie provider request routes match guide 02 (expected reds until step 5)', () => {
+describe('Tessie provider request routes match guide 02', () => {
   const p = new TessieProvider();
 
   it('listVehicles requests the documented GET /vehicles?only_active=true', async () => {
