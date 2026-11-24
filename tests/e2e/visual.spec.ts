@@ -477,7 +477,9 @@ test('active incident marks the demo provider degraded on the public status page
   await expect(page.getByText('Demo provider latency')).toBeVisible({
     timeout: 30000,
   });
-  await expect(page.getByText('Demo provider')).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText('Demo provider', { exact: true })).toBeVisible({
+    timeout: 30000,
+  });
   await page.waitForTimeout(1000);
   await expect(page).toHaveScreenshot('active-incident.png', {
     ...T,
@@ -544,10 +546,10 @@ test('command pending: a queued fixture shows data-status=queued', async ({ page
   await page.route('**/api/v1/commands*', (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/commands')) {
-      return route.fulfill({ json: queuedFixture('cmd-queued-1') });
+      return route.fulfill({ json: { data: queuedFixture('cmd-queued-1') } });
     }
     return route.fulfill({
-      json: { command: queuedFixture('cmd-queued-1').items[0], events: [] },
+      json: { data: { command: queuedFixture('cmd-queued-1').items[0], events: [] } },
     });
   });
   const vehicles = await page.request.get('/api/v1/vehicles');
@@ -580,9 +582,9 @@ test('command failure: a rejected fixture shows data-status=rejected and the mes
   await page.route('**/api/v1/commands*', (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/commands')) {
-      return route.fulfill({ json: { items: [rejected] } });
+      return route.fulfill({ json: { data: { items: [rejected] } } });
     }
-    return route.fulfill({ json: { command: rejected, events: [] } });
+    return route.fulfill({ json: { data: { command: rejected, events: [] } } });
   });
   const vehicles = await page.request.get('/api/v1/vehicles');
   const vbody = (await vehicles.json()) as {

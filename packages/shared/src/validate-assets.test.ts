@@ -66,6 +66,82 @@ describe('C-ASSETVALID validator', () => {
     }
   });
 
+  it('fails ENVELOPE when a NON-_mesh mesh node is exported below the ground plane (R2-39)', async () => {
+    const [{ NodeIO }, { ALL_EXTENSIONS }, { MeshoptDecoder }] = await Promise.all([
+      import('@gltf-transform/core'),
+      import('@gltf-transform/extensions'),
+      import('meshoptimizer'),
+    ]);
+    const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({
+      'meshopt.decoder': MeshoptDecoder,
+    });
+    const src = path.join(root, 'assets', 'models', 'processed', 'compact_sedan.glb');
+    const doc = await io.read(src);
+    // The old rule only checked *_mesh names; a glass/window node below the
+    // ground is just as wrong (webgl-3).
+    const target = doc
+      .getRoot()
+      .listNodes()
+      .find((n) => n.getMesh() && !(n.getName() ?? '').endsWith('_mesh'));
+    expect(target, 'a non-_mesh mesh node exists in the fixture').toBeTruthy();
+    const t = target!.getTranslation();
+    target!.setTranslation([t[0], t[1] - 5, t[2]]);
+    const dir = mkdtempSync(path.join(tmpdir(), 'voltlink-ground2-'));
+    try {
+      const meshopt = doc
+        .getRoot()
+        .listExtensionsUsed()
+        .find((e) => e.extensionName === 'EXT_meshopt_compression');
+      meshopt?.dispose();
+      const data = await io.writeBinary(doc);
+      writeFileSync(path.join(dir, 'compact_sedan.glb'), data);
+      const { status, out } = runValidator(['--staged', dir]);
+      expect(status).not.toBe(0);
+      expect(out).toContain('below ground');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails ENVELOPE when a *_mesh node leaves the body envelope (R2-39)', async () => {
+    const [{ NodeIO }, { ALL_EXTENSIONS }, { MeshoptDecoder }] = await Promise.all([
+      import('@gltf-transform/core'),
+      import('@gltf-transform/extensions'),
+      import('meshoptimizer'),
+    ]);
+    const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({
+      'meshopt.decoder': MeshoptDecoder,
+    });
+    const src = path.join(root, 'assets', 'models', 'processed', 'compact_sedan.glb');
+    const doc = await io.read(src);
+    const target = doc
+      .getRoot()
+      .listNodes()
+      .find((n) => {
+        const name = n.getName() ?? '';
+        return name.endsWith('_mesh') && name !== 'body_mesh' && n.getMesh();
+      });
+    expect(target, 'a non-body *_mesh node exists in the fixture').toBeTruthy();
+    // Push a door/window far outside the body envelope.
+    const t = target!.getTranslation();
+    target!.setTranslation([t[0] + 4, t[1], t[2] + 4]);
+    const dir = mkdtempSync(path.join(tmpdir(), 'voltlink-envelope-'));
+    try {
+      const meshopt = doc
+        .getRoot()
+        .listExtensionsUsed()
+        .find((e) => e.extensionName === 'EXT_meshopt_compression');
+      meshopt?.dispose();
+      const data = await io.writeBinary(doc);
+      writeFileSync(path.join(dir, 'compact_sedan.glb'), data);
+      const { status, out } = runValidator(['--staged', dir]);
+      expect(status).not.toBe(0);
+      expect(out).toContain('outside body envelope');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('fails ENVELOPE when a mesh node is exported below the ground plane (R2-39)', async () => {
     const [{ NodeIO }, { ALL_EXTENSIONS }, { MeshoptDecoder }] = await Promise.all([
       import('@gltf-transform/core'),

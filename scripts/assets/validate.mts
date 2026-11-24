@@ -260,15 +260,48 @@ for (const file of readdirSync(STAGED).filter((f) => f.endsWith('.glb') && !f.in
       fail(full, 'NAME_INVALID', `bad name: ${name}`);
   }
 
-  // ENVELOPE / ground floor — R2-39: no mesh may be exported below the
-  // ground plane (the old generator's parent-inverse bug exported door
-  // windows under the car). Per-mesh world box, not the whole-model box.
+  // ENVELOPE / ground floor — R2-39: NO mesh-bearing node may be exported
+  // below the ground plane (the old generator's parent-inverse bug exported
+  // door windows under the car), and every *_mesh node must sit inside the
+  // body_mesh world envelope. Per-mesh world box, not the whole-model box.
+  const bodyNode = nodes.get('body_mesh');
+  // The body envelope is the union of the structural shells (body, underbody,
+  // wheel wells) — doors, windows and trim must live inside it.
+  const bodyBox = ['body_mesh', 'underbody_mesh', 'wheel_well_mesh']
+    .map((n) => nodes.get(n))
+    .filter((n): n is typeof n & object => !!n && !!n.getMesh())
+    .reduce<Box3 | undefined>((acc, n) => {
+      const b = worldBox(doc, n);
+      return acc ? acc.union(b) : b;
+    }, undefined);
+  const ENVELOPE_TOL = 0.05;
   for (const [name, node] of nodes) {
-    if (!name.endsWith('_mesh')) continue;
-    if (!node.getMesh() || node.getMesh()!.listPrimitives().length === 0) continue;
+    const mesh = node.getMesh();
+    if (!mesh || mesh.listPrimitives().length === 0) continue;
     const mb = worldBox(doc, node);
     if (mb.min.y < -0.01)
       fail(full, 'ENVELOPE', `${name} below ground: min.y ${mb.min.y.toFixed(3)}`);
+    if (name.endsWith('_mesh') && name !== 'body_mesh' && bodyBox) {
+      if (
+        mb.min.x < bodyBox.min.x - ENVELOPE_TOL ||
+        mb.max.x > bodyBox.max.x + ENVELOPE_TOL ||
+        mb.min.y < bodyBox.min.y - ENVELOPE_TOL ||
+        mb.max.y > bodyBox.max.y + ENVELOPE_TOL ||
+        mb.min.z < bodyBox.min.z - ENVELOPE_TOL ||
+        mb.max.z > bodyBox.max.z + ENVELOPE_TOL
+      ) {
+        fail(
+          full,
+          'ENVELOPE',
+          `${name} outside body envelope: x[${mb.min.x.toFixed(2)},${mb.max.x.toFixed(2)}] ` +
+            `vs x[${bodyBox.min.x.toFixed(2)},${bodyBox.max.x.toFixed(2)}] ` +
+            `y[${mb.min.y.toFixed(2)},${mb.max.y.toFixed(2)}] ` +
+            `vs y[${bodyBox.min.y.toFixed(2)},${bodyBox.max.y.toFixed(2)}] ` +
+            `z[${mb.min.z.toFixed(2)},${mb.max.z.toFixed(2)}] ` +
+            `vs z[${bodyBox.min.z.toFixed(2)},${bodyBox.max.z.toFixed(2)}]`,
+        );
+      }
+    }
   }
 
   // PART_MISSING — required part set per class

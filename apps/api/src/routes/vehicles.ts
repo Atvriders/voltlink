@@ -40,6 +40,7 @@ function toVehicleWithState(v: {
   updatedAt: Date;
   snapshot: { state: unknown; fetchedAt: Date; freshness: string } | null;
   providerAccount: { label: string };
+  organization: { demoDegraded: boolean };
 }) {
   return {
     id: v.id,
@@ -77,6 +78,9 @@ function toVehicleWithState(v: {
             Date.now(),
           ),
           fetchedAt: v.snapshot.fetchedAt.toISOString(),
+          // Guide 08 §11 state #22: a degraded demo provider renders its
+          // vehicles stale at read time (the UI shows the outage banner).
+          ...(v.organization.demoDegraded ? { freshness: 'stale', dataSource: 'estimated' } : {}),
         }
       : null,
   };
@@ -95,7 +99,12 @@ vehiclesRouter.get('/', listPolicy, async (req, res) => {
   const ids = await accessibleVehicleIds(actor, 'vehicles.read');
   const vehicles = await prisma.vehicle.findMany({
     where: { id: { in: ids }, active: true },
-    include: { snapshot: true, providerAccount: true },
+    include: {
+      snapshot: true,
+      providerAccount: { select: { label: true } },
+      // Guide 08 §11 state #22: demoDegraded drives the read-time stale overlay.
+      organization: { select: { demoDegraded: true } },
+    },
     orderBy: { displayName: 'asc' },
   });
   const groupLinks = await prisma.fleetGroupVehicle.findMany({ where: { vehicleId: { in: ids } } });
@@ -226,7 +235,11 @@ vehiclesRouter.get(
   async (req, res) => {
     const vehicle = await prisma.vehicle.findUnique({
       where: { id: req.access!.vehicle!.id },
-      include: { snapshot: true, providerAccount: true },
+      include: {
+        snapshot: true,
+        providerAccount: { select: { label: true } },
+        organization: { select: { demoDegraded: true } },
+      },
     });
     if (!vehicle) throw new AccessDenied('NOT_FOUND', 'Vehicle not found.', 404);
     res.json({ data: toVehicleWithState(vehicle) });
