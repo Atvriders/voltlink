@@ -264,7 +264,6 @@ for (const file of readdirSync(STAGED).filter((f) => f.endsWith('.glb') && !f.in
   // below the ground plane (the old generator's parent-inverse bug exported
   // door windows under the car), and every *_mesh node must sit inside the
   // body_mesh world envelope. Per-mesh world box, not the whole-model box.
-  const bodyNode = nodes.get('body_mesh');
   // The body envelope is the union of the structural shells (body, underbody,
   // wheel wells) — doors, windows and trim must live inside it.
   const bodyBox = ['body_mesh', 'underbody_mesh', 'wheel_well_mesh']
