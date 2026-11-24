@@ -74,24 +74,41 @@ export default async function setup(project: TestProject) {
       { stdio: 'inherit', env: { ...process.env, DATABASE_URL: withDb(adminUrl, TEMPLATE) } },
     );
     // Open registration in the template so API tests can register over HTTP.
-    const seed = new pg.Client({ connectionString: withDb(adminUrl, TEMPLATE) });
-    await seed.connect();
-    await seed.query(
-      'INSERT INTO "AppSetting" (key, value, "updatedAt") VALUES ($1, $2, now()) ON CONFLICT (key) DO NOTHING',
-      ['instance.registrationMode', 'invite'],
-    );
-    await seed.query(
-      'INSERT INTO "AppSetting" (key, value, "updatedAt") VALUES ($1, $2, now()) ON CONFLICT (key) DO NOTHING',
-      ['instance.bootstrappedAt', new Date().toISOString()],
-    );
-    // The instance must be bootstrapped (>= 1 user) or registration answers
-    // SETUP_REQUIRED (403) even in open mode.
-    await seed.query(
-      `INSERT INTO "User" (id, email, name, "passwordHash", "webauthnUserId", "createdAt")
-       VALUES ('test-bootstrap', 'test-bootstrap@voltlink.test', 'Bootstrap', '$argon2id$test', NULL, now())
-       ON CONFLICT (id) DO NOTHING`,
-    );
-    await seed.end();
+    // R2-24 (4g): the template is seeded through Prisma, never raw SQL.
+    const { PrismaClient } = await import('@prisma/client');
+    const templatePrisma = new PrismaClient({
+      datasources: { db: { url: withDb(adminUrl, TEMPLATE) } },
+    });
+    try {
+      await templatePrisma.appSetting.upsert({
+        where: { key: 'instance.registrationMode' },
+        update: {},
+        create: { key: 'instance.registrationMode', value: 'invite' },
+      });
+      await templatePrisma.appSetting.upsert({
+        where: { key: 'instance.bootstrappedAt' },
+        update: {},
+        create: {
+          key: 'instance.bootstrappedAt',
+          value: new Date().toISOString(),
+        },
+      });
+      // The instance must be bootstrapped (>= 1 user) or registration answers
+      // SETUP_REQUIRED (403) even in open mode.
+      await templatePrisma.user.upsert({
+        where: { id: 'test-bootstrap' },
+        update: {},
+        create: {
+          id: 'test-bootstrap',
+          email: 'test-bootstrap@voltlink.test',
+          name: 'Bootstrap',
+          passwordHash: '$argon2id$test',
+          webauthnUserId: null,
+        },
+      });
+    } finally {
+      await templatePrisma.$disconnect();
+    }
   } catch (err) {
     console.error(`[test-db] prefix ${PREFIX}: setup failed: ${String(err)}`);
     process.exitCode = 1;
