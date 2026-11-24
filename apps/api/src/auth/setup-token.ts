@@ -10,6 +10,13 @@ import { randomToken, sha256hex } from '../core/crypto';
 export async function ensureSetupToken(): Promise<string | null> {
   const configured = process.env.VL_SETUP_TOKEN;
   if (configured) return configured;
+  // TI-53: once the instance is bootstrapped, no further setup token may be
+  // generated (the old code only checked for a leftover hash row, which
+  // bootstrap consumes — so every later boot leaked and logged a fresh token).
+  const bootstrapped = await prisma.appSetting.findUnique({
+    where: { key: 'instance.bootstrappedAt' },
+  });
+  if (bootstrapped) return null;
   const existing = await prisma.appSetting.findUnique({
     where: { key: 'instance.setupTokenHash' },
   });

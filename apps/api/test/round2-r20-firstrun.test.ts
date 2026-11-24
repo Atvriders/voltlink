@@ -37,7 +37,45 @@ import { setRegistrationMode } from '../src/auth/service';
 let server: Server;
 let base = '';
 let adminEmail = '';
+// File-level boot children: every spawned web role is killed here, so a test
+// timeout can never orphan a 100%-CPU tsx child (the 2026-11-24 check).
+const bootChildren: ReturnType<typeof spawn>[] = [];
 const uniq = () => `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+function spawnBoot(repoRoot: string, freePort: number): ReturnType<typeof spawn> {
+  const childEnv: NodeJS.ProcessEnv = { ...process.env, PORT: String(freePort), HOST: '127.0.0.1' };
+  childEnv.PUBLIC_URL = `http://127.0.0.1:${freePort}`;
+  delete childEnv.VL_SETUP_TOKEN;
+  const child = spawn(process.execPath, ['--import', 'tsx', 'apps/api/src/index.ts'], {
+    cwd: repoRoot,
+    env: childEnv,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  bootChildren.push(child);
+  console.log('[r20-boot] child pid', child.pid);
+  return child;
+}
+
+async function freePort(): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
+    const srv = createServer();
+    srv.once('error', reject);
+    srv.listen(0, '127.0.0.1', () => {
+      const a = srv.address() as AddressInfo;
+      srv.close(() => resolve(a.port));
+    });
+  });
+}
+
+async function stopChild(child: ReturnType<typeof spawn>): Promise<void> {
+  if (child.exitCode !== null) return;
+  child.kill('SIGTERM');
+  await Promise.race([
+    new Promise<void>((r) => child.once('exit', () => r())),
+    new Promise<void>((r) => setTimeout(r, 5000)),
+  ]);
+  if (child.exitCode === null) child.kill('SIGKILL');
+}
 
 async function csrfAndPost(path: string, body: unknown) {
   const c0 = await fetch(`${base}/api/v1/auth/csrf`);
@@ -68,6 +106,44 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
+  // Kill every boot child this file spawned (SIGTERM, wait, then SIGKILL).
+  // The shutdown handler of the child needs a moment to close the DB.
+  for (const child of bootChildren) {
+    console.log('[r20-boot] stopping child pid', child.pid);
+    await stopChild(child);
+  }
+  // Leave a bootstrapped instance behind so later test files see the suite's
+  // usual state (admin + operator org + bootstrapped marker).
+  const admin = await prisma.user.findFirst({ where: { isInstanceAdmin: true } });
+  if (!admin) {
+    const res = await csrfAndPost('/api/v1/auth/register', {
+      email: adminEmail,
+      name: 'R20 Admin',
+      password: 'r20-password-123',
+      setupToken: process.env.VL_SETUP_TOKEN,
+    });
+    if (res.status !== 201) {
+      await prisma.user.create({
+        data: {
+          email: adminEmail,
+          name: 'R20 Admin',
+          passwordHash: sha256hex(`r20-password-123:${uniq()}`),
+          isInstanceAdmin: true,
+          emailVerified: true,
+        },
+      });
+    }
+  }
+  await prisma.appSetting.upsert({
+    where: { key: 'instance.bootstrappedAt' },
+    update: {},
+    create: {
+      key: 'instance.bootstrappedAt',
+      value: new Date().toISOString(),
+      updatedAt: new Date(),
+    },
+  });
+  await prisma.appSetting.deleteMany({ where: { key: 'instance.setupTokenHash' } });
   await prisma.$disconnect();
 });
 
@@ -273,146 +349,143 @@ it('R2-20 generated token (VL_SETUP_TOKEN unset) completes first-run setup', asy
 // that extraction returns the token itself (R2-01 fix). Boot the REAL web
 // role (apps/api/src/index.ts) with VL_SETUP_TOKEN unset on this file's own
 // unseeded database, parse the token from its stdout, and register with it.
-// The child is stopped by its own PID.
-it('R2-20 real web-role boot (VL_SETUP_TOKEN unset) logs a token that completes first-run setup', async () => {
-  const saved = process.env.VL_SETUP_TOKEN;
-  let child: ReturnType<typeof spawn> | null = null;
-  let captured = '';
-  try {
-    delete process.env.VL_SETUP_TOKEN;
-    await prisma.appSetting.deleteMany({
-      where: {
-        key: {
-          in: ['instance.bootstrappedAt', 'instance.operatorOrgId', 'instance.setupTokenHash'],
+// The child is a FILE-LEVEL resource: the pid is printed, and afterAll kills
+// it (SIGTERM, wait, SIGKILL) so a timeout can never orphan it.
+it(
+  'R2-20 real web-role boot (VL_SETUP_TOKEN unset) logs a token that completes first-run setup',
+  { timeout: 45_000 },
+  async () => {
+    const saved = process.env.VL_SETUP_TOKEN;
+    try {
+      delete process.env.VL_SETUP_TOKEN;
+      await prisma.appSetting.deleteMany({
+        where: {
+          key: {
+            in: ['instance.bootstrappedAt', 'instance.operatorOrgId', 'instance.setupTokenHash'],
+          },
         },
-      },
-    });
-    await prisma.user.deleteMany({});
-    await prisma.organization.deleteMany({});
-
-    const freePort = await new Promise<number>((resolve, reject) => {
-      const srv = createServer();
-      srv.once('error', reject);
-      srv.listen(0, '127.0.0.1', () => {
-        const a = srv.address() as AddressInfo;
-        srv.close(() => resolve(a.port));
       });
-    });
+      await prisma.user.deleteMany({});
+      await prisma.organization.deleteMany({});
 
-    const repoRoot = fileURLToPath(new URL('../../..', import.meta.url));
-    const childEnv: NodeJS.ProcessEnv = {
-      ...process.env,
-      PORT: String(freePort),
-      HOST: '127.0.0.1',
-      PUBLIC_URL: `http://127.0.0.1:${freePort}`,
-    };
-    delete childEnv.VL_SETUP_TOKEN;
-    child = spawn(process.execPath, ['--import', 'tsx', 'apps/api/src/index.ts'], {
-      cwd: repoRoot,
-      env: childEnv,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    child.stdout!.on('data', (d: Buffer) => {
-      captured += d.toString('utf8');
-    });
-    child.stderr!.on('data', (d: Buffer) => {
-      captured += d.toString('utf8');
-    });
+      const repoRoot = fileURLToPath(new URL('../../..', import.meta.url));
+      const port = await freePort();
+      const child = spawnBoot(repoRoot, port);
+      let captured = '';
+      child.stdout!.on('data', (d: Buffer) => {
+        captured += d.toString('utf8');
+      });
+      child.stderr!.on('data', (d: Buffer) => {
+        captured += d.toString('utf8');
+      });
 
-    // Parse the token from the child's boot log.
-    const deadline = Date.now() + 60_000;
-    let token = '';
-    while (Date.now() < deadline && !token && child.exitCode === null) {
-      const m = captured.match(/first-run setup token ([A-Za-z0-9_-]{32,}) \(shown once/);
-      if (m) token = m[1]!;
-      if (!token) await new Promise((r) => setTimeout(r, 250));
-    }
-    // R2-01: the documented extraction (start-stack.sh / ci.yml) must return
-    // the token itself, not the literal word 'token'.
-    const documented = [...captured.matchAll(/first-run setup token [A-Za-z0-9_-]*/g)]
-      .map((m) => m[0].split(' ').at(-1))
-      .filter((w) => w !== 'token');
-    expect(token, `boot log must print the token; captured was:\n${captured.slice(-2000)}`).toMatch(
-      /^[A-Za-z0-9_-]{32,}$/,
-    );
-    expect(documented, 'the documented grep must extract the token').toContain(token);
-
-    // Hash at rest; the plaintext never is.
-    const row = await prisma.appSetting.findUnique({
-      where: { key: 'instance.setupTokenHash' },
-    });
-    expect(row, 'generated token must be hashed at rest').toBeTruthy();
-    expect(row!.value).toBe(sha256hex(token));
-    expect(row!.value).not.toBe(token);
-
-    // Register with the boot-log token against this file's own server (same DB).
-    const email = `r20boot-${uniq()}@test.dev`;
-    const res = await csrfAndPost('/api/v1/auth/register', {
-      email,
-      name: 'Boot User',
-      password: 'long-enough-123',
-      setupToken: token,
-    });
-    const bodyText = await res.text();
-    expect(res.status, bodyText).toBe(201);
-    const u = await prisma.user.findUniqueOrThrow({ where: { email } });
-    expect(u.isInstanceAdmin, 'first admin must be instance admin').toBe(true);
-    const opOrg = await prisma.appSetting.findUnique({
-      where: { key: 'instance.operatorOrgId' },
-    });
-    const membership = await prisma.membership.findFirst({
-      where: { organizationId: opOrg!.value, userId: u.id, role: 'OWNER' },
-    });
-    expect(membership, 'first admin must own the operator org').toBeTruthy();
-    // The hash row is consumed by the bootstrap.
-    expect(
-      await prisma.appSetting.findUnique({ where: { key: 'instance.setupTokenHash' } }),
-    ).toBeNull();
-    await prisma.user.delete({ where: { id: u.id } });
-  } finally {
-    if (child && child.exitCode === null) {
-      child.kill('SIGTERM');
-      await Promise.race([
-        new Promise<void>((r) => child!.once('exit', () => r())),
-        new Promise<void>((r) => setTimeout(r, 10_000)),
-      ]);
-      if (child.exitCode === null) child.kill('SIGKILL');
-    }
-    if (saved === undefined) delete process.env.VL_SETUP_TOKEN;
-    else process.env.VL_SETUP_TOKEN = saved;
-    // Order independence: leave a bootstrapped instance behind so any later
-    // test sees the same state the suite's describe left (admin + operator
-    // org + bootstrapped marker).
-    await prisma.appSetting.deleteMany({
-      where: { key: { in: ['instance.bootstrappedAt', 'instance.operatorOrgId'] } },
-    });
-    await prisma.user.deleteMany({});
-    await prisma.organization.deleteMany({});
-    const res = await csrfAndPost('/api/v1/auth/register', {
-      email: adminEmail,
-      name: 'R20 Admin',
-      password: 'r20-password-123',
-      setupToken: saved ?? 'r20-setup-token-0123456789abcdef01234567',
-    });
-    if (res.status !== 201) {
-      // Not in setup mode (mode toggles or consumed token): restore the
-      // bootstrapped markers directly so later tests keep working.
-      const admin = await prisma.user.findUnique({ where: { email: adminEmail } });
-      if (admin) {
-        await prisma.user.update({
-          where: { id: admin.id },
-          data: { isInstanceAdmin: true },
-        });
+      // Wait for readiness well inside the test timeout; then the token
+      // assertions decide the test — a red is a failed assertion, never a
+      // vitest timeout.
+      const deadline = Date.now() + 20_000;
+      let ready = false;
+      while (Date.now() < deadline && !ready && child.exitCode === null) {
+        ready = /\[voltlink\] web listening/.test(captured);
+        if (!ready) await new Promise((r) => setTimeout(r, 100));
       }
-      await prisma.appSetting.upsert({
-        where: { key: 'instance.bootstrappedAt' },
-        update: {},
-        create: {
-          key: 'instance.bootstrappedAt',
-          value: new Date().toISOString(),
-          updatedAt: new Date(),
-        },
+      const tokenMatch = captured.match(/setup token ([A-Za-z0-9_-]{32,})/);
+      const token = tokenMatch?.[1] ?? '';
+      expect(
+        token,
+        `boot log must print the token; captured was:\n${captured.slice(-2000)}`,
+      ).toMatch(/^[A-Za-z0-9_-]{32,}$/);
+
+      // R2-01: the documented extraction (start-stack.sh / ci.yml) must return
+      // the token itself. Decoupled from the token regex above: a boot line
+      // that prints the token with a different wording fails HERE alone.
+      const documented = [...captured.matchAll(/first-run setup token [A-Za-z0-9_-]*/g)].map((m) =>
+        m[0].split(' ').at(-1)!,
+      );
+      expect(documented, 'the documented grep must extract the token').toContain(token);
+
+      // Hash at rest; the plaintext never is.
+      const row = await prisma.appSetting.findUnique({
+        where: { key: 'instance.setupTokenHash' },
       });
+      expect(row, 'generated token must be hashed at rest').toBeTruthy();
+      expect(row!.value).toBe(sha256hex(token));
+      expect(row!.value).not.toBe(token);
+
+      // Register with the boot-log token against this file's own server (same DB).
+      const email = `r20boot-${uniq()}@test.dev`;
+      const res = await fetch(`http://127.0.0.1:${port}/api/v1/auth/csrf`);
+      const setCookies = res.headers.getSetCookie?.() ?? [];
+      const csrf = setCookies.join(';').match(/vl_csrf=([^;]+)/)?.[1] ?? '';
+      const cookie = setCookies.find((x) => x.startsWith('vl_csrf='))?.split(';')[0] ?? '';
+      const reg = await fetch(`http://127.0.0.1:${port}/api/v1/auth/register`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-vl-csrf': csrf, cookie },
+        body: JSON.stringify({
+          email,
+          name: 'Boot User',
+          password: 'long-enough-123',
+          setupToken: token,
+        }),
+      });
+      const bodyText = await reg.text();
+      expect(reg.status, bodyText).toBe(201);
+      const u = await prisma.user.findUniqueOrThrow({ where: { email } });
+      expect(u.isInstanceAdmin, 'first admin must be instance admin').toBe(true);
+      const opOrg = await prisma.appSetting.findUnique({
+        where: { key: 'instance.operatorOrgId' },
+      });
+      const membership = await prisma.membership.findFirst({
+        where: { organizationId: opOrg!.value, userId: u.id, role: 'OWNER' },
+      });
+      expect(membership, 'first admin must own the operator org').toBeTruthy();
+      // The hash row is consumed by the bootstrap.
+      expect(
+        await prisma.appSetting.findUnique({ where: { key: 'instance.setupTokenHash' } }),
+      ).toBeNull();
+      await prisma.user.delete({ where: { id: u.id } });
+    } finally {
+      if (saved === undefined) delete process.env.VL_SETUP_TOKEN;
+      else process.env.VL_SETUP_TOKEN = saved;
     }
-  }
-});
+  },
+);
+
+// TI-53: after bootstrap, later boots must NOT generate and log a fresh setup
+// token (the old ensureSetupToken only checked for a leftover hash row, which
+// bootstrap consumes — so every post-bootstrap boot leaked a new token).
+it(
+  'TI-53: a bootstrapped instance logs no fresh setup token on later boots',
+  { timeout: 45_000 },
+  async () => {
+    const saved = process.env.VL_SETUP_TOKEN;
+    try {
+      delete process.env.VL_SETUP_TOKEN;
+      const repoRoot = fileURLToPath(new URL('../../..', import.meta.url));
+      const port = await freePort();
+      const child = spawnBoot(repoRoot, port);
+      let captured = '';
+      child.stdout!.on('data', (d: Buffer) => {
+        captured += d.toString('utf8');
+      });
+      child.stderr!.on('data', (d: Buffer) => {
+        captured += d.toString('utf8');
+      });
+      const deadline = Date.now() + 20_000;
+      let ready = false;
+      while (Date.now() < deadline && !ready && child.exitCode === null) {
+        ready = /\[voltlink\] web listening/.test(captured);
+        if (!ready) await new Promise((r) => setTimeout(r, 100));
+      }
+      expect(
+        captured,
+        `bootstrapped instance must not log a fresh token; captured was:\n${captured.slice(-2000)}`,
+      ).not.toMatch(/first-run setup token [A-Za-z0-9_-]{32,}/);
+      expect(
+        await prisma.appSetting.findUnique({ where: { key: 'instance.setupTokenHash' } }),
+      ).toBeNull();
+    } finally {
+      if (saved === undefined) delete process.env.VL_SETUP_TOKEN;
+      else process.env.VL_SETUP_TOKEN = saved;
+    }
+  },
+);
