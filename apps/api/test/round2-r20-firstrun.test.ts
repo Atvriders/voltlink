@@ -468,6 +468,9 @@ it(
     const saved = process.env.VL_SETUP_TOKEN;
     try {
       delete process.env.VL_SETUP_TOKEN;
+      // Any hash row left by an earlier test in THIS file is not this boot's
+      // business: clear it so the check below observes only this boot.
+      await prisma.appSetting.deleteMany({ where: { key: 'instance.setupTokenHash' } });
       const repoRoot = fileURLToPath(new URL('../../..', import.meta.url));
       const port = await freePort();
       const child = spawnBoot(repoRoot, port);
