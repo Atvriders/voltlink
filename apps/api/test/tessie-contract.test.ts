@@ -117,7 +117,7 @@ beforeAll(async () => {
       charger_actual_current: 32,
       charge_current_request: 32,
       charge_current_request_max: 48,
-      charge_port_door_open: true,
+      charge_port_door_open: false,
       minutes_to_full_charge: 95,
       timestamp: 1700000000000,
     },
@@ -202,6 +202,12 @@ beforeAll(async () => {
       return res.status(400).json({ error: 'state takes no query parameters' });
     }
     const vin = String(req.params.vin);
+    // 5YJ3PORTOPEN00001 drives the guard precheck: charge port already open.
+    if (vin === '5YJ3PORTOPEN00001')
+      return res.json({
+        ...state,
+        charge_state: { ...(state.charge_state as object), charge_port_door_open: true },
+      });
     if (vin === '5YJ3SLEEP0000001') return res.json({ ...state, state: 'asleep' });
     if (vin === '5YJ3AUTH0000001') return res.status(401).json({ error: 'bad token' });
     return res.json(state);
@@ -471,7 +477,7 @@ describe('Tessie provider request routes match guide 02 (expected reds until ste
       sentry_mode: { sentryOn: true },
       valet_mode: { valetOn: true },
       speed_limit: { speedLimitOn: true, speedLimitKmh: 80, pin: '1234' },
-      send_navigation: { destination: '1 Main St' },
+      send_navigation: { destination: { name: '1 Main St' } },
       schedule_update: { updateDelaySec: 60 },
       window_vent: {},
       open_trunk: {},
@@ -493,26 +499,36 @@ describe('Tessie provider request routes match guide 02 (expected reds until ste
       const hit = cmdCalls.some(
         (r) => r.path.endsWith(`/command/${routeName}`) || r.path.endsWith(`/${routeName}`),
       );
-      // The provider must either have requested the documented route, or (for
-      // commands refused locally — validation, guards, unmapped) have sent no
-      // COMMAND request at all. State/status reads for prechecks are fine.
+      // commands-8: EVERY documented command must hit its documented route
+      // when given a valid state and valid params. Only types explicitly named
+      // here may refuse locally (each entry states why); any other miss fails.
+      const LOCALLY_REFUSED: Record<string, string> = {};
+      if (LOCALLY_REFUSED[type]) {
+        expect(out.kind === 'rejected' || out.kind === 'unsupported', LOCALLY_REFUSED[type]).toBe(
+          true,
+        );
+        expect(cmdCalls.length, LOCALLY_REFUSED[type]).toBe(0);
+        continue;
+      }
       expect(
-        hit ||
-          (out.kind === 'unsupported' && cmdCalls.length === 0) ||
-          (out.kind === 'rejected' && cmdCalls.length === 0),
+        hit,
         `${type} → ${route} (got kind=${out.kind}, ${
           cmdCalls.map((c) => `${c.method} ${c.path}`).join(', ') || 'no command request'
         })`,
       ).toBe(true);
       // speed_limit is a documented multi-step command (set_speed_limit then
-      // enable/disable_speed_limit) — its steps are asserted in the dedicated
-      // test, so the generic wrong-route check is skipped for it.
-      if (type !== 'speed_limit') {
-        const wrong = cmdCalls.filter(
-          (r) => r.path.includes('/command/') && !r.path.endsWith(`/command/${routeName}`),
-        );
-        expect(wrong, `${type} hit ${wrong.map((r) => r.path).join(',')}`).toEqual([]);
-      }
+      // enable/disable_speed_limit) — every step must be on a documented name,
+      // and the dedicated test asserts the exact order and queries.
+      const ALLOWED_STEPS: Record<string, string[]> = {
+        speed_limit: ['set_speed_limit', 'enable_speed_limit', 'disable_speed_limit'],
+      };
+      const allowed = ALLOWED_STEPS[type] ?? [routeName];
+      const wrong = cmdCalls.filter(
+        (r) =>
+          r.path.includes('/command/') &&
+          !allowed.some((name) => r.path.endsWith(`/command/${name}`)),
+      );
+      expect(wrong, `${type} hit ${wrong.map((r) => r.path).join(',')}`).toEqual([]);
     }
   });
 });
@@ -599,7 +615,7 @@ describe('Tessie provider commands on the documented fake', () => {
 
   it('guard precheck rejects when the charge port is already open', async () => {
     const p = new TessieProvider();
-    const out = await p.sendCommand(ctx, '5YJ3000000NEXUS02', 'charge_port_open', {});
+    const out = await p.sendCommand(ctx, '5YJ3PORTOPEN00001', 'charge_port_open', {});
     expect(out.kind).toBe('rejected');
     expect(out.providerCode).toBe('PRECHECK');
   });
