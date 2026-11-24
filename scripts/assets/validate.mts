@@ -281,23 +281,25 @@ for (const file of readdirSync(STAGED).filter((f) => f.endsWith('.glb') && !f.in
     if (mb.min.y < -0.01)
       fail(full, 'ENVELOPE', `${name} below ground: min.y ${mb.min.y.toFixed(3)}`);
     if (name.endsWith('_mesh') && name !== 'body_mesh' && bodyBox) {
+      // Horizontal containment: a part may sit below the floor line (battery,
+      // underbody gear) but never outside the body footprint or above the
+      // roofline — the old parent-inverse bug pushed doors/windows sideways
+      // and down.
       if (
         mb.min.x < bodyBox.min.x - ENVELOPE_TOL ||
         mb.max.x > bodyBox.max.x + ENVELOPE_TOL ||
-        mb.min.y < bodyBox.min.y - ENVELOPE_TOL ||
-        mb.max.y > bodyBox.max.y + ENVELOPE_TOL ||
         mb.min.z < bodyBox.min.z - ENVELOPE_TOL ||
-        mb.max.z > bodyBox.max.z + ENVELOPE_TOL
+        mb.max.z > bodyBox.max.z + ENVELOPE_TOL ||
+        mb.max.y > bodyBox.max.y + ENVELOPE_TOL
       ) {
         fail(
           full,
           'ENVELOPE',
           `${name} outside body envelope: x[${mb.min.x.toFixed(2)},${mb.max.x.toFixed(2)}] ` +
             `vs x[${bodyBox.min.x.toFixed(2)},${bodyBox.max.x.toFixed(2)}] ` +
-            `y[${mb.min.y.toFixed(2)},${mb.max.y.toFixed(2)}] ` +
-            `vs y[${bodyBox.min.y.toFixed(2)},${bodyBox.max.y.toFixed(2)}] ` +
             `z[${mb.min.z.toFixed(2)},${mb.max.z.toFixed(2)}] ` +
-            `vs z[${bodyBox.min.z.toFixed(2)},${bodyBox.max.z.toFixed(2)}]`,
+            `vs z[${bodyBox.min.z.toFixed(2)},${bodyBox.max.z.toFixed(2)}] ` +
+            `yMax[${mb.max.y.toFixed(2)}] vs yMax[${bodyBox.max.y.toFixed(2)}]`,
         );
       }
     }
