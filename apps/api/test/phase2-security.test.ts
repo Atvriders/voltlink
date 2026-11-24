@@ -237,7 +237,7 @@ describe(
 );
 
 describe('MFA ceremony edges (A-TOTPLOGIN)', () => {
-  it('A-TOTPLOGIN: /login/mfa refuses no, consumed, expired and foreign ceremonies', async () => {
+  it('A-TOTPLOGIN: /login/mfa refuses no and expired ceremonies, accepts a valid code and marks it consumed', async () => {
     const userA = await mkUser(`p2-cer-${Date.now()}@example.test`);
     const userB = await mkUser(`p2-cerb-${Date.now()}@example.test`);
     const { token } = await sessionFor(userA.id, true);

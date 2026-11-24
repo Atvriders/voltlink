@@ -112,29 +112,66 @@ describe('C-NOTESTS M2b: anonymous MFA completion cannot sign anyone in', () => 
     return { header: token, cookie };
   }
 
-  it('anonymous {email, code} at /login/mfa is refused with no session cookie', async () => {
+  const moduleTotp = new TOTP({ crypto: new NobleCryptoPlugin(), base32: new ScureBase32Plugin() });
+
+  // A user with ENROLLED TOTP and fresh recovery codes: the verification's M2b
+  // (no-ceremony email lookup with the code check kept) can only sign this user
+  // in with a REAL code — the old version pointed the bogus code at the
+  // TOTP-less admin, so the TOTP-only bypass survived both tests.
+  async function mkEnrolledUser(email: string) {
+    const user = await prisma.user.create({
+      data: {
+        email,
+        name: email.split('@')[0]!,
+        passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
+        webauthnUserId: randomId(),
+        emailVerifiedAt: new Date(),
+      },
+      select: { id: true, email: true },
+    });
+    const setup = await totpSetup(user.id);
+    const confirmed = await totpConfirm(
+      user.id,
+      await moduleTotp.generate({ secret: setup.secret }),
+    );
+    // Clear the replay marker so a code from this same time step verifies.
+    await prisma.user.update({ where: { id: user.id }, data: { totpLastStep: null } });
+    return { user, secret: setup.secret, recoveryCodes: confirmed.recoveryCodes };
+  }
+
+  async function postAnonymousMfa(body: unknown): Promise<Response> {
     const c = await csrf();
-    const res = await fetch(`${base}/api/v1/auth/login/mfa`, {
+    return fetch(`${base}/api/v1/auth/login/mfa`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-vl-csrf': c.header, cookie: c.cookie },
-      body: JSON.stringify({ email: adminEmail, code: '123456' }),
+      body: JSON.stringify(body),
     });
+  }
+
+  it('anonymous {email, current valid code} at /login/mfa signs nobody in', async () => {
+    const { user, secret } = await mkEnrolledUser(`cnotes-m2b-${uniq()}@test.dev`);
+    const code = await moduleTotp.generate({ secret });
+    const res = await postAnonymousMfa({ email: user.email, code });
     const bodyText = await res.text();
     expect(res.status, bodyText).toBe(401);
     expect(res.headers.getSetCookie?.() ?? []).toEqual([]);
     expect(bodyText).not.toContain('vl_session');
+    expect(await prisma.userSession.count({ where: { userId: user.id } })).toBe(0);
   });
 
-  it('anonymous {email, recoveryCode} at /login/mfa is refused', async () => {
-    const c = await csrf();
-    const res = await fetch(`${base}/api/v1/auth/login/mfa`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-vl-csrf': c.header, cookie: c.cookie },
-      body: JSON.stringify({ email: adminEmail, recoveryCode: 'ABCD-EFGH-IJKL-MNOP' }),
-    });
+  it('anonymous {email, unused recovery code} at /login/mfa signs nobody in and consumes nothing', async () => {
+    const { user, recoveryCodes } = await mkEnrolledUser(`cnotes-m2br-${uniq()}@test.dev`);
+    const res = await postAnonymousMfa({ email: user.email, recoveryCode: recoveryCodes[0] });
     const bodyText = await res.text();
     expect(res.status, bodyText).toBe(401);
     expect(res.headers.getSetCookie?.() ?? []).toEqual([]);
+    expect(await prisma.userSession.count({ where: { userId: user.id } })).toBe(0);
+    // The presented recovery code must still be unused: M2b consumes it on the
+    // way to a 200 sign-in.
+    const unused = await prisma.recoveryCode.count({
+      where: { userId: user.id, usedAt: null },
+    });
+    expect(unused).toBe(recoveryCodes.length);
   });
 });
 
