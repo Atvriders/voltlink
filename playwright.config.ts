@@ -14,6 +14,7 @@ export default defineConfig({
       threshold: 0.2,
       animations: 'disabled',
       caret: 'hide',
+      stylePath: ['tests/e2e/screenshot.css'],
     },
   },
   fullyParallel: false,

@@ -1,0 +1,21 @@
+/* Guide 08 §11.5 — injected into page snapshots only (Playwright
+ * toHaveScreenshot stylePath). The WebGL canvas is animation-dependent, so
+ * page shots hide it behind a deterministic placeholder; the viewer has its
+ * own element shots (maxDiffPixelRatio 0.01) with stylePath: [].
+ */
+[data-testid='vehicle-viewer'] canvas {
+  visibility: hidden;
+}
+[data-testid='vehicle-viewer'] {
+  position: relative;
+}
+[data-testid='vehicle-viewer']::after {
+  content: 'WebGL viewer';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #0b0f14;
+  color: #8b95a1;
+  font-size: 12px;
+}

@@ -392,6 +392,7 @@ test('showroom page', async ({ page }) => {
   // still uses the 25-pixel budget.
   await expect(viewer).toHaveScreenshot('showroom-viewer.png', {
     maxDiffPixelRatio: 0.01,
+    stylePath: [],
     timeout: 60000,
   });
   await expect(page).toHaveScreenshot('showroom.png', {
@@ -450,6 +451,7 @@ test('webgl loading state holds the GLB and shows data-asset-state=loading', asy
   });
   await expect(viewer).toHaveScreenshot('webgl-loading.png', {
     maxDiffPixelRatio: 0.01,
+    stylePath: [],
     timeout: 60000,
   });
 });
