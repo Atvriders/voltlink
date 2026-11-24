@@ -169,13 +169,23 @@ export default function LiveVehiclePage() {
         {state && (
           <Badge
             tone={
-              (FRESHNESS_LABEL[computeFreshness(state, Date.now())] ?? FRESHNESS_LABEL.last_known!)
-                .tone
+              (
+                FRESHNESS_LABEL[
+                  ['stale', 'last_known'].includes(String(state.freshness))
+                    ? String(state.freshness)
+                    : computeFreshness(state, Date.now())
+                ] ?? FRESHNESS_LABEL.last_known!
+              ).tone
             }
           >
             {
-              (FRESHNESS_LABEL[computeFreshness(state, Date.now())] ?? FRESHNESS_LABEL.last_known!)
-                .label
+              (
+                FRESHNESS_LABEL[
+                  ['stale', 'last_known'].includes(String(state.freshness))
+                    ? String(state.freshness)
+                    : computeFreshness(state, Date.now())
+                ] ?? FRESHNESS_LABEL.last_known!
+              ).label
             }
           </Badge>
         )}{' '}
