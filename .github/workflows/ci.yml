@@ -238,7 +238,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: bash scripts/e2e/start-stack.sh
+      # Guide 08 §11.2: the whole e2e matrix runs against the scripted
+      # frozen visual stack (fresh voltlink_visual database, NODE_ENV=test,
+      # VL_TEST_FROZEN_NOW, poller off) — no hand-set environment anywhere.
+      - run: bash scripts/e2e/start-stack.sh visual
         env:
           # start-stack.sh never reads apps/api/.env (R2-24); everything comes
           # from the environment. Public URL is the API itself, which serves
@@ -261,7 +264,7 @@ jobs:
           npx playwright test \
             --project=desktop --project=tablet --project=mobile \
             --project=webgl-swiftshader --project=no-webgl --project=a11y \
-            --workers=3
+            --update-snapshots=none --workers=3
         env:
           E2E_BASE_URL: http://127.0.0.1:3111
           VL_E2E_SMTP_HTTP: http://127.0.0.1:1026

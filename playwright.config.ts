@@ -6,7 +6,16 @@ export default defineConfig({
   // demo-fleet-predicate.test.ts) are never Playwright tests.
   testMatch: /\.spec\.ts$/,
   timeout: 60000,
-  expect: { timeout: 10000 },
+  expect: {
+    timeout: 10000,
+    // web-10: the pixel contract lives in config defaults, not per-call flags.
+    toHaveScreenshot: {
+      maxDiffPixels: 25,
+      threshold: 0.2,
+      animations: 'disabled',
+      caret: 'hide',
+    },
+  },
   fullyParallel: false,
   workers: 1,
   retries: 0,

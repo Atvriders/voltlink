@@ -176,7 +176,11 @@ export default function LiveVehiclePage() {
             Charging {fmtPower(state.chargePowerKw)}
           </Badge>
         )}
-        {state && <span className="text-xs text-faint">updated {timeAgo(state.fetchedAt)}</span>}
+        {state && (
+          <span className="text-xs text-faint" data-relative-time>
+            updated {timeAgo(state.fetchedAt)}
+          </span>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <Select
             aria-label="Graphics preset"

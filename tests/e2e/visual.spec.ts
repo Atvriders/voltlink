@@ -21,12 +21,22 @@
 import { expect, test, type Page } from '@playwright/test';
 import { DEMO_VEHICLES, enableDemo, register } from './helpers';
 
-const T = { maxDiffPixels: 25 };
+// Guide 08 §11.3: the browser clock is frozen to the scripted visual instant
+// before ANY navigation, so relative and wall-clock timestamps are
+// pixel-stable on any day of the year.
+const FROZEN = new Date('2026-06-15T15:30:00Z');
 
-// Dynamic regions: the account chip (email) and tabular numbers (relative
-// times, odometers, live counters) are masked in every logged-in snapshot.
+async function freezeClock(page: Page): Promise<void> {
+  await page.clock.setFixedTime(FROZEN);
+}
+
+const T = { maxDiffPixels: 25, fullPage: true };
+
+// Dynamic regions: the account chip and every [data-relative-time] element
+// the product marks are masked in every logged-in snapshot. No month or
+// format regexes: the frozen clock keeps every timestamp stable.
 function maskDynamic(page: Page) {
-  return [page.getByRole('button', { name: /Account menu/ }), page.locator('.tabular-nums')];
+  return [page.getByRole('button', { name: /Account menu/ }), page.locator('[data-relative-time]')];
 }
 
 async function loginAsInstanceAdmin(page: Page): Promise<void> {
@@ -60,6 +70,7 @@ async function registerWithDemoFleet(page: Page): Promise<void> {
 }
 
 test('sign-in page', async ({ page }) => {
+  await freezeClock(page);
   await page.goto('/login');
   await expect(page.getByRole('heading', { name: 'VoltLink' })).toBeVisible();
   await page.waitForTimeout(1000);
@@ -67,6 +78,7 @@ test('sign-in page', async ({ page }) => {
 });
 
 test('overview desktop with demo fleet', async ({ page }) => {
+  await freezeClock(page);
   await registerWithDemoFleet(page);
   await assertDemoFleetOn(page);
   await page.waitForTimeout(1500);
@@ -77,6 +89,7 @@ test('overview desktop with demo fleet', async ({ page }) => {
 });
 
 test('live vehicle controls panel', async ({ page }) => {
+  await freezeClock(page);
   await registerWithDemoFleet(page);
   await page.getByRole('button', { name: 'Live vehicle' }).first().click();
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 20000 });
@@ -91,6 +104,7 @@ test('live vehicle controls panel', async ({ page }) => {
 });
 
 test('drives page', async ({ page }) => {
+  await freezeClock(page);
   await registerWithDemoFleet(page);
   await page.goto('/drives');
   await expect(page.getByRole('heading', { name: 'Drives' })).toBeVisible({
@@ -108,6 +122,7 @@ test('drives page', async ({ page }) => {
 });
 
 test('charging page', async ({ page }) => {
+  await freezeClock(page);
   await registerWithDemoFleet(page);
   await page.goto('/charging');
   await expect(page.getByText('Electricity rates')).toBeVisible({ timeout: 20000 });
@@ -123,6 +138,7 @@ test('charging page', async ({ page }) => {
 });
 
 test('automations page', async ({ page }) => {
+  await freezeClock(page);
   await registerWithDemoFleet(page);
   await page.goto('/automations');
   await expect(page.getByRole('heading', { name: 'Automations' })).toBeVisible({ timeout: 20000 });
@@ -138,6 +154,7 @@ test('automations page', async ({ page }) => {
 });
 
 test('fleet page', async ({ page }) => {
+  await freezeClock(page);
   await registerWithDemoFleet(page);
   await page.goto('/fleet');
   await expect(page.getByText('Fleet status')).toBeVisible({ timeout: 20000 });
@@ -155,6 +172,7 @@ test('fleet page', async ({ page }) => {
 });
 
 test('public status page', async ({ page }) => {
+  await freezeClock(page);
   await page.goto('/status');
   await expect(page.getByText(/operational|degraded|outage|maintenance/i).first()).toBeVisible({
     timeout: 20000,
@@ -173,6 +191,7 @@ test('public status page', async ({ page }) => {
 });
 
 test('settings security tab', async ({ page }) => {
+  await freezeClock(page);
   await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await page.goto('/settings/security');
   await expect(page.getByText('Two-factor authentication (TOTP)', { exact: true })).toBeVisible({
@@ -186,6 +205,7 @@ test('settings security tab', async ({ page }) => {
 });
 
 test('admin page as instance admin', async ({ page }) => {
+  await freezeClock(page);
   await loginAsInstanceAdmin(page);
   await page.goto('/admin');
   await expect(page.getByText('Users & roles')).toBeVisible({ timeout: 20000 });
@@ -213,6 +233,7 @@ test('admin page as instance admin', async ({ page }) => {
 });
 
 test('admin page for a non-admin shows the 403 card and hides the nav', async ({ page }) => {
+  await freezeClock(page);
   await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await page.goto('/admin');
   // R2-35: a non-admin gets a 403 card (expected red until the step-5
@@ -229,6 +250,7 @@ test('admin page for a non-admin shows the 403 card and hides the nav', async ({
 });
 
 test('map page', async ({ page }) => {
+  await freezeClock(page);
   await registerWithDemoFleet(page);
   await page.goto('/map');
   await expect(page.locator('div[aria-label="Map"]')).toBeVisible({
@@ -258,6 +280,7 @@ test('map page', async ({ page }) => {
 });
 
 test('light theme overview', async ({ page }) => {
+  await freezeClock(page);
   await registerWithDemoFleet(page);
   await assertDemoFleetOn(page);
   // switch to light theme via the theme menu
@@ -271,6 +294,7 @@ test('light theme overview', async ({ page }) => {
 });
 
 test('battery page', async ({ page }) => {
+  await freezeClock(page);
   await registerWithDemoFleet(page);
   await page.goto('/battery');
   await expect(page.getByText('Battery health estimate')).toBeVisible({
@@ -286,6 +310,7 @@ test('battery page', async ({ page }) => {
 });
 
 test('notifications page', async ({ page }) => {
+  await freezeClock(page);
   await registerWithDemoFleet(page);
   await page.goto('/notifications');
   await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible({
@@ -298,13 +323,14 @@ test('notifications page', async ({ page }) => {
   await page.waitForTimeout(1000);
   await expect(page).toHaveScreenshot('notifications.png', {
     ...T,
-    // notification createdAt is wall-clock by design (runtime events + the
-    // per-run welcome mail); the content itself is asserted above
-    mask: [...maskDynamic(page), page.getByText(/^Nov \d{1,2}, \d{4}, /)],
+    // notification createdAt is wall-clock by design, but the frozen browser
+    // clock keeps it stable; only [data-relative-time] regions are masked.
+    mask: maskDynamic(page),
   });
 });
 
 test('providers page', async ({ page }) => {
+  await freezeClock(page);
   await registerWithDemoFleet(page);
   await page.goto('/providers');
   // Strict: the exact-count badge — the loose /demo vehicles/ regex also
@@ -322,6 +348,7 @@ test('providers page', async ({ page }) => {
 });
 
 test('vehicles list page', async ({ page }) => {
+  await freezeClock(page);
   await registerWithDemoFleet(page);
   await page.goto('/vehicles');
   await assertDemoFleetOn(page);
@@ -333,6 +360,7 @@ test('vehicles list page', async ({ page }) => {
 });
 
 test('drive detail page', async ({ page }) => {
+  await freezeClock(page);
   await registerWithDemoFleet(page);
   await page.goto('/drives');
   await expect(page.getByRole('heading', { name: 'Drives' })).toBeVisible({
@@ -348,6 +376,7 @@ test('drive detail page', async ({ page }) => {
 });
 
 test('showroom page', async ({ page }) => {
+  await freezeClock(page);
   await registerWithDemoFleet(page);
   await page.goto('/showroom');
   const viewer = page.locator('[data-testid="vehicle-viewer"]');
@@ -373,6 +402,7 @@ test('showroom page', async ({ page }) => {
 });
 
 test('admin users tab as instance admin', async ({ page }) => {
+  await freezeClock(page);
   await loginAsInstanceAdmin(page);
   await page.goto('/admin');
   await expect(page.getByText(/accounts|users/i).first()).toBeVisible({
@@ -397,6 +427,7 @@ test('admin users tab as instance admin', async ({ page }) => {
 });
 
 test('status admin page', async ({ page }) => {
+  await freezeClock(page);
   await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await enableDemo(page);
   await page.goto('/status-admin');
@@ -418,6 +449,7 @@ test('status admin page', async ({ page }) => {
 });
 
 test('onboarding welcome', async ({ page }) => {
+  await freezeClock(page);
   await register(page, `e2e-vis-${Date.now()}@voltlink.test`);
   await page.goto('/onboarding');
   await expect(page.getByText('Welcome to VoltLink')).toBeVisible({

@@ -6,10 +6,16 @@
 import { expect, test, type Page } from '@playwright/test';
 import { DEMO_VEHICLES, enableDemo, register } from './helpers';
 
-const T = { maxDiffPixels: 25 };
+const FROZEN = new Date('2026-06-15T15:30:00Z');
+
+async function freezeClock(page: Page): Promise<void> {
+  await page.clock.setFixedTime(FROZEN);
+}
+
+const T = { maxDiffPixels: 25, fullPage: true };
 
 function maskDynamic(page: Page) {
-  return [page.getByRole('button', { name: /Account menu/ }), page.locator('.tabular-nums')];
+  return [page.getByRole('button', { name: /Account menu/ }), page.locator('[data-relative-time]')];
 }
 
 async function registerWithDemoFleet(page: Page): Promise<void> {
@@ -24,6 +30,7 @@ async function registerWithDemoFleet(page: Page): Promise<void> {
 }
 
 test('overview at project viewport', async ({ page }) => {
+  await freezeClock(page);
   await registerWithDemoFleet(page);
   await page.waitForTimeout(1500);
   await expect(page).toHaveScreenshot('overview.png', {
@@ -34,6 +41,7 @@ test('overview at project viewport', async ({ page }) => {
 });
 
 test('live vehicle controls at project viewport', async ({ page }) => {
+  await freezeClock(page);
   await registerWithDemoFleet(page);
   await page.getByRole('button', { name: 'Live vehicle' }).first().click();
   await expect(page.getByText('Remote controls')).toBeVisible({ timeout: 30000 });

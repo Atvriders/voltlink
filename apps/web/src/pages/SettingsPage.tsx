@@ -261,7 +261,7 @@ function SecurityTab() {
               >
                 <span className="flex items-center gap-2">
                   <KeyRound size={13} className="text-accent" /> {p.name}{' '}
-                  <span className="text-xs text-faint">
+                  <span className="text-xs text-faint" data-relative-time>
                     {fmtDateTime(p.createdAt, user?.timezone)}
                   </span>
                 </span>
@@ -504,7 +504,7 @@ function SessionsTab() {
               <Laptop size={15} className="text-subtle" />
               <div className="min-w-0 flex-1">
                 <p className="truncate">{s.userAgent || 'Unknown device'}</p>
-                <p className="text-xs text-faint">
+                <p className="text-xs text-faint" data-relative-time>
                   {s.ip} · created {fmtDateTime(s.createdAt, user?.timezone)} ·{' '}
                   {s.lastSeenAt ? `last seen ${fmtDateTime(s.lastSeenAt, user?.timezone)}` : ''}
                 </p>

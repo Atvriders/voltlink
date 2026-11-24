@@ -196,7 +196,10 @@ export default function DrivesPage() {
                     className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm hover:bg-panel2"
                   >
                     <span className="w-32 shrink-0 font-medium">{d.vehicleName}</span>
-                    <span className="w-36 whitespace-nowrap text-subtle tabular-nums">
+                    <span
+                      className="w-36 whitespace-nowrap text-subtle tabular-nums"
+                      data-relative-time
+                    >
                       {fmtClock(d.startAt, user?.timezone)} → {fmtClock(d.endAt, user?.timezone)}
                     </span>
                     <span className="w-24">{fmtDist(d.distanceKm, units)}</span>

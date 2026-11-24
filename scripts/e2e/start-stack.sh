@@ -51,6 +51,16 @@ if [ "${1:-}" = "stop" ]; then
   exit 0
 fi
 
+# ---- visual mode (guide 08 §11.2) -------------------------------------------
+# `start-stack.sh visual` boots the scripted frozen demo stack for the visual
+# baselines: a FRESH voltlink_visual database every time, NODE_ENV=test,
+# VL_TEST_FROZEN_NOW fixed, provider poller off. No hand-set environment is
+# ever needed; TESTING.md documents this mode.
+VISUAL_MODE=0
+if [ "${1:-}" = "visual" ]; then
+  VISUAL_MODE=1
+fi
+
 mkdir -p "$RUN_DIR" "$LOG_DIR"
 [ -f "$PID_FILE" ] && stop_stack
 : > "$PID_FILE"
@@ -64,7 +74,25 @@ record_pid() {
 : "${JWT_SECRET:?JWT_SECRET is required}"
 : "${VL_MASTER_KEY:?VL_MASTER_KEY is required}"
 : "${PUBLIC_URL:?PUBLIC_URL is required (e.g. http://127.0.0.1:3110)}"
-export NODE_ENV="${NODE_ENV:-production}"
+if [ "$VISUAL_MODE" = "1" ]; then
+  # Guide 08 §11.2: rewrite the database to voltlink_visual (unless the caller
+  # pins VL_VISUAL_KEEP_DB) and reset it so every visual run starts from the
+  # same fresh demo world.
+  if [ "${VL_VISUAL_KEEP_DB:-}" != "1" ]; then
+    DATABASE_URL="$(node -e "const u=new URL(process.argv[1]);u.pathname='/voltlink_visual';process.stdout.write(u.toString())" "$DATABASE_URL")"
+    ADMIN_DB_URL="$(node -e "const u=new URL(process.argv[1]);u.pathname='/postgres';process.stdout.write(u.toString())" "$DATABASE_URL")"
+    node "$SCRIPT_DIR/reset-visual-db.mjs" "$ADMIN_DB_URL" || {
+      echo 'visual db reset failed' >&2
+      exit 1
+    }
+  fi
+  export NODE_ENV="test"
+  export VL_TEST_FROZEN_NOW="2026-06-15T15:30:00Z"
+  export VL_POLLER_ENABLED="false"
+  echo 'visual mode: fresh voltlink_visual database, NODE_ENV=test, VL_TEST_FROZEN_NOW=2026-06-15T15:30:00Z, VL_POLLER_ENABLED=false'
+else
+  export NODE_ENV="${NODE_ENV:-production}"
+fi
 # R2-24: the shared machine — bind loopback unless the caller explicitly opts out.
 export HOST="${HOST:-127.0.0.1}"
 export PORT="${PORT:-3111}"

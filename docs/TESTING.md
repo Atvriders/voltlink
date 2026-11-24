@@ -42,6 +42,26 @@ cd apps/api && PORT=3111 node dist/index.cjs
 
 ## Visual regression
 
+The visual baselines are generated from the SCRIPTED frozen demo stack
+(guide 08 §11.2), never from a hand-set environment:
+
+```
+RUN_DIR="$PWD/scripts/e2e/run-visual" \
+DATABASE_URL=postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink \
+REDIS_URL=redis://127.0.0.1:6379 \
+JWT_SECRET=<32+ char secret> VL_MASTER_KEY=<base64> \
+PUBLIC_URL=http://127.0.0.1:3111 \
+bash scripts/e2e/start-stack.sh visual
+```
+
+Visual mode resets the dedicated `voltlink_visual` database on every boot,
+runs `NODE_ENV=test` with `VL_TEST_FROZEN_NOW=2026-06-15T15:30:00Z` and
+`VL_POLLER_ENABLED=false`; the API rejects `VL_TEST_FROZEN_NOW` in
+production (the demo clock is test-only, `apps/api/src/core/demoClock.ts`).
+CI's e2e-fullstack job boots this same mode. The Playwright specs freeze the
+browser clock with `page.clock.setFixedTime` before navigating, so relative
+times are pixel-stable on any day.
+
 `tests/e2e/visual.spec.ts` (desktop project) snapshots: sign-in, overview
 (desktop + light theme), live vehicle, drives, charging, automations, fleet,
 map, public status, settings security, admin (as the instance admin), the
@@ -50,11 +70,12 @@ detail, showroom (page + viewer element), admin users, status admin and
 onboarding. `tests/e2e/visual-mobile.spec.ts` runs under the real mobile
 (Pixel 7) and tablet (iPad Pro 11) projects: overview and live vehicle.
 Every snapshot is preceded by content assertions on the page's own seeded
-data, dynamic regions (account chip, relative times/counters) are masked,
-and full-page tolerance is `maxDiffPixels: 25` (the WebGL viewer element
-shot uses `maxDiffPixelRatio: 0.01`). Baselines live in
+data, dynamic regions (account chip, `[data-relative-time]` elements) are
+masked, and full-page tolerance is `maxDiffPixels: 25` (the WebGL viewer
+element shot uses `maxDiffPixelRatio: 0.01`). Baselines live in
 `tests/e2e/visual.spec.ts-snapshots/` and are regenerated only in R6 with
-`--update-snapshots`, reviewing every diff image before committing.
+`--update-snapshots` against the scripted visual stack, reviewing every diff
+image before committing.
 
 ## Blender assets
 

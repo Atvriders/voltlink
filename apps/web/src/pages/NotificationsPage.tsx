@@ -110,7 +110,9 @@ export default function NotificationsPage() {
                           )}
                         </div>
                         <p className="text-sm text-subtle">{n.body}</p>
-                        <p className="mt-0.5 text-[11px] text-faint">{fmtDateTime(n.createdAt)}</p>
+                        <p className="mt-0.5 text-[11px] text-faint" data-relative-time>
+                          {fmtDateTime(n.createdAt)}
+                        </p>
                       </div>
                       {!n.readAt && (
                         <span

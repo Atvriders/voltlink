@@ -348,7 +348,9 @@ function OverviewState({ state, units }: { state: VehicleState; units: 'metric' 
             <ShieldAlert size={12} /> Security mode
           </span>
         )}
-        <span className="ml-auto text-xs text-faint">updated {timeAgo(state.fetchedAt)}</span>
+        <span className="ml-auto text-xs text-faint" data-relative-time>
+          updated {timeAgo(state.fetchedAt)}
+        </span>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
