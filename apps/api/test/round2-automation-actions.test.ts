@@ -1,11 +1,20 @@
 // R5: automation action realism (N-ACTIONSTUBS, N-CONDITIONS):
 // tag_drive really tags a drive, previous_result reads the last run's result,
 // maxRetries actually retries, and the hourly budget prevents loops.
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { prisma } from '../src/core/db';
 import { initRedis } from '../src/core/redis';
 import { randomId, hashPassword } from '../src/core/crypto';
 import { runAutomation, evaluateCondition } from '../src/automations/engine';
+import { issueCommand } from '../src/commands/service';
+
+// TI-13: count command-pipeline attempts. The engine imports the module
+// dynamically, so mock it module-wide with a passthrough spy and count calls
+// by action type below.
+vi.mock('../src/commands/service', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/commands/service')>();
+  return { ...actual, issueCommand: vi.fn(actual.issueCommand) };
+});
 
 beforeAll(async () => {
   await initRedis();
@@ -133,16 +142,10 @@ describe('automation actions are real (N-ACTIONSTUBS)', { tags: ['automation'] }
     expect(ran.result).toBe('success');
   });
 
-  // TI-13: the spec is per-ACTION retry — only the FAILING action is re-run.
-  // The successful actions (notify_app, flash_lights) must fire exactly once
-  // and a permanent validation error is attempted once. The current engine
-  // re-runs EVERY action on each attempt (PROGRESS honesty entry 2026-11-20
-  // review part 12), so this test is an expected red until the step-5 engine
-  // fix. The old 'maxRetries retries failed actions up to the configured
-  // count' test asserted the DEFECT (inbox === 3) and was merged here; the old
-  // 'cmds <= 1' check could never fail because set_charge_limit(5) is rejected
-  // by zod before any VehicleCommand row and the fixture vehicle had no
-  // capabilities.
+  // TI-13: the spec is per-ACTION retry — only the FAILING action is re-run,
+  // and a PERMANENT failure (CommandError 4xx: VALIDATION / UNSUPPORTED /
+  // UNKNOWN_COMMAND) is attempted exactly once. Successful actions
+  // (notify_app, flash_lights) must fire exactly once.
   it('TI-13 maxRetries retries only the failed action, without duplicate side effects', async () => {
     const { vehicle, automation } = await mkWorld();
     const auto = await automation({
@@ -170,7 +173,15 @@ describe('automation actions are real (N-ACTIONSTUBS)', { tags: ['automation'] }
     expect(cmds, 'a successful action must not be re-issued').toBe(1);
 
     // The permanent validation error (chargeLimitPct 5 is outside 50..100) is
-    // attempted once and reported once.
+    // attempted exactly once through the command pipeline, not once per retry.
+    const setChargeCalls = vi
+      .mocked(issueCommand)
+      .mock.calls.filter((c) => c[2] === 'set_charge_limit');
+    expect(
+      setChargeCalls,
+      'a permanent validation error must reach issueCommand exactly once',
+    ).toHaveLength(1);
+
     const failed = res.actionResults.filter((r) => r.action === 'set_charge_limit');
     expect(failed).toHaveLength(1);
     expect(failed[0]!.ok).toBe(false);

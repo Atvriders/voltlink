@@ -181,6 +181,13 @@ export async function evaluateCondition(
 // Actions
 // ---------------------------------------------------------------------------
 
+/** TI-13: 4xx CommandErrors are permanent — retrying cannot succeed. */
+function isPermanentError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const e = err as Error & { code?: string; status?: number };
+  return typeof e.code === 'string' && typeof e.status === 'number' && e.status < 500;
+}
+
 export async function executeActions(
   userId: string,
   actions: { type: ActionType; params: Record<string, unknown> }[],
@@ -191,14 +198,21 @@ export async function executeActions(
     automationId?: string;
     organizationId?: string;
   },
-): Promise<{ action: ActionType; ok: boolean; detail: string }[]> {
-  const results: { action: ActionType; ok: boolean; detail: string }[] = [];
+): Promise<{ action: ActionType; ok: boolean; detail: string; permanent?: boolean }[]> {
+  const results: { action: ActionType; ok: boolean; detail: string; permanent?: boolean }[] = [];
   for (const a of actions) {
     try {
       const detail = await executeAction(userId, a, ctx);
       results.push({ action: a.type, ok: true, detail });
     } catch (err) {
-      results.push({ action: a.type, ok: false, detail: (err as Error).message.slice(0, 200) });
+      results.push({
+        action: a.type,
+        ok: false,
+        // TI-13: VALIDATION / UNSUPPORTED / UNKNOWN_COMMAND and every other
+        // 4xx command error is permanent and must not be retried.
+        permanent: isPermanentError(err),
+        detail: (err as Error).message.slice(0, 200),
+      });
     }
   }
   return results;
@@ -432,8 +446,13 @@ export async function runAutomation(
   // maxRetries: TI-13 — the spec is per-ACTION retry. Only the FAILING
   // actions are re-run on each attempt; successful actions execute exactly
   // once, so side effects (notifications, commands) never duplicate.
+  // PERMANENT failures (4xx CommandErrors) are recorded once and dropped
+  // from the pending set: no retry can succeed.
   const attempts = Math.max(1, (row.maxRetries ?? 0) + 1);
-  const finalResults = new Map<number, { action: ActionType; ok: boolean; detail: string }>();
+  const finalResults = new Map<
+    number,
+    { action: ActionType; ok: boolean; detail: string; permanent?: boolean }
+  >();
   let pending = actions.map((action, index) => ({ index, action }));
   for (let attempt = 0; attempt < attempts && pending.length > 0; attempt++) {
     const batch = await executeActions(
@@ -450,7 +469,7 @@ export async function runAutomation(
     pending = pending.filter((p, i) => {
       const result = batch[i]!;
       finalResults.set(p.index, result);
-      return !result.ok;
+      return !result.ok && !result.permanent;
     });
   }
   const actionResults = actions.map((_a, index) => finalResults.get(index)!);
