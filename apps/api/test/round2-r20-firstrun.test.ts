@@ -468,6 +468,13 @@ it(
     const saved = process.env.VL_SETUP_TOKEN;
     try {
       delete process.env.VL_SETUP_TOKEN;
+      // Make the bootstrap state self-sufficient: do not depend on an earlier
+      // test's registration having completed (it may have failed midway).
+      await prisma.appSetting.upsert({
+        where: { key: 'instance.bootstrappedAt' },
+        update: {},
+        create: { key: 'instance.bootstrappedAt', value: String(Date.now()) },
+      });
       // Any hash row left by an earlier test in THIS file is not this boot's
       // business: clear it so the check below observes only this boot.
       await prisma.appSetting.deleteMany({ where: { key: 'instance.setupTokenHash' } });
