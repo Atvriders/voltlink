@@ -61,9 +61,7 @@ describe('queue contract', { tags: ['queue'] }, () => {
     const again = await enqueue(name, { x: 2 }, { dedupeKey: `other:${Date.now()}` });
     expect(again).not.toBe(a);
     await expect(enqueue(name, { x: 1 }, { jobId: 'bad:id' })).rejects.toThrow();
-    await queue(name)
-      .obliterate({ force: true })
-      .catch(() => undefined);
+    await queue(name).obliterate({ force: true });
   });
 });
 
@@ -330,9 +328,7 @@ describe('retries and dead-lettering', () => {
       expect(processor.mock.calls.length).toBeGreaterThanOrEqual(3);
     } finally {
       await w.close();
-      await queue(name)
-        .obliterate({ force: true })
-        .catch(() => undefined);
+      await queue(name).obliterate({ force: true });
     }
   });
 
