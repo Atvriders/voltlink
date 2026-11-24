@@ -1,6 +1,7 @@
 // Round 2 headline defect tests (ROUND2_PLAN.md R0). Each test name carries
 // its issue ID and reproduces the verifier's evidence on the pre-fix code;
-// red logs are kept under ~/voltlink-handoff/evidence/round2/.
+// red logs are kept under the round-2 evidence directory in the handoff
+// folder (a machine-local path that must never appear in the repo).
 //
 // - R2-01: a fresh install with no VL_SETUP_TOKEN must get a generated,
 //   persisted setup token (currently: no token exists anywhere).

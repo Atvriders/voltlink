@@ -19,8 +19,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # R2-24: the run directory (cookie jar, logs, setup token) must live OUTSIDE
-# the repo so evidence like the setup token can never be committed.
-RUN_DIR="${RUN_DIR:-$HOME/voltlink-verify/stack-run}"
+# the repo so evidence like the setup token can never be committed. Default to
+# a machine-local temp dir; CI and developers set RUN_DIR explicitly when they
+# want a stable location.
+RUN_DIR="${RUN_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/voltlink-stack.XXXXXX")}"
 PID_FILE="$RUN_DIR/pids"
 LOG_DIR="$RUN_DIR/logs"
 export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
