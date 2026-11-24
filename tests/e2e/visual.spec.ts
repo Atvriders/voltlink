@@ -475,18 +475,29 @@ test('active incident marks the demo provider degraded on the public status page
     },
   });
   expect(created.status()).toBe(201);
-  await page.goto('/status');
-  await expect(page.getByText('Demo provider latency').first()).toBeVisible({
-    timeout: 30000,
-  });
-  await expect(page.getByText('Demo provider', { exact: true })).toBeVisible({
-    timeout: 30000,
-  });
-  await page.waitForTimeout(1000);
-  await expect(page).toHaveScreenshot('active-incident.png', {
-    ...T,
-    mask: maskDynamic(page),
-  });
+  const createdId = (((await created.json()) as { data?: { id?: string } }).data ?? {}).id ?? '';
+  expect(createdId, 'created incident id').toBeTruthy();
+  try {
+    await page.goto('/status');
+    await expect(page.getByText('Demo provider latency').first()).toBeVisible({
+      timeout: 30000,
+    });
+    await expect(page.getByText('Demo provider', { exact: true })).toBeVisible({
+      timeout: 30000,
+    });
+    await page.waitForTimeout(1000);
+    await expect(page).toHaveScreenshot('active-incident.png', {
+      ...T,
+      mask: maskDynamic(page),
+    });
+  } finally {
+    // Order-independence: the created incident must never leak into the
+    // public-status or status-admin baselines of the same or a later run.
+    await page.request.patch(`/api/v1/status/incidents/${createdId}`, {
+      headers: { 'X-VL-CSRF': token, 'Content-Type': 'application/json' },
+      data: { public: false },
+    });
+  }
 });
 
 test('provider outage shows the outage banner and stale labels', async ({ page }) => {
