@@ -5,6 +5,7 @@
 // loudly instead of running with a published default key.
 
 import { z } from 'zod';
+import { assertDemoClockEnv } from './demoClock';
 import { ENV_SPEC } from './env-spec';
 
 const PLACEHOLDER = /(secret|change.?me|changeme|placeholder|example|your-|xxxx|default)/i;
@@ -65,6 +66,8 @@ export const env = {
   DATABASE_URL: process.env.DATABASE_URL,
   REDIS_URL: process.env.REDIS_URL || '',
   QUEUE_PREFIX: optional('VL_QUEUE_PREFIX', 'voltlink'),
+  // Guide 08 §11.2: visual mode disables the provider poller.
+  POLLER_ENABLED: optional('VL_POLLER_ENABLED', 'true') === 'true',
 
   JWT_SECRET: () => requireSecret('JWT_SECRET', 32),
   JWT_EXPIRES_SEC: numberOpt('JWT_EXPIRES_SEC', 60 * 60 * 24 * 14),
@@ -172,6 +175,9 @@ export function parseTrustProxy(value: string): number | string[] | false {
 }
 
 export function validateEnv() {
+  // Guide 08 §11.1: the test-only demo clock must never take effect in
+  // production — refuse the boot outright, synchronously.
+  assertDemoClockEnv();
   const parsed = ENV_SPEC.safeParse(process.env);
   if (!parsed.success) {
     // Fail closed with a readable report (guide 04 §1).

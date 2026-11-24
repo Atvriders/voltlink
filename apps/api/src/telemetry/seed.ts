@@ -14,6 +14,7 @@ import {
   simulatedState,
 } from '../providers/demo';
 import { seededRng, hashString } from '../providers/types';
+import { demoClockNow } from '../core/demoClock';
 import { getQueue } from '../core/queue';
 
 const DAY = 86400000;
@@ -23,14 +24,11 @@ export async function seedDemoWorld(
   userId: string,
   vehicles: { id: string; providerVehicleId: string }[],
 ): Promise<void> {
-  // Visual-regression determinism (R2-35/C-VISUAL): when VL_DEMO_FROZEN_AT is
-  // set, the demo world (drives, charges, telemetry) is generated from a FIXED
-  // rng seed instead of the per-organization hash, and the 30-day history is
-  // anchored to a fixed instant — so every e2e-visual user sees identical
-  // history and pixel baselines hold across runs.
-  const frozen = process.env.VL_DEMO_FROZEN_AT;
-  const rng = seededRng(frozen ? 0x5eedf00d : hashString(organizationId) ^ 0x9e3779b9);
-  const now = frozen ? new Date(frozen) : new Date();
+  // Visual-regression determinism (R2-35/C-VISUAL, guide 08 §11.1): every
+  // demo world is generated from the CONSTANT seed hashString('voltlink-demo-v1')
+  // and the demo clock (frozen under NODE_ENV=test via VL_TEST_FROZEN_NOW).
+  const rng = seededRng(hashString('voltlink-demo-v1'));
+  const now = demoClockNow();
 
   // ---- Places ----
   const placeHome = await prisma.place.create({

@@ -289,9 +289,13 @@ describe('round2 headline defects', () => {
 
   it('R2-01: a fresh install without VL_SETUP_TOKEN gets a generated setup token', async () => {
     delete process.env.VL_SETUP_TOKEN;
-    // Isolate the precondition: a previous run's row must not leak into this
-    // fresh install.
-    await prisma.appSetting.deleteMany({ where: { key: 'instance.setupTokenHash' } });
+    // Isolate the precondition: a previous run's rows must not leak into this
+    // fresh install. TI-53: a BOOTSTRAPPED instance must not generate a token,
+    // so the bootstrap marker is cleared here too — this test is the fresh
+    // install, not a later boot.
+    await prisma.appSetting.deleteMany({
+      where: { key: { in: ['instance.setupTokenHash', 'instance.bootstrappedAt'] } },
+    });
     const mod = await import('../src/auth/setup-token');
     const token = await mod.ensureSetupToken();
     expect(token).toMatch(/^[A-Za-z0-9_-]{24,}$/);

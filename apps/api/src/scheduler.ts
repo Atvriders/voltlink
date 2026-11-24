@@ -19,7 +19,9 @@ async function main(): Promise<void> {
   await prisma.$connect();
   await ensureComponents();
 
-  poller.start();
+  // Guide 08 §11.2: visual mode (VL_POLLER_ENABLED=false) boots the
+  // scheduler without the provider poller so the demo state stays frozen.
+  if (env.POLLER_ENABLED) poller.start();
   console.log('[voltlink] scheduler started');
 
   // Scheduled automations: evaluate each minute.

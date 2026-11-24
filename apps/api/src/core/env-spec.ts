@@ -32,6 +32,10 @@ export const ENV_SPEC = z.object({
   VL_RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(900),
   VL_STEPUP_WINDOW_SEC: z.coerce.number().int().positive().default(300),
   VL_SETUP_TOKEN: optionalString,
+  // Guide 08 §11.1: test-only frozen demo clock; validated in env.ts.
+  VL_TEST_FROZEN_NOW: optionalString,
+  // Guide 08 §11.2: visual mode boots the scheduler without the provider poller.
+  VL_POLLER_ENABLED: bool,
   SMTP_URL: optionalString,
   MAIL_FROM: optionalString,
   MAIL_TO_CONSOLE: z.string().default('true'),
