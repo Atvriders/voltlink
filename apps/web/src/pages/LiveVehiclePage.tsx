@@ -243,7 +243,12 @@ export default function LiveVehiclePage() {
             {commands && commands.length > 0 ? (
               <ul className="divide-y divide-line">
                 {commands.slice(0, 6).map((c) => (
-                  <li key={c.id} data-command-id={c.id} data-status={c.status}>
+                  <li
+                    key={c.id}
+                    data-command-id={c.id}
+                    data-status={c.status}
+                    data-confirmation={c.confirmation}
+                  >
                     <button
                       className="flex w-full items-center gap-3 py-2 text-left text-sm hover:text-accent"
                       onClick={() => setActiveCommandId(c.id)}
