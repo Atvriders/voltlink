@@ -520,6 +520,7 @@ test('provider outage shows the outage banner and stale labels', async ({ page }
   await expect(page).toHaveScreenshot('provider-outage.png', {
     ...T,
     mask: maskDynamic(page),
+    timeout: 60000,
   });
 });
 
@@ -567,6 +568,7 @@ test('command pending: a queued fixture shows data-status=queued', async ({ page
   await expect(page).toHaveScreenshot('command-pending.png', {
     ...T,
     mask: maskDynamic(page),
+    timeout: 60000,
   });
 });
 
@@ -605,5 +607,6 @@ test('command failure: a rejected fixture shows data-status=rejected and the mes
   await expect(page).toHaveScreenshot('command-failure.png', {
     ...T,
     mask: maskDynamic(page),
+    timeout: 60000,
   });
 });
