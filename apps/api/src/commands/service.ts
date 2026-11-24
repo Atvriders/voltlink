@@ -569,7 +569,16 @@ export async function processCommandJob(payload: {
             ) as { pin?: string };
             pin = payload.pin;
           } catch {
-            /* unreadable secret — dispatch proceeds without a PIN */
+            // P-TESLAMAP policy (documented 2026-11-24): an unreadable PIN
+            // secret FAILS the command. Dispatching without the PIN would
+            // silently weaken a PIN-protected command.
+            await transitionStatus(command.id, ['submitted'], 'failed', {
+              responseCategory: 'invalid_request',
+              errorMessage: 'Command PIN secret could not be decrypted.',
+            });
+            await auditEvent(command.id, 'failed', 'worker', 'PIN secret unreadable.');
+            await notifyCommandFinished(command, 'failed');
+            return;
           }
         }
         const provider = getProvider(vehicle.provider);
