@@ -592,10 +592,10 @@ test('command failure: a rejected fixture shows data-status=rejected and the mes
   };
   const aurora = (vbody.data ?? []).find((v) => (v.displayName ?? '').includes('Aurora'));
   await page.goto(`/vehicles/${aurora!.id}`);
-  await page.locator('[data-status="rejected"]').first().click();
   await expect(
     page.locator('[data-command-id="cmd-rejected-1"][data-status="rejected"]'),
   ).toBeVisible({ timeout: 30000 });
+  // Guide 08 §11 state #24: the failure message is visible on the row.
   await expect(page.getByText('Provider refused the command.')).toBeVisible({
     timeout: 10000,
   });

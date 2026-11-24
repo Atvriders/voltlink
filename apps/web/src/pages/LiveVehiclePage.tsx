@@ -147,15 +147,14 @@ export default function LiveVehiclePage() {
 
   return (
     <div className="space-y-4">
-      {state &&
-        ['stale', 'last_known'].includes(computeFreshness(state, Date.now())) && (
-          <div
-            data-outage-banner
-            className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn"
-          >
-            Stale data — the provider is degraded; telemetry may not be current.
-          </div>
-        )}
+      {state && ['stale', 'last_known'].includes(String(state.freshness)) && (
+        <div
+          data-outage-banner
+          className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn"
+        >
+          Stale data — the provider is degraded; telemetry may not be current.
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <Link to="/" className="text-sm text-subtle hover:text-accent">
           Overview
@@ -279,6 +278,9 @@ export default function LiveVehiclePage() {
                         </Badge>
                       </span>
                     </button>
+                    {c.errorMessage && (
+                      <p className="px-3 pb-2 text-xs text-danger">{c.errorMessage}</p>
+                    )}
                   </li>
                 ))}
               </ul>
