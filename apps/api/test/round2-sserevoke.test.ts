@@ -235,8 +235,8 @@ describe('R2-31 / TI-29 A-SSEREVOKE immediate stream termination', { tags: ['rea
   // password from B: A's /auth/me must answer 401 and A's stream must end,
   // while B's stream stays open and still receives events. Expected red until
   // step 5 (today no revocation is published on password change, so A's stream
-  // never ends).
-  it('R2-31 password change revokes only the other sessions (expected red until step 5)', async () => {
+  // never ends). Green since 693253b; reds are mutation logs in evidence/.
+  it('R2-31 password change revokes only the other sessions', async () => {
     const { owner, org } = await mkStreamUser();
     const a = await createSession(owner.id);
     const b = await createSession(owner.id);
@@ -277,8 +277,9 @@ describe('R2-31 / TI-29 A-SSEREVOKE immediate stream termination', { tags: ['rea
 
   // Review #2 point 7: password reset revokes EVERY session (guide 04 :709,
   // allExcept: null) — the victim's stream must end. Expected red until step 5
-  // (today resetPassword revokes the rows but publishes nothing).
-  it('R2-31 password reset revokes every session (expected red until step 5)', async () => {
+  // (today resetPassword revokes the rows but publishes nothing). Green since
+  // 693253b; reds are mutation logs in evidence/.
+  it('R2-31 password reset revokes every session', async () => {
     const { owner, org } = await mkStreamUser();
     const a = await createSession(owner.id);
     const stream = openStream(a.token);
@@ -311,7 +312,7 @@ describe('R2-31 / TI-29 A-SSEREVOKE immediate stream termination', { tags: ['rea
     await prisma.user.delete({ where: { id: owner.id } });
   });
 
-  it('R2-31 admin suspend publishes the revocation (expected red until step 5)', async () => {
+  it('R2-31 admin suspend publishes the revocation', async () => {
     const { owner, org } = await mkStreamUser();
     const a = await createSession(owner.id);
     const stream = openStream(a.token);
