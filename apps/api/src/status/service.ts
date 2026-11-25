@@ -7,7 +7,7 @@ import { env } from '../core/env';
 import { poller } from '../telemetry/poller';
 import { getSetting } from '../core/settings';
 import { sseCount } from '../core/sse';
-import { demoClockIsFrozen } from '../core/demoClock';
+import { demoClockIsFrozen, demoClockNow } from '../core/demoClock';
 import type { ComponentStatus } from '@voltlink/shared';
 
 export const STATUS_GROUPS = ['Core', 'Data', 'Vehicle', 'Integrations', 'Providers'] as const;
@@ -375,7 +375,9 @@ export async function publicStatusBundle(): Promise<unknown> {
 
 /** Per-day uptime percentages over the last `days` days (N-STATUSMISC). */
 async function uptimeSeries(days: number): Promise<{ date: string; pct: number }[]> {
-  const from = new Date(Date.now() - days * 86400000);
+  // R2-35/C-VISUAL: the window starts at the demo clock so the frozen visual
+  // world computes uptime from its seeded history (production sees real time).
+  const from = new Date(demoClockNow().getTime() - days * 86400000);
   const rows = await prisma.statusCheck.findMany({
     where: { at: { gte: from } },
     select: { at: true, ok: true },
@@ -394,7 +396,8 @@ async function uptimeSeries(days: number): Promise<{ date: string; pct: number }
 }
 
 async function uptimePct(days: number): Promise<Map<string, number>> {
-  const from = new Date(Date.now() - days * 86400000);
+  // R2-35/C-VISUAL: demo-clock window (see uptimeSeries).
+  const from = new Date(demoClockNow().getTime() - days * 86400000);
   const rows = await prisma.statusCheck.findMany({
     where: { at: { gte: from } },
     select: { componentKey: true, ok: true },
