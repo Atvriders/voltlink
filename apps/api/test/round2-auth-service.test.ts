@@ -295,7 +295,11 @@ describe('setup and registration modes', () => {
       create: { key: 'instance.registrationMode', value: 'closed' },
     });
     await expect(
-      registerUser({ email: `c.${Date.now()}@example.invalid`, name: 'C', password: 'long-enough-123' }),
+      registerUser({
+        email: `c.${Date.now()}@example.invalid`,
+        name: 'C',
+        password: 'long-enough-123',
+      }),
     ).rejects.toMatchObject({ code: 'REGISTRATION_CLOSED' });
 
     await prisma.appSetting.update({

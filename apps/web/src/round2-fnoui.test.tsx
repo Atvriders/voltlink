@@ -183,7 +183,9 @@ describe('missing UI capabilities (F-NOUI)', () => {
       if (path === '/api/v1/vehicles/v1/shares' && init?.method === 'POST')
         return { status: 'invited' };
       if (path === '/api/v1/vehicles/v1/shares')
-        return [{ id: 's1', userEmail: 'b@example.invalid', level: 'viewer', allowHighRisk: false }];
+        return [
+          { id: 's1', userEmail: 'b@example.invalid', level: 'viewer', allowHighRisk: false },
+        ];
       if (path.startsWith('/api/v1/vehicles/v1/shares/s1')) return { ok: true };
       if (path.startsWith('/api/v1/commands?')) return { items: [], total: 0 };
       if (path.startsWith('/api/v1/drives')) return { items: [], total: 0 };
@@ -210,7 +212,10 @@ describe('missing UI capabilities (F-NOUI)', () => {
     await waitFor(() =>
       expect(apiMock).toHaveBeenCalledWith(
         '/api/v1/vehicles/v1/shares',
-        expect.objectContaining({ method: 'POST', body: { email: 'c@example.invalid', level: 'viewer' } }),
+        expect.objectContaining({
+          method: 'POST',
+          body: { email: 'c@example.invalid', level: 'viewer' },
+        }),
       ),
     );
     fireEvent.click(screen.getByRole('button', { name: /revoke/i }));

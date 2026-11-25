@@ -57,15 +57,14 @@ describe('compose-render (C3)', () => {
     const web = out.services.web!;
     expect(web.environment.PUBLIC_URL).toBe('http://localhost:3110');
     expect(web.environment.DATABASE_URL).toContain('0273562be8b07bd887cce80c59cc66e4');
-    expect(web.environment.JWT_SECRET).toBe('c4ed0b963a2d89dad3387e59110914f76b9b48dc02864964559a4eb37a277049');
+    expect(web.environment.JWT_SECRET).toBe(
+      'c4ed0b963a2d89dad3387e59110914f76b9b48dc02864964559a4eb37a277049',
+    );
   });
 
   it('still throws for a `${VAR:?msg}` fail-fast (the model keeps the form)', () => {
     const file = `${repo}scripts/compose-render.test-fixture.yml`;
-    writeFileSync(
-      file,
-      "services:\n  probe:\n    environment:\n      A: '${REQ:?need REQ}'\n",
-    );
+    writeFileSync(file, "services:\n  probe:\n    environment:\n      A: '${REQ:?need REQ}'\n");
     try {
       expect(() => renderCompose([file], { env: {} })).toThrow(/Required variable REQ is not set/);
     } finally {
