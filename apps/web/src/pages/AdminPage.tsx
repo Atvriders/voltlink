@@ -257,7 +257,10 @@ export default function AdminPage() {
             ) : (
               <ul className="max-h-52 space-y-1.5 overflow-auto text-sm">
                 {(deadJobs ?? []).map((j) => (
-                  <li key={j.id} className="rounded-lg border border-danger/40 bg-danger/5 px-3 py-2">
+                  <li
+                    key={j.id}
+                    className="rounded-lg border border-danger/40 bg-danger/5 px-3 py-2"
+                  >
                     <div className="flex items-center justify-between">
                       <Badge tone="danger">{j.queue}</Badge>
                       <span className="text-xs text-faint">{j.attempts} attempts</span>

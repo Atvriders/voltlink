@@ -5,12 +5,7 @@
 // scripts/healthcheck-probe.mjs, which docker/healthcheck.sh runs for the
 // worker/scheduler roles.
 import { describe, expect, it } from 'vitest';
-import {
-  BEAT_BOUNDS,
-  beatFresh,
-  beatValueMs,
-  configProblems,
-} from './healthcheck-probe.mjs';
+import { BEAT_BOUNDS, beatFresh, beatValueMs, configProblems } from './healthcheck-probe.mjs';
 
 describe('healthcheck probe (I-HEALTH)', () => {
   it('bounds worker beats to 90 s', () => {
@@ -35,14 +30,14 @@ describe('healthcheck probe (I-HEALTH)', () => {
   });
 
   it('fails when REDIS_URL is missing', () => {
-    const problems = configProblems({ role: 'worker', redisUrl: '', databaseUrl: 'x' });
+    const problems = configProblems({ role: 'worker', redisUrl: '' });
     expect(problems).toContain('REDIS_URL is required');
-    const sched = configProblems({ role: 'scheduler', redisUrl: undefined, databaseUrl: 'x' });
+    const sched = configProblems({ role: 'scheduler', redisUrl: undefined });
     expect(sched).toContain('REDIS_URL is required');
   });
 
   it('passes when REDIS_URL is set', () => {
-    const problems = configProblems({ role: 'worker', redisUrl: 'redis://x:1', databaseUrl: 'x' });
+    const problems = configProblems({ role: 'worker', redisUrl: 'redis://x:1' });
     expect(problems).toEqual([]);
   });
 });

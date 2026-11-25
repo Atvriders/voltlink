@@ -19,5 +19,9 @@ export interface RenderedCompose {
 
 export function renderCompose(
   files: string[],
-  options?: { envFile?: string; env?: Record<string, string | undefined> },
+  options?: {
+    envFile?: string;
+    env?: Record<string, string | undefined>;
+    profiles?: string[];
+  },
 ): RenderedCompose;

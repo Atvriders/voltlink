@@ -32,9 +32,7 @@ async function main(): Promise<void> {
   // every minute REGARDLESS of the poller gate, so even a paused visual stack
   // reports a live scheduler to the healthcheck.
   const minuteBeat = () => setSetting('schedulerBeat', String(Date.now()));
-  void minuteBeat().catch((err) =>
-    console.error('scheduler beat failed:', (err as Error).message),
-  );
+  void minuteBeat().catch((err) => console.error('scheduler beat failed:', (err as Error).message));
   const minute = setInterval(async () => {
     try {
       await minuteBeat();

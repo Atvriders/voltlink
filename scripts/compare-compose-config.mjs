@@ -69,7 +69,9 @@ for (const name of services) {
     // emits objects. Compare published:target for both.
     const normPort = (s) => {
       const parts = String(s).split(':');
-      return parts.length >= 2 ? `${parts[parts.length - 2]}:${parts[parts.length - 1]}` : String(s);
+      return parts.length >= 2
+        ? `${parts[parts.length - 2]}:${parts[parts.length - 1]}`
+        : String(s);
     };
     compare(
       'ports',

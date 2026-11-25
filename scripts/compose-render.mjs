@@ -48,22 +48,6 @@ function parseValue(lines, i, indent) {
   return [scalar(rest), i + 1];
 }
 
-function nextNonChild(lines, i, indent) {
-  let j = i + 1;
-  while (j < lines.length) {
-    const line = lines[j];
-    if (line.trim() === '' || line.trim().startsWith('#')) {
-      j += 1;
-      continue;
-    }
-    const m = INDENT_RE.exec(line);
-    const col = m ? m[1].length : 0;
-    if (col <= indent) break;
-    j += 1;
-  }
-  return j;
-}
-
 function parseSequence(lines, i, indent) {
   const out = [];
   let j = i;
@@ -125,7 +109,7 @@ function parseMapping(lines, i, indent) {
     const mmMerge = rest.match(/^<<:\s*(.*)$/);
     if (mmMerge) {
       for (const name of mmMerge[1]
-        .replace(/[\[\],*]/g, ' ')
+        .replace(/[[\],*]/g, ' ')
         .split(/\s+/)
         .filter(Boolean)) {
         merges.push(name);
@@ -277,7 +261,7 @@ function interpolate(value, env, envFile) {
         return '';
       },
     );
-    return out.replace(/\u0000DOLLAR\u0000/g, '$');
+    return out.split('\u0000DOLLAR\u0000').join('$');
   }
   if (Array.isArray(value)) return value.map((v) => interpolate(v, env, envFile));
   if (value && typeof value === 'object') {

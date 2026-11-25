@@ -17,6 +17,7 @@ describe('compose-render (C3)', () => {
   it('resolves anchors and merges: every role inherits the shared app environment', () => {
     const out = renderCompose([production], {
       env: {
+        VL_QUEUE_PREFIX: 'voltlink',
         POSTGRES_PASSWORD: 'pgpw',
         JWT_SECRET: 'j'.repeat(64),
         VL_MASTER_KEY: Buffer.alloc(32, 1).toString('base64'),

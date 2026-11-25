@@ -491,9 +491,9 @@ export function commandStatePredicate(
       // P-SCHED decision (2026-11-24): scheduling is observable only once the
       // car reports a scheduled update.
       return (state.softwareUpdate as { status?: string } | undefined)?.status === 'scheduled';
-    case 'cancel_update': // P-SCHED decision (2026-11-24): a cancel is observable when the car no
+    // P-SCHED decision (2026-11-24): a cancel is observable when the car no
     // longer reports a pending or installing update.
-    {
+    case 'cancel_update': {
       const s = (state.softwareUpdate as { status?: string } | undefined)?.status;
       return s !== undefined && s !== 'scheduled' && s !== 'installing';
     }
