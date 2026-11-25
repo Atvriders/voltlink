@@ -18,6 +18,11 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    # Prisma schema validation (generate) and the drift gates need a
+    # DATABASE_URL even though checks never boots the app; the service below
+    # is the real throwaway database. Not a secret.
+    env:
+      DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink
     services:
       postgres:
         image: postgres:17-alpine
