@@ -61,20 +61,26 @@ export async function pendingMigrations(): Promise<string[]> {
 
 export async function waitForMigrations(timeoutMs = 120_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
+  let lastErr: string | null = null;
   for (;;) {
     let pending: string[] = [];
     try {
       pending = await pendingMigrations();
+      lastErr = null;
     } catch (err) {
-      if (Date.now() >= deadline) {
-        console.error('[voltlink] could not read migration state:', err);
-        process.exit(1);
-      }
+      // R2-21: a failed state read (fresh database without
+      // _prisma_migrations, provider down) is NOT 'current' — treat it as
+      // pending and keep polling to the ceiling instead of booting the role
+      // on an unmigrated schema.
+      lastErr = (err as Error).message;
+      console.warn(`[voltlink] could not read migration state (will retry): ${lastErr}`);
     }
-    if (pending.length === 0) return;
+    if (lastErr === null && pending.length === 0) return;
     if (Date.now() >= deadline) {
       console.error(
-        `[voltlink] migrations not current after ${timeoutMs / 1000}s: ${pending.join(', ')} — run the migrate role first.`,
+        lastErr !== null
+          ? `[voltlink] could not read migration state for ${timeoutMs / 1000}s: ${lastErr}`
+          : `[voltlink] migrations not current after ${timeoutMs / 1000}s: ${pending.join(', ')} — run the migrate role first.`,
       );
       process.exit(1);
     }

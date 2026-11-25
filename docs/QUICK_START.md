@@ -36,8 +36,10 @@ Watch startup:
 docker compose -f compose.production.yml logs -f web
 ```
 
-`--wait` returns after every role is healthy. Migrations apply automatically
-under an advisory lock on boot.
+`--wait` returns after every role is healthy. Only the `migrate` role ever
+applies migrations (under an advisory lock); the web/worker/scheduler roles
+wait for the schema to be current and exit with a clear message if it is not
+after 120 s.
 
 ## 4. First-run setup
 

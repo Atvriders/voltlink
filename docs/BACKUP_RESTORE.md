@@ -52,6 +52,7 @@ runs steps 1–2 and fails only on non-partition restore errors.
 
 - The queue lives in Redis (`REDIS_URL`); in-flight queue items are ephemeral
   by design and recover on retry after a restore.
-- Migrations run only in the `migrate` role; after restoring an older dump,
-  booting the stack upgrades the schema to the image's version.
+- Migrations run only in the `migrate` role (the other roles never migrate —
+  they wait up to 120 s for the schema to be current); after restoring an
+  older dump, booting the stack upgrades the schema to the image's version.
 - `docker compose down` keeps the `pgdata` volume; `down -v` deletes it.
