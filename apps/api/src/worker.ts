@@ -112,6 +112,9 @@ export async function main(): Promise<void> {
     30_000,
   );
   beat.unref();
+  // I-HEALTH: record a beat at boot too, so the healthcheck's freshness
+  // window does not depend on the first interval firing.
+  void setSetting('workerBeat', new Date().toISOString()).catch(() => undefined);
 
   console.log('[voltlink] worker started');
 

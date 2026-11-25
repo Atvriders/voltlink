@@ -9,13 +9,10 @@ case "$role" in
   web) probe "${PORT:-3000}" /readyz ;;
   status) probe "${STATUS_PORT:-3001}" /healthz ;;
   worker|scheduler)
-    # Liveness: this script only runs while the main process is alive; also
-    # verify Redis is reachable when configured.
-    if [ -n "${REDIS_URL:-}" ]; then
-      node -e "const R=require('ioredis');const c=new R(process.env.REDIS_URL,{lazyConnect:true,maxRetriesPerRequest:1});c.ping().then(()=>{c.disconnect();process.exit(0)}).catch(()=>process.exit(1))"
-    else
-      exit 0
-    fi
+    # I-HEALTH: verify the role's REAL heartbeat (workerBeat/schedulerBeat
+    # recorded for /admin/health) with a freshness bound, and fail when
+    # REDIS_URL is missing. The probe also pings Redis.
+    exec node /app/healthcheck-probe.mjs "$role"
     ;;
   migrate|selftest) exit 0 ;;
   *) exit 1 ;;

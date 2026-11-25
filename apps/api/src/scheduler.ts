@@ -24,32 +24,37 @@ async function main(): Promise<void> {
   if (env.POLLER_ENABLED) poller.start();
   console.log('[voltlink] scheduler started');
 
-  // Scheduled automations: evaluate each minute. Also gated on
+  // Scheduled automations: evaluate each minute. Gated on
   // VL_POLLER_ENABLED=false so the scripted visual stack keeps the demo world
   // frozen — an executed scheduled automation would bump runCount mid-snapshot
   // and make the visual baselines order- and time-dependent (guide 08 §11.2).
-  if (env.POLLER_ENABLED) {
-    const minute = setInterval(async () => {
-      try {
-        // Expiring heartbeat (spec L1217): the health check accepts beats < 5 min old.
-        await setSetting('schedulerBeat', String(Date.now()));
-        const rows = await prisma.automation.findMany({
-          where: { enabled: true, triggerType: 'scheduled' },
+  // I-HEALTH: the expiring heartbeat (spec L1217) is recorded at boot and
+  // every minute REGARDLESS of the poller gate, so even a paused visual stack
+  // reports a live scheduler to the healthcheck.
+  const minuteBeat = () => setSetting('schedulerBeat', String(Date.now()));
+  void minuteBeat().catch((err) =>
+    console.error('scheduler beat failed:', (err as Error).message),
+  );
+  const minute = setInterval(async () => {
+    try {
+      await minuteBeat();
+      if (!env.POLLER_ENABLED) return;
+      const rows = await prisma.automation.findMany({
+        where: { enabled: true, triggerType: 'scheduled' },
+      });
+      for (const row of rows) {
+        void dispatchTrigger({
+          type: 'scheduled',
+          userId: row.userId,
+          vehicleId: row.vehicleId ?? undefined,
+          data: {},
         });
-        for (const row of rows) {
-          void dispatchTrigger({
-            type: 'scheduled',
-            userId: row.userId,
-            vehicleId: row.vehicleId ?? undefined,
-            data: {},
-          });
-        }
-      } catch (err) {
-        console.error('scheduled automation tick failed:', (err as Error).message);
       }
-    }, 60_000);
-    minute.unref();
-  }
+    } catch (err) {
+      console.error('scheduled automation tick failed:', (err as Error).message);
+    }
+  }, 60_000);
+  minute.unref();
 
   // Status checks hourly (offset from the web role's hourly check).
   const statusTimer = setInterval(async () => {
