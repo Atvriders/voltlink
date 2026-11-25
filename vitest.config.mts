@@ -88,6 +88,14 @@ export default defineConfig({
           environment: 'node',
         },
       },
+      {
+        test: {
+          name: 'scripts',
+          root: abs('.'),
+          include: ['scripts/**/*.test.*'],
+          environment: 'node',
+        },
+      },
     ],
     coverage: {
       provider: 'v8',
