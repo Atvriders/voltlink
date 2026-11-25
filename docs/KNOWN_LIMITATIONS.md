@@ -69,3 +69,25 @@ Kept honest and current. File an issue for anything that matters to you.
 - Vehicle models are stylized low-poly originals, not manufacturer-accurate
   recreations.
 - Blender is needed only to regenerate assets; shipped GLBs work without it.
+
+## Spec deferrals (2026-11-25 completion sweep)
+
+Owner-directed completion of the spec matrix: these requirements from the
+original spec are deliberately not part of v1.1.1. Each is recorded here so
+`SPEC_COMPLETION_MATRIX.md` (handoff) can honestly mark it n/a.
+
+- **UI icons are third-party** (lucide-react, licensed — `docs/ASSET_LICENSES.md`); only the logo is original. Replacing every icon with original artwork is out of scope.
+- **Per-provider permissions**: provider management is org-role based; the per-account `ProviderAccountGrant` model exists but is not enforced.
+- **Per-vehicle provider-unavailable state**: provider errors show on the provider card only.
+- **Polling**: static rate buckets only — provider `429`/`Retry-After` is not honored, and the poller does not read retention settings.
+- **Monthly aggregates**: `/charging/totals` aggregates sessions on demand; the `AggregateMonthly` cache table is upserted by ingest but never read.
+- **Charging UI**: monthly totals, session comparisons, charging-behavior and seasonal/rolling battery analyses have no UI (endpoints exist for some); no period-comparison view; no print CSS (CSV/JSON exports exist); fast-charge classification is never assigned (home/work/public badges exist).
+- **Battery analytics**: seasonal comparison and rolling averages are not implemented.
+- **Software updates**: `schedule_update` exists; `cancel_update` is not a command type.
+- **Automations**: the `door_open` trigger covers doors only (not trunk or left-open duration); conditions for driver, provider capability and user role are not in `CONDITION_TYPES`; notification preferences have no per-vehicle field; registration/insurance/service records carry `dueAt` but reminder events are never emitted.
+- **Fleet**: no utilization view; no per-driver activity route; active alerts show only the failed-automation count.
+- **Status platform**: no historical calendar; no public-page response-time chart (admin 24h chart exists); Tesla/Tessie monitoring counts recent errors without a reachability probe.
+- **3D viewer**: `wheelStyle` and `windowsOpen` are not rendered; brake-light, indicator and battery meshes are missing; lock/climate 3D cues and component highlighting are pending; indicators/windows/airflow/defrost/lifecycle animations are pending; `frameloop` is always on (no reduced rendering while hidden).
+- **Branding**: only an `orgName` text setting — no logo/colour/asset upload.
+- **Scale**: the poller is batched (200/tick) with serial enqueue, but a real 5,000-vehicle load test was never run; lists are not virtualized; no analytics cache layer.
+- **Presentation renders**: the Phase-12 render step (product renders/thumbnails beyond the 512×288 showroom thumbs) is post-push work.
