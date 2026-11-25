@@ -350,15 +350,58 @@ it('R2-20 generated token (VL_SETUP_TOKEN unset) completes first-run setup', asy
   }
 });
 
+// R2-01/TI-53: while setup is still pending, EVERY boot must issue a usable
+// token again (the stored hash is replaced), so a lost first-boot log can
+// never lock the owner out. After bootstrap no token may be generated.
+it('R2-01/TI-53: every pending boot reissues a usable token; bootstrap stops it', async () => {
+  const saved = process.env.VL_SETUP_TOKEN;
+  try {
+    delete process.env.VL_SETUP_TOKEN;
+    await prisma.appSetting.deleteMany({
+      where: {
+        key: {
+          in: ['instance.bootstrappedAt', 'instance.operatorOrgId', 'instance.setupTokenHash'],
+        },
+      },
+    });
+    await prisma.user.deleteMany({});
+    await prisma.organization.deleteMany({});
+    const { ensureSetupToken } = await import('../src/auth/setup-token');
+    const first = await ensureSetupToken();
+    expect(first).toBeTruthy();
+    const second = await ensureSetupToken();
+    expect(second, 'a second pending boot must issue a NEW usable token').toBeTruthy();
+    expect(second).not.toBe(first);
+    const row = await prisma.appSetting.findUniqueOrThrow({
+      where: { key: 'instance.setupTokenHash' },
+    });
+    expect(row.value, 'the stored hash must match the LATEST token').toBe(sha256hex(second!));
+    // The latest token completes first-run setup.
+    const email = `r20g2-${uniq()}@test.dev`;
+    const res = await csrfAndPost('/api/v1/auth/register', {
+      email,
+      name: 'Reboot User',
+      password: 'long-enough-123',
+      setupToken: second,
+    });
+    expect(res.status, await res.text()).toBe(201);
+    const third = await ensureSetupToken();
+    expect(third, 'after bootstrap no further token may be generated').toBeNull();
+    await prisma.user.deleteMany({ where: { email } });
+  } finally {
+    if (saved === undefined) delete process.env.VL_SETUP_TOKEN;
+    else process.env.VL_SETUP_TOKEN = saved;
+  }
+});
+
 // R2-20 (review #2 point 9): the documented extraction greps the BOOT LOG —
-// start-stack.sh and ci.yml run
-//   grep -o 'first-run setup token [A-Za-z0-9_-]*' | awk '{print $NF}'
-// The boot line now prints 'first-run setup token <token> (shown once…)' so
-// that extraction returns the token itself (R2-01 fix). Boot the REAL web
-// role (apps/api/src/index.ts) with VL_SETUP_TOKEN unset on this file's own
-// unseeded database, parse the token from its stdout, and register with it.
-// The child is a FILE-LEVEL resource: the pid is printed, and afterAll kills
-// it (SIGTERM, wait, SIGKILL) so a timeout can never orphan it.
+// the guide and ci.yml run
+//   grep 'first-run setup token' | tail -1 | awk '{print $NF}'
+// The boot line keeps the token as its LAST field (R2-01 fix). Boot the REAL
+// web role (apps/api/src/index.ts) with VL_SETUP_TOKEN unset on this file's
+// own unseeded database, parse the token from its stdout, and register with
+// it. The child is a FILE-LEVEL resource: the pid is printed, and afterAll
+// kills it (SIGTERM, wait, SIGKILL) so a timeout can never orphan it.
 it(
   'R2-20 real web-role boot (VL_SETUP_TOKEN unset) logs a token that completes first-run setup',
   { timeout: 45_000 },
@@ -396,20 +439,22 @@ it(
         ready = /\[voltlink\] web listening/.test(captured);
         if (!ready) await new Promise((r) => setTimeout(r, 100));
       }
-      const tokenMatch = captured.match(/setup token ([A-Za-z0-9_-]{32,})/);
-      const token = tokenMatch?.[1] ?? '';
+      // R2-01: the token is the LAST field of its log line, so the
+      // documented extraction (guide / ci.yml)
+      //   grep 'first-run setup token' | tail -1 | awk '{print $NF}'
+      // returns the token itself. Decoupled from any wording: a boot line
+      // that prints the token elsewhere fails HERE alone.
+      const tokenLine =
+        captured
+          .split('\n')
+          .filter((l) => l.includes('first-run setup token'))
+          .at(-1) ?? '';
+      const token = tokenLine.trim().split(/\s+/).at(-1) ?? '';
       expect(
         token,
-        `boot log must print the token; captured was:\n${captured.slice(-2000)}`,
+        `boot log must end its token line with the token; captured was:\n${captured.slice(-2000)}`,
       ).toMatch(/^[A-Za-z0-9_-]{32,}$/);
-
-      // R2-01: the documented extraction (start-stack.sh / ci.yml) must return
-      // the token itself. Decoupled from the token regex above: a boot line
-      // that prints the token with a different wording fails HERE alone.
-      const documented = [...captured.matchAll(/first-run setup token [A-Za-z0-9_-]*/g)].map((m) =>
-        m[0].split(' ').at(-1)!,
-      );
-      expect(documented, 'the documented grep must extract the token').toContain(token);
+      expect(tokenLine, 'the boot line must point at /setup').toContain('/setup');
 
       // Hash at rest; the plaintext never is.
       const row = await prisma.appSetting.findUnique({
@@ -497,7 +542,7 @@ it(
       expect(
         captured,
         `bootstrapped instance must not log a fresh token; captured was:\n${captured.slice(-2000)}`,
-      ).not.toMatch(/first-run setup token [A-Za-z0-9_-]{32,}/);
+      ).not.toContain('first-run setup token');
       expect(
         await prisma.appSetting.findUnique({ where: { key: 'instance.setupTokenHash' } }),
       ).toBeNull();

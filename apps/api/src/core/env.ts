@@ -6,6 +6,7 @@
 
 import { z } from 'zod';
 import { assertDemoClockEnv } from './demoClock';
+import { validateKeyRing } from './keyring';
 import { ENV_SPEC } from './env-spec';
 
 const PLACEHOLDER = /(secret|change.?me|changeme|placeholder|example|your-|xxxx|default)/i;
@@ -195,6 +196,17 @@ export function validateEnv() {
   );
   if (env.NODE_ENV === 'production') {
     env.MASTER_KEY();
+    // R2-67: fail fast on a broken key ring (bad version, malformed
+    // VL_MASTER_KEYS entry, missing active version) instead of failing on
+    // the first envelope operation.
+    validateKeyRing();
+    // A-TOKENLOG: warn when production has no SMTP so suppressed mail is
+    // expected (the suppression line is logged per mail, without links).
+    if (!process.env.SMTP_URL) {
+      console.warn(
+        '[voltlink] no SMTP_URL configured — transactional mail is suppressed and its links are never logged.',
+      );
+    }
     const httpInsecure =
       !/^https:\/\//.test(env.PUBLIC_URL) && !env.PUBLIC_URL.startsWith('http://localhost');
     if (httpInsecure && process.env.VL_ALLOW_INSECURE_HTTP !== 'true') {

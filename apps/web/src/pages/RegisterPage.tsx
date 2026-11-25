@@ -1,6 +1,6 @@
 // Account registration page.
 
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { UserPlus } from 'lucide-react';
 import { api, ApiError } from '../api/client';
@@ -16,6 +16,24 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [verification, setVerification] = useState<{ token?: string; link?: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [needsSetup, setNeedsSetup] = useState(false);
+
+  // R2-04: when the instance has not been set up yet, /register offers the
+  // setup path instead of a registration that can never succeed.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await api<{ needsSetup: boolean }>('/api/v1/auth/setup-status');
+        if (alive) setNeedsSetup(res.needsSetup);
+      } catch {
+        // stay silent; registration keeps its own error path
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -48,6 +66,18 @@ export default function RegisterPage() {
           <h1 className="text-xl font-extrabold">Create your VoltLink account</h1>
         </div>
         <form onSubmit={submit} className="card space-y-4 p-5">
+          {needsSetup && (
+            <div
+              className="rounded-lg border border-info/40 bg-info/10 px-3 py-2 text-sm text-subtle"
+              role="status"
+            >
+              This instance has not been set up yet.{' '}
+              <Link className="underline" to="/setup">
+                Complete first-run setup
+              </Link>{' '}
+              to create the instance administrator.
+            </div>
+          )}
           {error && (
             <div
               className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger"

@@ -11,7 +11,7 @@ import { Button, Field, Input } from '../components/ui';
 
 export default function SetupPage() {
   const navigate = useNavigate();
-  const { refresh } = useAuth();
+  const { refresh, user } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -29,7 +29,8 @@ export default function SetupPage() {
         );
         if (!alive) return;
         setStatus(res);
-        if (!res.needsSetup) navigate('/login', { replace: true });
+        // R2-01: a signed-in user is sent home, never bounced to /login.
+        if (!res.needsSetup) navigate(user ? '/' : '/login', { replace: true });
       } catch {
         if (alive) setStatus({});
       }
@@ -37,7 +38,7 @@ export default function SetupPage() {
     return () => {
       alive = false;
     };
-  }, [navigate]);
+  }, [navigate, user]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -49,7 +50,8 @@ export default function SetupPage() {
         body: { name, email, password, setupToken },
       });
       await refresh();
-      navigate('/overview', { replace: true });
+      // R2-01 fix text: setup lands on '/'.
+      navigate('/', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Setup failed.');
     } finally {

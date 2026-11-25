@@ -18,14 +18,15 @@ async function main(): Promise<void> {
   await ensureComponents();
 
   // R2-01: a fresh install without VL_SETUP_TOKEN still gets a way in. The
-  // token is generated once, hashed at rest, and logged exactly once here,
-  // in the documented shape: 'first-run setup token <token>' so
-  // `grep -o 'first-run setup token [A-Za-z0-9_-]*' | awk '{print $NF}'`
-  // (start-stack.sh, ci.yml) extracts the token itself.
+  // web role generates a fresh token on EVERY boot while setup is pending,
+  // hashes it at rest, and logs it with the token as the LAST field of the
+  // line (the documented shape), so the guide/CI command
+  //   grep 'first-run setup token' | tail -1 | awk '{print $NF}'
+  // extracts the token itself. A configured VL_SETUP_TOKEN is never logged.
   const setupToken = await ensureSetupToken();
   if (setupToken) {
     console.log(
-      `[voltlink] first-run setup token ${setupToken} (shown once; complete setup at /register)`,
+      `[voltlink] first-run setup token (complete first-run setup at /setup; this token is reissued on every boot until setup completes) ${setupToken}`,
     );
   }
 

@@ -31,9 +31,9 @@ All configuration is environment variables. In Docker Compose they come from
 
 | Variable          | Description                                                               |
 | ----------------- | ------------------------------------------------------------------------- |
-| `SMTP_URL`        | `smtp://user:pass@host:587`; empty = console logging of messages          |
-| `MAIL_FROM`       | From header                                                               |
-| `MAIL_TO_CONSOLE` | `true` (default) logs every mail instead of sending — useful for previews |
+| `SMTP_URL`        | `smtp://user:pass@host:587`; empty = mail is suppressed (one log line per mail, never the body or a link) |
+| `MAIL_FROM`       | From header                                                                |
+| `MAIL_TO_CONSOLE` | `false` (default). `true` prints every mail instead of sending — development only; production refuses to boot with it |
 
 ## Authentication extras
 

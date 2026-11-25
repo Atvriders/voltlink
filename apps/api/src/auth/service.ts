@@ -129,6 +129,8 @@ export async function sendMail(opts: {
     });
     return { sent: true, detail: 'smtp' };
   }
+  // A-TOKENLOG: one line per suppressed mail, never the body or a link.
+  console.log(`[voltlink] mail suppressed (no SMTP): to=${opts.to} subject="${opts.subject}"`);
   return { sent: false, detail: 'no-smtp' };
 }
 

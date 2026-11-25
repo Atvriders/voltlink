@@ -43,7 +43,7 @@ export const ENV_SPEC = z.object({
   NODE_EXTRA_CA_CERTS: optionalString,
   SMTP_URL: optionalString,
   MAIL_FROM: optionalString,
-  MAIL_TO_CONSOLE: z.string().default('true'),
+  MAIL_TO_CONSOLE: z.string().default('false'),
   VL_TOTP_ISSUER: z.string().default('VoltLink'),
   VL_WEBAUTHN_RP_NAME: z.string().default('VoltLink'),
   TESLA_CLIENT_ID: optionalString,

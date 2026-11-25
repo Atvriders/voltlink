@@ -22,7 +22,7 @@ function parseRing(): { active: number; keys: Map<number, Buffer> } {
   const raw = env.MASTER_KEY();
   const buf = Buffer.from(raw, 'base64');
   if (buf.length !== 32) throw new Error('VL_MASTER_KEY must be 32 bytes when base64-decoded.');
-  const active = Number(process.env.VL_MASTER_KEY_VERSION ?? '1');
+  const active = Number(process.env.VL_MASTER_KEY_VERSION || '1');
   if (!Number.isInteger(active) || active < 1)
     throw new Error('VL_MASTER_KEY_VERSION must be a positive integer.');
   keys.set(active, buf);
@@ -54,6 +54,13 @@ function ring() {
  * rotation test can simulate a process restart with a new active key. */
 export function resetRingForTests(): void {
   ringCache = null;
+}
+
+/** R2-67: validate the whole key ring at boot so a bad VL_MASTER_KEY_VERSION,
+ * a malformed VL_MASTER_KEYS entry or a missing active version fails the
+ * process immediately instead of failing on the first envelope operation. */
+export function validateKeyRing(): void {
+  parseRing();
 }
 
 const contextAad = (context: string) => Buffer.from(`voltlink:v2:${context}`);

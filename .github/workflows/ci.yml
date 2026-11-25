@@ -358,7 +358,7 @@ jobs:
             -c "DELETE FROM \"AppSetting\" WHERE key IN ('instance.bootstrappedAt','instance.registrationMode','instance.operatorOrgId','instance.setupTokenHash')"
           docker compose -f compose.production.yml restart web
           # The install docs say the one-time token is generated and logged.
-          TOKEN=$(docker compose -f compose.production.yml logs web 2>&1 | grep -o 'first-run setup token [A-Za-z0-9_-]*' | head -1 | awk '{print $NF}')
+          TOKEN=$(docker compose -f compose.production.yml logs web 2>&1 | grep 'first-run setup token' | tail -1 | awk '{print $NF}')
           test -n "$TOKEN" || { echo 'no first-run token in web log'; exit 1; }
           SMOKE_SETUP_TOKEN="$TOKEN" node scripts/smoke.mjs
           docker compose -f compose.production.yml down -v

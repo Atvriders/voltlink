@@ -3,7 +3,7 @@
 
 process.env.NODE_ENV = 'test';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -185,6 +185,37 @@ describe('A-TOKENLOG mail console default', () => {
   it('MAIL_TO_CONSOLE defaults to false unless explicitly enabled', async () => {
     const { env } = await import('../src/core/env');
     expect(env.MAIL_TO_CONSOLE).toBe(false);
+  });
+
+  // A-TOKENLOG fix text: removing the production refusal in env.ts makes THIS
+  // test fail. The module graph is reset so env.ts parses fresh with
+  // production values (the file-level module is otherwise cached as test).
+  it('production boot refuses MAIL_TO_CONSOLE=true', async () => {
+    vi.resetModules();
+    const saved = {
+      NODE_ENV: process.env.NODE_ENV,
+      JWT_SECRET: process.env.JWT_SECRET,
+      VL_MASTER_KEY: process.env.VL_MASTER_KEY,
+      PUBLIC_URL: process.env.PUBLIC_URL,
+      MAIL_TO_CONSOLE: process.env.MAIL_TO_CONSOLE,
+      SMTP_URL: process.env.SMTP_URL,
+    };
+    try {
+      process.env.NODE_ENV = 'production';
+      process.env.JWT_SECRET = 'j'.repeat(64);
+      process.env.VL_MASTER_KEY = Buffer.alloc(32, 3).toString('base64');
+      process.env.PUBLIC_URL = 'https://voltlink.example.com';
+      process.env.MAIL_TO_CONSOLE = 'true';
+      process.env.SMTP_URL = '';
+      const { validateEnv } = await import('../src/core/env');
+      expect(() => validateEnv()).toThrow(/MAIL_TO_CONSOLE=true is not allowed in production/);
+    } finally {
+      vi.resetModules();
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
   });
 });
 
