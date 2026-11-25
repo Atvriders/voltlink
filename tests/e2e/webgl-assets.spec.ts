@@ -127,3 +127,163 @@ test('showroom renders the right GLB per vehicle class, with zero page errors', 
     'no 404 console errors during the sweep (R2-61)',
   ).toEqual([]);
 });
+
+/** Quantized unique colours in the viewer canvas: a blank or failed render
+ * has ~1; a real vehicle has dozens (R2-44 pixel assertion). */
+async function uniqueColors(page: import('@playwright/test').Page): Promise<number> {
+  return page.evaluate(() => {
+    const c = document.querySelector(
+      '[data-testid="vehicle-viewer"] canvas',
+    ) as HTMLCanvasElement | null;
+    if (!c) return 0;
+    const gl = (c.getContext('webgl2') || c.getContext('webgl')) as WebGLRenderingContext | null;
+    if (!gl) return 0;
+    const w = gl.drawingBufferWidth;
+    const h = gl.drawingBufferHeight;
+    const buf = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+    const seen = new Set<number>();
+    for (let i = 0; i < buf.length; i += 4) {
+      const q = ((buf[i]! >> 4) << 8) | ((buf[i + 1]! >> 4) << 4) | (buf[i + 2]! >> 4);
+      seen.add(q);
+    }
+    return seen.size;
+  });
+}
+
+test('R2-44: per-class pixels, presets and GPU memory return to baseline', async ({ page }) => {
+  test.setTimeout(240_000);
+  const email = `e2e-glb44-${Date.now()}@voltlink.test`;
+  await register(page, email);
+  await enableDemo(page);
+
+  const vehiclesRes = await page.request.get('/api/v1/vehicles');
+  const vehicles =
+    ((await vehiclesRes.json()) as { data?: { id: string; displayName?: string }[] }).data ?? [];
+  expect(vehicles.length, 'demo fleet').toBeGreaterThanOrEqual(5);
+  const first = vehicles[0]!;
+
+  await page.goto(`/vehicles/${first.id}`);
+  const viewer = page.locator('[data-testid="vehicle-viewer"]');
+  await expect
+    .poll(() => viewer.first().getAttribute('data-asset'), { timeout: 30000 })
+    .toBe('glb');
+
+  // Pixel assertion: every vehicle class renders non-background geometry.
+  const demoVehicles = ['Aurora', 'Comet', 'Terra', 'Atlas', 'Bison'];
+  for (const name of demoVehicles) {
+    await page
+      .getByRole('button', { name: new RegExp(name) })
+      .first()
+      .click();
+    await expect
+      .poll(() => viewer.first().getAttribute('data-asset'), { timeout: 30000 })
+      .toBe('glb');
+    await page.waitForTimeout(600);
+    const colors = await uniqueColors(page);
+    expect(colors, `${name} renders real pixels (got ${colors} unique colours)`).toBeGreaterThan(
+      50,
+    );
+  }
+
+  // Preset test: low → _lod2, medium → _lod, high/ultra → LOD0, and the
+  // pixel ratio follows the preset (1 for low, >1.5 for high/ultra).
+  const presetSelect = page.locator('select[aria-label="Graphics preset"]');
+  const presetCases: [string, RegExp][] = [
+    ['low', /_lod2\./],
+    ['medium', /_lod\./],
+    ['high', /compact_sedan\./],
+    ['ultra', /compact_sedan\./],
+  ];
+  for (const [preset, suffix] of presetCases) {
+    await presetSelect.selectOption(preset);
+    await expect
+      .poll(() => viewer.first().getAttribute('data-asset-url'), { timeout: 30000 })
+      .toMatch(suffix);
+    const dpr = await page.evaluate(() => {
+      const c = document.querySelector(
+        '[data-testid="vehicle-viewer"] canvas',
+      ) as HTMLCanvasElement | null;
+      if (!c) return 0;
+      return c.width / Math.max(1, c.getBoundingClientRect().width);
+    });
+    if (preset === 'low') expect(dpr, 'low preset renders at 1x').toBeLessThan(1.2);
+    if (preset === 'high' || preset === 'ultra') {
+      expect(dpr, `${preset} preset renders above 1.5x`).toBeGreaterThan(1.5);
+    }
+  }
+
+  // Memory test: geometries/textures must return to baseline after cycling
+  // every vehicle — no per-switch GPU growth (R2-44).
+  await presetSelect.selectOption('high');
+  await expect
+    .poll(() => viewer.first().getAttribute('data-asset'), { timeout: 30000 })
+    .toBe('glb');
+  const readMem = async () => ({
+    geometries: Number(await viewer.first().getAttribute('data-gpu-geometries')),
+    textures: Number(await viewer.first().getAttribute('data-gpu-textures')),
+  });
+  const baseline = await readMem();
+  expect(baseline.geometries, 'baseline geometries recorded').toBeGreaterThan(0);
+  for (const name of demoVehicles.slice(1)) {
+    await page
+      .getByRole('button', { name: new RegExp(name) })
+      .first()
+      .click();
+    await expect
+      .poll(() => viewer.first().getAttribute('data-asset'), { timeout: 30000 })
+      .toBe('glb');
+  }
+  await page
+    .getByRole('button', { name: /Aurora/ })
+    .first()
+    .click();
+  await expect
+    .poll(() => viewer.first().getAttribute('data-asset'), { timeout: 30000 })
+    .toBe('glb');
+  const after = await readMem();
+  expect(
+    Math.abs(after.geometries - baseline.geometries),
+    `geometries return to baseline (${baseline.geometries} -> ${after.geometries})`,
+  ).toBeLessThanOrEqual(8);
+  expect(
+    Math.abs(after.textures - baseline.textures),
+    `textures return to baseline (${baseline.textures} -> ${after.textures})`,
+  ).toBeLessThanOrEqual(8);
+});
+
+test('R2-61: real GLBs load on /vehicles/<id> and /presentation with zero 404s', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const email = `e2e-glb61-${Date.now()}@voltlink.test`;
+  await register(page, email);
+  await enableDemo(page);
+
+  const consoleErrors: string[] = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  const vehiclesRes = await page.request.get('/api/v1/vehicles');
+  const vehicles = ((await vehiclesRes.json()) as { data?: { id: string }[] }).data ?? [];
+  const first = vehicles[0]!;
+  await page.goto(`/vehicles/${first.id}`);
+  await expect
+    .poll(() => page.locator('[data-testid="vehicle-viewer"]').first().getAttribute('data-asset'), {
+      timeout: 30000,
+    })
+    .toBe('glb');
+
+  await page.goto('/presentation');
+  await expect
+    .poll(() => page.locator('[data-testid="vehicle-viewer"]').first().getAttribute('data-asset'), {
+      timeout: 30000,
+    })
+    .toBe('glb');
+
+  expect(
+    consoleErrors.filter((t) => t.includes('404')),
+    'no 404 console errors on /vehicles/<id> or /presentation (R2-61)',
+  ).toEqual([]);
+});
