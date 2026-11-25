@@ -94,15 +94,16 @@ describe('contrast boundaries (F-CONTRAST)', () => {
   });
 
   it('web-9: the .text-<tone> classes bind the checked tokens (live usage)', () => {
-    // The token ratios above only matter if the classes real pages use are
-    // bound to those tokens — a detached token pair could pass while a page
-    // ships an unbound tone colour.
+    // The token ratios above only matter if the utility classes real pages
+    // use are bound to those tokens. Tailwind v4 generates .text-ok etc.
+    // from the @theme mapping, so the binding lives in the theme block:
+    // --color-ok: var(--vl-ok).
     const css = readFileSync(path.resolve('apps/web/src/index.css'), 'utf8');
+    const theme = css.match(/@theme[^{]*\{([\s\S]*?)\n\}/);
+    expect(theme, '@theme block exists').toBeTruthy();
     for (const tone of ['ok', 'warn', 'danger', 'info']) {
-      const cls = css.match(new RegExp(`\\.text-${tone}\\s*\\{([\\s\\S]*?)\\}`));
-      expect(cls, `.text-${tone} defined`).toBeTruthy();
-      expect(cls![1], `.text-${tone} uses the tone token`).toMatch(
-        new RegExp(`color:\\s*var\\(--vl-${tone}\\)`),
+      expect(theme![1], `--color-${tone} maps the tone token (generates .text-${tone})`).toMatch(
+        new RegExp(`--color-${tone}:\\s*var\\(--vl-${tone}\\)`),
       );
     }
   });

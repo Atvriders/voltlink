@@ -1,6 +1,6 @@
 // Admin routes: users, roles, settings, retention, health, and demo controls.
 import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { PATHS } from '../core/paths';
 
 import { policyRouter, sessionActor } from '../authz/policy';
 import { prisma } from '../core/db';
@@ -275,36 +275,35 @@ adminRouter.get(
   '/health',
   { auth: 'session', target: { kind: 'instanceAdmin' } },
   async (req, res) => {
-    let database = 'ok';
-    let migrationsCurrent: boolean;
+    let database: string;
+    let migrationsCurrent = false;
+    // NEW-10: database reflects ONLY the SELECT 1 probe; a migrations-path
+    // or comparison problem must not misreport the database as 'error'.
     try {
       await prisma.$queryRaw`SELECT 1`;
-      // NEW-10: migrationsCurrent compares the applied set against the
-      // bundled migration list, not just SELECT 1. The bundled dist lays the
-      // API out flat (dist/index.cjs), so resolve the migrations dir from
-      // several image/local layouts instead of one hard-coded path.
-      const candidates = [
-        join(__dirname, '..', '..', 'prisma', 'migrations'),
-        join(__dirname, '..', 'prisma', 'migrations'),
-        join(__dirname, '..', '..', 'apps', 'api', 'prisma', 'migrations'),
-        join(process.cwd(), 'apps', 'api', 'prisma', 'migrations'),
-      ];
-      const dir = candidates.find((d) => existsSync(d));
-      if (!dir) throw new Error('prisma migrations directory not found');
-      const bundled = readdirSync(dir, {
-        withFileTypes: true,
-      })
-        .filter((d) => d.isDirectory())
-        .map((d) => d.name)
-        .sort();
-      const applied = await prisma.$queryRaw<{ migration_name: string }[]>`
-        SELECT migration_name FROM _prisma_migrations`;
-      const appliedSet = new Set(applied.map((r) => r.migration_name));
-      migrationsCurrent =
-        applied.length === bundled.length && bundled.every((name) => appliedSet.has(name));
+      database = 'ok';
     } catch {
       database = 'error';
-      migrationsCurrent = false;
+    }
+    if (database === 'ok') {
+      try {
+        // NEW-10: the bundled migrations live at PATHS.migrations — never a
+        // hard-coded candidate list.
+        const dir = PATHS.migrations;
+        if (!existsSync(dir)) throw new Error('prisma migrations directory not found');
+        const bundled = readdirSync(dir, { withFileTypes: true })
+          .filter((d) => d.isDirectory())
+          .map((d) => d.name)
+          .sort();
+        const applied = await prisma.$queryRaw<{ migration_name: string }[]>`
+          SELECT migration_name FROM _prisma_migrations
+          WHERE rolled_back_at IS NULL AND finished_at IS NOT NULL`;
+        const appliedSet = new Set(applied.map((r) => r.migration_name));
+        migrationsCurrent =
+          bundled.length === appliedSet.size && bundled.every((name) => appliedSet.has(name));
+      } catch {
+        migrationsCurrent = false;
+      }
     }
     const queue = getQueue();
     const depth = await queue.depth('vehicle-commands').catch(() => -1);

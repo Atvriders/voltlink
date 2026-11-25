@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "VoltLink API",
-    "version": "1.0.0",
+    "version": "1.1.1",
     "description": "Generated from the live route table and the shared zod schemas. Auth is a session cookie (`vl_session`) plus a CSRF header (`x-vl-csrf`) for mutating requests."
   },
   "paths": {

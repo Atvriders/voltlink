@@ -329,12 +329,15 @@ describe('token refresh rotation (P-TESLAREFRESH)', () => {
 
 describe('Tesla provider-level flows', () => {
   it('TI-60 parseClass maps VIN position 4 and falls back', () => {
-    expect(parseClass('5YJ30000000000001')).toBe('compact_sedan'); // 5YJ3 = Model 3
-    expect(parseClass('5YJS0000000000001')).toBe('sport_sedan');
-    expect(parseClass('5YJX0000000000001')).toBe('suv');
-    expect(parseClass('5YJY0000000000001')).toBe('compact_crossover');
-    expect(parseClass('7SAY0000000000001')).toBe('compact_crossover'); // 7SAY = Model Y
-    expect(parseClass('ZZZZ0000000000001')).toBe('fallback');
+    // Real-format synthetic VINs (17 chars, realistic positions 5-17).
+    expect(parseClass('5YJ3E1EA2NF000001')).toBe('compact_sedan'); // 5YJ3 = Model 3
+    expect(parseClass('5YJSA7E26RF000001')).toBe('sport_sedan'); // Model S
+    expect(parseClass('5YJXCBE44KF000001')).toBe('suv'); // Model X
+    expect(parseClass('5YJYGDEE1MF000001')).toBe('compact_crossover'); // Model Y
+    expect(parseClass('7SAYGDEE9PF000001')).toBe('compact_crossover'); // 7SAY = Model Y (Shanghai)
+    expect(parseClass('7G2CEHED5RA000001')).toBe('pickup'); // 7G2C = Cybertruck (R2-40)
+    expect(parseClass('1N4BL4BV7KC000001')).toBe('fallback'); // Nissan Altima
+    expect(parseClass('INVALIDVIN000000')).toBe('fallback');
   });
 
   it('readiness reports per-vehicle key pairing from fleet_status', async () => {

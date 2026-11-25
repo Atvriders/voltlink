@@ -269,7 +269,11 @@ export function Stat({
   return (
     <div className="rounded-xl border border-line bg-panel2 p-3">
       <p className="text-[11px] font-semibold uppercase tracking-wider text-faint">{label}</p>
-      <p className={`mt-1 text-xl font-bold ${tone ? `text-${tone}` : ''}`}>{value}</p>
+      {/* tone is the full utility class (e.g. 'text-ok'), applied as-is —
+          the old text-${tone} double-prefixed 'text-ok' into the nonexistent
+          'text-text-ok' and the admin health tiles lost their status colours
+          (web-9 contrast-boundaries live failure). */}
+      <p className={`mt-1 text-xl font-bold ${tone ?? ''}`}>{value}</p>
       {sub && <p className="mt-0.5 text-xs text-subtle">{sub}</p>}
     </div>
   );

@@ -30,6 +30,9 @@ const CLASS_BY_VIN4: Record<string, VehicleClass> = {
   S: 'sport_sedan',
   X: 'suv',
   Y: 'compact_crossover',
+  // R2-40: the Cybertruck model code maps to pickup, matching the shared
+  // class map in guides/02-tessie-api.md (cybertruck -> pickup).
+  C: 'pickup',
 };
 export const parseClass = (vin: string): VehicleClass =>
   CLASS_BY_VIN4[vin.charAt(3)?.toUpperCase()] ?? 'fallback';
