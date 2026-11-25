@@ -69,8 +69,8 @@
 
 1. Put VoltLink behind TLS; set `PUBLIC_URL` to the HTTPS origin.
 2. Set `TRUST_PROXY=1` only when exactly one trusted proxy terminates TLS (or
-   a comma list of proxy addresses/CIDRs); `TRUST_PROXY=true` makes the web
-   role refuse to start.
+   a comma list of proxy addresses/CIDRs); the boolean `true` value makes the
+   web role refuse to start.
 3. Generate strong `JWT_SECRET`, `VL_MASTER_KEY`, `POSTGRES_PASSWORD`.
 4. Enable TOTP for owner/admin accounts; register a passkey as backup.
 5. Keep `pull_policy: always` (production compose) and subscribe to releases

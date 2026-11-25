@@ -17,8 +17,8 @@ and move PostgreSQL to managed hosting.
 1. Point a DNS record at the server.
 2. Terminate TLS at a reverse proxy (Caddy, nginx, Traefik) in front of the
    web container; set `TRUST_PROXY=1` for exactly one trusted proxy (or a
-   comma list of proxy addresses/CIDRs). `TRUST_PROXY=true` makes the web
-   role refuse to start.
+   comma list of proxy addresses/CIDRs). The boolean `true` value makes the
+   web role refuse to start.
 3. Set `PUBLIC_URL=https://<host>`.
 
 Example Caddyfile:
@@ -34,8 +34,8 @@ Example nginx server block — see [Installation](INSTALLATION.md).
 ## Security before going live
 
 - Strong `JWT_SECRET`, `VL_MASTER_KEY`, `POSTGRES_PASSWORD`
-- `PUBLIC_URL` on HTTPS, `TRUST_PROXY=1` behind the trusted proxy (never `true`;
-  the web role refuses to start on it)
+- `PUBLIC_URL` on HTTPS, `TRUST_PROXY=1` behind the trusted proxy (never the
+  boolean `true`; the web role refuses to start on it)
 - TOTP on the owner account
 - Firewall: expose only 80/443; keep PostgreSQL/Redis internal to the compose
   network
