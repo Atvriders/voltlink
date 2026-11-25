@@ -538,6 +538,10 @@ export default function VehicleViewer({
           antialias: p !== 'low',
           powerPreference: 'high-performance',
           failIfMajorPerformanceCaveat: false,
+          // R2-44: keep the presented frame in the drawing buffer so the
+          // e2e pixel assertion (and any frame capture) can readPixels the
+          // real rendered scene instead of a cleared buffer.
+          preserveDrawingBuffer: true,
         }}
         onCreated={({ gl }) => {
           gl.domElement.addEventListener('webglcontextlost', (e) => {

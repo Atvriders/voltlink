@@ -130,6 +130,18 @@ test('showroom renders the right GLB per vehicle class, with zero page errors', 
 
 /** Quantized unique colours in the viewer canvas: a blank or failed render
  * has ~1; a real vehicle has dozens (R2-44 pixel assertion). */
+/** Pick a vehicle by display name from the shell fleet switcher. On the
+ * vehicle detail pages the fleet list lives behind the "Fleet N Choose
+ * vehicle" / "Vehicle: X. Change vehicle" menu button, and its rows are
+ * role="menuitem" buttons that only exist while the menu is open. */
+async function switchVehicle(page: import('@playwright/test').Page, name: string) {
+  const switcher = page.getByRole('button', { name: /Choose vehicle|Change vehicle/ }).first();
+  if (await switcher.isVisible().catch(() => false)) {
+    await switcher.click();
+  }
+  await page.getByRole('menuitem', { name: new RegExp(name) }).first().click();
+}
+
 async function uniqueColors(page: import('@playwright/test').Page): Promise<number> {
   return page.evaluate(() => {
     const c = document.querySelector(
@@ -172,22 +184,30 @@ test('R2-44: per-class pixels, presets and GPU memory return to baseline', async
   // Pixel assertion: every vehicle class renders non-background geometry.
   const demoVehicles = ['Aurora', 'Comet', 'Terra', 'Atlas', 'Bison'];
   for (const name of demoVehicles) {
-    await page
-      .getByRole('button', { name: new RegExp(name) })
-      .first()
-      .click();
+    await switchVehicle(page, name);
     await expect
       .poll(() => viewer.first().getAttribute('data-asset'), { timeout: 30000 })
       .toBe('glb');
-    await page.waitForTimeout(600);
-    const colors = await uniqueColors(page);
-    expect(colors, `${name} renders real pixels (got ${colors} unique colours)`).toBeGreaterThan(
-      50,
-    );
+    // Poll rather than sleep: on the shared runner the first rendered frame
+    // of a freshly-mounted model can take longer than any fixed wait, and
+    // until it lands readPixels sees the cleared buffer (1 colour).
+    await expect
+      .poll(async () => uniqueColors(page), {
+        timeout: 30000,
+        message: `${name} renders real pixels`,
+      })
+      .toBeGreaterThan(50);
   }
 
   // Preset test: low → _lod2, medium → _lod, high/ultra → LOD0, and the
   // pixel ratio follows the preset (1 for low, >1.5 for high/ultra).
+  // The suffix assertions are class-specific: return to Aurora (the first
+  // demo vehicle, compact_sedan) so they hold regardless of where the
+  // pixel sweep above stopped.
+  await switchVehicle(page, 'Aurora');
+  await expect
+    .poll(() => viewer.first().getAttribute('data-asset'), { timeout: 30000 })
+    .toBe('glb');
   const presetSelect = page.locator('select[aria-label="Graphics preset"]');
   const presetCases: [string, RegExp][] = [
     ['low', /_lod2\./],
@@ -225,22 +245,12 @@ test('R2-44: per-class pixels, presets and GPU memory return to baseline', async
   });
   const baseline = await readMem();
   expect(baseline.geometries, 'baseline geometries recorded').toBeGreaterThan(0);
-  for (const name of demoVehicles.slice(1)) {
-    await page
-      .getByRole('button', { name: new RegExp(name) })
-      .first()
-      .click();
+  for (const name of [...demoVehicles.slice(1), 'Aurora']) {
+    await switchVehicle(page, name);
     await expect
       .poll(() => viewer.first().getAttribute('data-asset'), { timeout: 30000 })
       .toBe('glb');
   }
-  await page
-    .getByRole('button', { name: /Aurora/ })
-    .first()
-    .click();
-  await expect
-    .poll(() => viewer.first().getAttribute('data-asset'), { timeout: 30000 })
-    .toBe('glb');
   const after = await readMem();
   expect(
     Math.abs(after.geometries - baseline.geometries),
