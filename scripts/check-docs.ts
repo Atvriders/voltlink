@@ -77,9 +77,7 @@ for (const file of DOC_FILES) {
     if (m) {
       failed = true;
       console.error(
-      console.error(
         `✖ ${file}: '$(' inside a .env example ('${m[1]}=$(...') — compose never runs commands in .env.`,
-      );
       );
     }
   }
