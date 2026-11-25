@@ -7,7 +7,7 @@ import {
   GRANT_PERMISSIONS,
   OPERATOR_PERMISSIONS,
   ORG_PERMISSIONS,
-  ROLE_PERMISSIONS,
+  permissionsForRole,
   VEHICLE_PERMISSIONS,
   type OrgPermission,
   type Permission,
@@ -43,7 +43,9 @@ export async function effectiveVehiclePermissions(
   ]);
   const perms = new Set<VehiclePermission>();
   if (m?.status === 'ACTIVE' && m.vehicleScope === 'ALL') {
-    for (const p of ROLE_PERMISSIONS[m.role]) {
+    // PL-01: an unknown role is refused every permission (permissionsForRole
+    // returns [] for it) — never a fallback role and never a crash.
+    for (const p of permissionsForRole(m.role)) {
       if ((VEHICLE_PERMISSIONS as readonly string[]).includes(p)) perms.add(p as VehiclePermission);
     }
   }
@@ -185,7 +187,7 @@ export async function orgPermissions(
     where: { organizationId_userId: { organizationId, userId: actor.userId } },
   });
   if (!m || m.status !== 'ACTIVE') return new Set<Permission>();
-  const perms = new Set<Permission>(ROLE_PERMISSIONS[m.role]);
+  const perms = new Set<Permission>(permissionsForRole(m.role));
   if (organizationId !== (await getOperatorOrgId(db))) {
     for (const p of OPERATOR_PERMISSIONS) perms.delete(p);
   }
@@ -272,7 +274,7 @@ export async function accessibleVehicleIds(
   });
   const rolePermitted: string[] = [];
   for (const m of orgMemberships) {
-    if (m.vehicleScope === 'ALL' && (ROLE_PERMISSIONS[m.role] as readonly string[]).includes(perm))
+    if (m.vehicleScope === 'ALL' && permissionsForRole(m.role).includes(perm))
       rolePermitted.push(m.organizationId);
   }
   const [byRole, byGrant] = await Promise.all([
@@ -335,7 +337,7 @@ export async function vehicleReaderIds(vehicleId: string): Promise<string[]> {
   });
   const ids = new Set<string>(
     members
-      .filter((m) => (ROLE_PERMISSIONS[m.role] as readonly string[]).includes('vehicles.read'))
+      .filter((m) => permissionsForRole(m.role).includes('vehicles.read'))
       .map((m) => m.userId),
   );
   const grants = await prisma.vehicleGrant.findMany({

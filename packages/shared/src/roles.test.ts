@@ -9,10 +9,11 @@ import {
   OPERATOR_PERMISSIONS,
   ORG_PERMISSIONS,
   ORG_ROLES,
+  permissionsForRole,
   ROLE_PERMISSIONS,
   VEHICLE_PERMISSIONS,
 } from './roles';
-import { COMMAND_DEFINITIONS, HIGH_RISK_COMMANDS, RISK_LEVELS } from './commands';
+import { COMMAND_DEFINITIONS, COMMAND_TYPES, HIGH_RISK_COMMANDS, RISK_LEVELS } from './commands';
 
 describe('role → permission matrix (golden)', () => {
   it('STATUS_MANAGER and SUPPORT have no vehicle permissions', () => {
@@ -104,11 +105,33 @@ describe('role → permission matrix (golden)', () => {
       }
     });
 
+    it('PL-01 behavioural: an unknown role is refused every permission (PL-01)', () => {
+      // The access layer routes through permissionsForRole: an unknown role
+      // (possible only via a tampered/migrated database) must get NOTHING,
+      // not a fallback role's permissions and not a crash.
+      for (const p of [...ORG_PERMISSIONS, ...VEHICLE_PERMISSIONS]) {
+        expect(permissionsForRole('SUPERUSER').includes(p), p).toBe(false);
+      }
+      expect(permissionsForRole('SUPERUSER')).toEqual([]);
+      expect(permissionsForRole('OWNER')).toContain('vehicles.read');
+    });
+
     it('every command has a definition and high-risk commands are high (PL-01)', () => {
-      for (const [name, def] of Object.entries(COMMAND_DEFINITIONS)) {
-        expect(def.label.length).toBeGreaterThan(0);
-        expect([...RISK_LEVELS]).toContain(def.risk);
-        expect(name).toBeTypeOf('string');
+      // Iterate the CANONICAL command list (the enum), not the definitions:
+      // a command that lost its definition must fail this test.
+      for (const name of COMMAND_TYPES) {
+        const def = COMMAND_DEFINITIONS[name];
+        expect(def, `command ${name} has no definition`).toBeDefined();
+        expect(def.label.length, `command ${name} has a label`).toBeGreaterThan(0);
+        expect([...RISK_LEVELS], `command ${name} risk`).toContain(def.risk);
+      }
+      // No extra definitions beyond the canonical list, and every high-risk
+      // command really is high.
+      for (const name of Object.keys(COMMAND_DEFINITIONS)) {
+        expect(
+          (COMMAND_TYPES as readonly string[]).includes(name),
+          `${name} is not a canonical command`,
+        ).toBe(true);
       }
       expect(HIGH_RISK_COMMANDS.length).toBeGreaterThanOrEqual(3);
       for (const cmd of HIGH_RISK_COMMANDS) {

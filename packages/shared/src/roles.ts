@@ -86,6 +86,16 @@ export const GRANT_PERMISSIONS = {
 } as const satisfies Record<'VIEWER' | 'DRIVER' | 'MANAGER', readonly VehiclePermission[]>;
 
 /**
+ * The single lookup for a role's permissions. An UNKNOWN role (not in
+ * ORG_ROLES — only possible through a tampered or migrated database) is
+ * refused EVERY permission, never granted a fallback role's permissions and
+ * never allowed to crash the caller (PL-01).
+ */
+export function permissionsForRole(role: string): readonly Permission[] {
+  return (ROLE_PERMISSIONS as Record<string, readonly Permission[]>)[role] ?? [];
+}
+
+/**
  * Scopes for API keys (`vlk_` tokens). A key's permissions are always
  * intersected with the owning user's live permissions in the key's
  * organization, and never include high-risk command, sharing, provider or
