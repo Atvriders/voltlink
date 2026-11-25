@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, within } from '@testing-library/react';
 
 const apiMock = vi.fn();
 const csvMock = vi.fn().mockResolvedValue('a,b');
@@ -146,11 +146,26 @@ const commandItems = [
     id: 'cmd-activity',
     vehicleId: 'v1',
     type: 'set_temperature',
-    status: 'queued',
+    // web-9: confirmed-only activity fixtures — the modal's outcome lines are
+    // status-dependent, so the list item must carry the same terminal state
+    // the detail endpoint returns.
+    status: 'confirmed',
+    confirmation: 'state_match',
     createdAt: '2024-01-01T00:00:00.000Z',
     params: {},
     idempotencyKey: 'key-activity',
     updatedAt: '2024-01-01T00:00:01.000Z',
+  },
+  {
+    id: 'cmd-honk-activity',
+    vehicleId: 'v1',
+    type: 'honk_horn',
+    status: 'accepted',
+    confirmation: 'not_observable',
+    createdAt: '2024-01-02T00:00:00.000Z',
+    params: {},
+    idempotencyKey: 'key-honk-activity',
+    updatedAt: '2024-01-02T00:00:01.000Z',
   },
 ];
 
@@ -282,22 +297,44 @@ describe('LiveVehiclePage', () => {
     const user = userEvent.setup();
     renderVehiclePage();
 
-    const activityButton = await screen.findByRole('button', {
-      name: /set[_ ]temperature/i,
-    });
-    await user.click(activityButton);
+    // The activity ROW button (inside its li), not any action-panel button.
+    const row = (await screen.findAllByRole('button', { name: /set[_ ]temperature/i })).find((b) =>
+      b.closest('[data-command-id="cmd-activity"]'),
+    )!;
+    await user.click(row);
 
-    expect(await screen.findByText('Audit trail')).toBeTruthy();
-    expect(screen.getByText(/Provider accepted/)).toBeTruthy();
-    expect(screen.getByText(/Vehicle state confirms the command completed/)).toBeTruthy();
+    const dialog = within(screen.getByRole('dialog'));
+    expect(await dialog.findByText('Audit trail')).toBeTruthy();
+    // The confirmed detail: terminal box + the confirmed-only line.
+    expect(dialog.getByText(/Provider accepted/)).toBeTruthy();
+    expect(dialog.getByText(/Vehicle state confirms the command completed/)).toBeTruthy();
     expect(apiMock).toHaveBeenCalledWith('/api/v1/commands/cmd-activity');
+  });
+
+  it('web-9: a not-observable honk activity modal shows the cannot-confirm outcome', async () => {
+    const user = userEvent.setup();
+    renderVehiclePage();
+
+    const row = (await screen.findAllByRole('button', { name: /honk[_ ]horn/i })).find((b) =>
+      b.closest('[data-command-id="cmd-honk-activity"]'),
+    )!;
+    await user.click(row);
+
+    const dialog = within(screen.getByRole('dialog'));
+    expect(await dialog.findByText(/cannot confirm/)).toBeTruthy();
+    expect(dialog.queryByText(/Vehicle state confirms the command completed/)).toBeNull();
   });
 
   it('issues a honk command and shows confirmation', async () => {
     const user = userEvent.setup();
     renderVehiclePage();
 
-    await user.click(await screen.findByRole('button', { name: /honk horn/i }));
+    // The ACTION button, not the honk activity row (web-9: the row is
+    // now in the fixtures too).
+    const action = (await screen.findAllByRole('button', { name: /honk[_ ]horn/i })).find(
+      (b) => !b.closest('[data-command-id]'),
+    )!;
+    await user.click(action);
 
     await waitFor(() =>
       expect(apiMock).toHaveBeenCalledWith(
@@ -310,9 +347,12 @@ describe('LiveVehiclePage', () => {
     );
 
     // TI-26: the real honk outcome is 'Provider accepted' + the
-    // not-observable note, never 'Vehicle state confirms…'.
-    expect(await screen.findByText(/Provider accepted/)).toBeTruthy();
-    expect(await screen.findByText(/cannot confirm/)).toBeTruthy();
+    // not-observable note, never 'Vehicle state confirms…'. Scoped to the
+    // lifecycle dialog (the activity chip uses the same words — web-9).
+    const dialog = within(await screen.findByRole('dialog'));
+    expect(await dialog.findByText(/Provider accepted/)).toBeTruthy();
+    expect(await dialog.findByText(/cannot confirm/)).toBeTruthy();
+    expect(dialog.queryByText(/Vehicle state confirms/)).toBeNull();
   });
 
   it('issues a lock command and shows confirmation', async () => {
@@ -388,7 +428,10 @@ describe('LiveVehiclePage', () => {
     commandPostError = new Error('boom');
     renderVehiclePage();
 
-    await user.click(await screen.findByRole('button', { name: /honk horn/i }));
+    const action = (await screen.findAllByRole('button', { name: /honk[_ ]horn/i })).find(
+      (b) => !b.closest('[data-command-id]'),
+    )!;
+    await user.click(action);
 
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain('Command failed.');

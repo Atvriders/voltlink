@@ -656,8 +656,10 @@ function Row({
   onDelete?: () => void;
 }) {
   return (
-    <li className="flex items-center gap-1 rounded-lg px-2 py-1 text-sm hover:bg-panel2">
-      <button type="button" className="min-w-0 truncate text-left" onClick={onShow}>
+    <li className="flex items-center gap-1 rounded-lg px-1 py-0.5 text-sm hover:bg-panel2">
+      {/* py-2 keeps the row label at a 24 px touch target (axe target-size,
+          PL-05 phone width) without inflating the list. */}
+      <button type="button" className="min-w-0 truncate py-2 text-left" onClick={onShow}>
         {label}
         {hint && <span className="ml-1.5 text-xs text-faint">{hint}</span>}
       </button>
@@ -697,7 +699,7 @@ function IconButton({
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="rounded p-1 text-subtle hover:bg-muted hover:text-foreground"
+      className="rounded p-2 text-subtle hover:bg-muted hover:text-foreground"
     >
       {children}
     </button>

@@ -128,9 +128,12 @@ import { within } from '@testing-library/react';
 import { EVENT_TYPES } from '@voltlink/shared';
 import NotificationsPage from './NotificationsPage';
 
+const { pushEnableMock } = vi.hoisted(() => ({
+  pushEnableMock: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('../lib/push', () => ({
   pushSupport: () => 'supported',
-  enable: vi.fn().mockResolvedValue(undefined),
+  enable: pushEnableMock,
 }));
 
 const firstEvent = EVENT_TYPES[0];
@@ -290,6 +293,10 @@ describe('NotificationsPage', () => {
     renderPage('/notifications', <NotificationsPage />);
     await user.click(screen.getByRole('tab', { name: /preferences/i }));
     await user.click(await screen.findByRole('button', { name: /enable push notifications/i }));
+    // web-9: the confirmation alone is weak — the enable() call must have
+    // happened (the subscription PUT lives in lib/push) and the success
+    // message is the page's own outcome, not a fixture.
+    expect(pushEnableMock).toHaveBeenCalledTimes(1);
     expect(await screen.findByText('Push notifications enabled.')).toBeTruthy();
   });
 

@@ -172,49 +172,57 @@ describe('AutomationsPage', () => {
       vi.fn(() => true),
     );
     apiMock.mockClear();
-    apiMock.mockImplementation(async (path: string, options?: { method?: string }) => {
-      const method = options?.method ?? 'GET';
-      if (path === '/api/v1/automations' && method === 'POST') {
-        return { ...automationFixture, id: 'a2', name: 'Created' };
-      }
-      if (path === '/api/v1/automations') return [automationFixture];
-      if (path === '/api/v1/vehicles') return [{ id: 'v1', displayName: 'Aurora' }];
-      if (path === '/api/v1/notifications/webhooks') {
-        return [{ id: 'wh1', name: 'Ops endpoint', displayHint: 'ops.example.test' }];
-      }
-      if (path === `/api/v1/automations/${automationFixture.id}/executions`) {
-        return executionFixtures;
-      }
-      if (path === `/api/v1/automations/${automationFixture.id}/dry-run`) {
-        return {
-          result: 'success',
-          actionResults: [{ action: 'notify_app', ok: true, detail: 'would notify' }],
-        };
-      }
-      if (
-        path === `/api/v1/automations/${automationFixture.id}/inbound-webhook` &&
-        method === 'POST'
-      ) {
-        return {
-          url: 'https://example.test/hook',
-          secret: 'supersecret',
-          publicId: 'pub1',
-        };
-      }
-      if (
-        path === `/api/v1/automations/${automationFixture.id}/inbound-webhook` &&
-        method === 'DELETE'
-      ) {
-        return { ok: true };
-      }
-      if (path === `/api/v1/automations/${automationFixture.id}` && method === 'PATCH') {
-        return { ...automationFixture, enabled: false };
-      }
-      if (path === `/api/v1/automations/${automationFixture.id}` && method === 'DELETE') {
-        return { ok: true };
-      }
-      return {};
-    });
+    // web-9: stateful mock — the list refetch after a PATCH must reflect the
+    // patched enabled flag, or the UI-flip assertion would be a fixture lie.
+    let fixtureEnabled = true;
+    apiMock.mockImplementation(
+      async (path: string, options?: { method?: string; body?: unknown }) => {
+        const method = options?.method ?? 'GET';
+        if (path === '/api/v1/automations' && method === 'POST') {
+          return { ...automationFixture, id: 'a2', name: 'Created' };
+        }
+        if (path === '/api/v1/automations')
+          return [{ ...automationFixture, enabled: fixtureEnabled }];
+        if (path === '/api/v1/vehicles') return [{ id: 'v1', displayName: 'Aurora' }];
+        if (path === '/api/v1/notifications/webhooks') {
+          return [{ id: 'wh1', name: 'Ops endpoint', displayHint: 'ops.example.test' }];
+        }
+        if (path === `/api/v1/automations/${automationFixture.id}/executions`) {
+          return executionFixtures;
+        }
+        if (path === `/api/v1/automations/${automationFixture.id}/dry-run`) {
+          return {
+            result: 'success',
+            actionResults: [{ action: 'notify_app', ok: true, detail: 'would notify' }],
+          };
+        }
+        if (
+          path === `/api/v1/automations/${automationFixture.id}/inbound-webhook` &&
+          method === 'POST'
+        ) {
+          return {
+            url: 'https://example.test/hook',
+            secret: 'supersecret',
+            publicId: 'pub1',
+          };
+        }
+        if (
+          path === `/api/v1/automations/${automationFixture.id}/inbound-webhook` &&
+          method === 'DELETE'
+        ) {
+          return { ok: true };
+        }
+        if (path === `/api/v1/automations/${automationFixture.id}` && method === 'PATCH') {
+          fixtureEnabled =
+            (options?.body as { enabled?: boolean } | undefined)?.enabled ?? fixtureEnabled;
+          return { ...automationFixture, enabled: fixtureEnabled };
+        }
+        if (path === `/api/v1/automations/${automationFixture.id}` && method === 'DELETE') {
+          return { ok: true };
+        }
+        return {};
+      },
+    );
   });
 
   afterEach(() => {
@@ -238,12 +246,18 @@ describe('AutomationsPage', () => {
     await screen.findByText('Hook');
     await user.click(screen.getByRole('button', { name: /disable/i }));
 
+    // web-9 (W15): the PATCH body must carry the flipped enabled flag, and
+    // the row must show the opposite action afterwards.
     await waitFor(() => {
       expect(apiMock).toHaveBeenCalledWith(
         `/api/v1/automations/${automationFixture.id}`,
-        expect.objectContaining({ method: 'PATCH' }),
+        expect.objectContaining({
+          method: 'PATCH',
+          body: expect.objectContaining({ enabled: false }),
+        }),
       );
     });
+    expect(await screen.findByRole('button', { name: /enable/i })).toBeTruthy();
   });
 
   it('deletes an automation after confirmation', async () => {

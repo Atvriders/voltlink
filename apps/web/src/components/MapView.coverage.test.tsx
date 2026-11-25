@@ -202,8 +202,13 @@ describe('MapView', () => {
       expect(document.querySelector('[aria-label="Map"]')).toBeTruthy();
     });
     await waitFor(() => expect(onReady).toHaveBeenCalled());
-    expect(fakeMap.addSource).toHaveBeenCalled();
-    expect(fakeMap.addLayer).toHaveBeenCalled();
+    // web-9: not just 'some' source/layer calls — every layer id in the prop
+    // reaches the map, in order (the component prefixes ids with 'lyr-').
+    const drawnIds = fakeMap.addLayer.mock.calls.map((c) => (c[0] as { id: string }).id);
+    for (const layer of layers) {
+      expect(drawnIds, `layer ${layer.id} drawn`).toContain(`lyr-${layer.id}`);
+    }
+    expect(drawnIds.slice(0, layers.length)).toEqual(layers.map((l) => `lyr-${l.id}`));
   });
 
   it('shows the fallback card when map creation throws', async () => {

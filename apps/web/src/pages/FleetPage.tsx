@@ -114,7 +114,14 @@ export default function FleetPage() {
               />
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            /* tabIndex makes the scrollable table keyboard-focusable so
+               phone and keyboard users can scroll it (axe
+               scrollable-region-focusable, PL-05 phone width). */
+            <div
+              className="overflow-x-auto"
+              tabIndex={0}
+              aria-label="Fleet table (scrolls horizontally)"
+            >
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-faint">
