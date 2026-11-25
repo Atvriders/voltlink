@@ -8,7 +8,7 @@ async function loginFresh(page: Page): Promise<string> {
   await register(page, email);
   await page.goto('/vehicles', { waitUntil: 'domcontentloaded' });
   await page
-    .locator('button[aria-label="Account menu"]:visible')
+    .locator('button[aria-label^="Account menu"]:visible')
     .waitFor({ state: 'visible', timeout: 15000 });
   return email;
 }
@@ -28,7 +28,7 @@ test.describe('preload reload guard (R2-37/TI-28)', () => {
     await expect.poll(() => vehiclesLoads, { timeout: 15000 }).toBeGreaterThanOrEqual(2);
     // Let the reloaded page finish mounting before the second failure.
     await page
-      .locator('button[aria-label="Account menu"]:visible')
+      .locator('button[aria-label^="Account menu"]:visible')
       .waitFor({ state: 'visible', timeout: 15000 });
     // The session marker survives the reload: a second failure never reloads
     // again, however long the session lasts.
@@ -38,7 +38,7 @@ test.describe('preload reload guard (R2-37/TI-28)', () => {
     // The second failure never navigates again (at most one reload per session).
     expect(vehiclesLoads).toBe(baseline);
     await page
-      .locator('button[aria-label="Account menu"]:visible')
+      .locator('button[aria-label^="Account menu"]:visible')
       .waitFor({ state: 'visible', timeout: 15000 });
   });
 
@@ -67,13 +67,13 @@ test.describe('preload reload guard (R2-37/TI-28)', () => {
     await expect.poll(() => aborted, { timeout: 15000 }).toBeGreaterThanOrEqual(1);
     // The Shell stays mounted and the page reports the failure or renders.
     await page
-      .locator('button[aria-label="Account menu"]:visible')
+      .locator('button[aria-label^="Account menu"]:visible')
       .first()
       .waitFor({ state: 'visible', timeout: 20000 });
     await expect(
       page.getByRole('heading', { name: /Drives|This page hit an error/ }).first(),
     ).toBeVisible({ timeout: 20000 });
     await page.waitForTimeout(2000);
-    await expect(page.locator('button[aria-label="Account menu"]:visible').first()).toBeVisible();
+    await expect(page.locator('button[aria-label^="Account menu"]:visible').first()).toBeVisible();
   });
 });

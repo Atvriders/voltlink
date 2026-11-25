@@ -1,4 +1,7 @@
 // Page render test (coverage harness).
+// web-9 note: the viewer re-keying on vehicle switch (data-asset-url per
+// class, held-GLB recovery) is NOT asserted here — jsdom renders no WebGL.
+// That behaviour is covered by the C-WEBGLTEST e2e (tests/e2e/webgl-assets.spec.ts).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -228,6 +231,10 @@ describe('ShowroomPage', () => {
     await waitFor(() => {
       expect(boltButton.getAttribute('aria-pressed')).toBe('true');
     });
+    // web-9: the switch must change the SELECTED detail, not just the pressed
+    // state — the detail card's live-vehicle link follows the clicked vehicle.
     expect(screen.getAllByText('Bolt').length).toBeGreaterThan(0);
+    const liveLink = await screen.findByRole('link', { name: /live vehicle/i });
+    expect(liveLink.getAttribute('href')).toBe('/vehicles/v2');
   });
 });

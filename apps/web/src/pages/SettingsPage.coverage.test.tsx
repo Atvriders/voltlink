@@ -230,6 +230,25 @@ describe('SettingsPage', () => {
     expect(await screen.findByText('Passkey registered. Use it on the sign-in page.')).toBeTruthy();
   });
 
+  it('web-9: deletes a passkey through the API', async () => {
+    apiMock.mockImplementation(async (path: string) => {
+      if (path === '/api/v1/auth/passkeys')
+        return [{ id: 'pk1', name: 'YubiKey', createdAt: '2024-01-01T00:00:00Z' }];
+      return {};
+    });
+    renderSettings('/settings/security');
+    await userEvent.click(await screen.findByRole('button', { name: /Delete passkey YubiKey/ }));
+    await waitFor(() =>
+      expect(
+        apiMock.mock.calls.some(
+          (c) =>
+            c[0] === '/api/v1/auth/passkeys/pk1' &&
+            (c[1] as { method?: string })?.method === 'DELETE',
+        ),
+      ).toBe(true),
+    );
+  });
+
   it('changes the password and reports success', async () => {
     renderSettings('/settings/security');
     await userEvent.type(await screen.findByLabelText('Current password'), 'old-pass-123');
@@ -238,6 +257,17 @@ describe('SettingsPage', () => {
     expect(
       await screen.findByText('Password changed. Other sessions were signed out.'),
     ).toBeTruthy();
+    // web-9 (W1): the request body carries both fields, not just the new one.
+    expect(
+      apiMock.mock.calls.some(
+        (c) =>
+          c[0] === '/api/v1/users/change-password' &&
+          (c[1] as { body?: { currentPassword?: string; newPassword?: string } })?.body
+            ?.currentPassword === 'old-pass-123' &&
+          (c[1] as { body?: { currentPassword?: string; newPassword?: string } })?.body
+            ?.newPassword === 'new-pass-456',
+      ),
+    ).toBe(true);
   });
 
   it('saves retention policy and runs the delete-account flow', async () => {

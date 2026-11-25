@@ -41,7 +41,7 @@ test.describe('TOTP enrolment and MFA sign-in (R2-07/TI-36)', () => {
 
     // Sign out, then sign in again: the MFA step appears and accepts the
     // recovery code.
-    await page.locator('button[aria-label="Account menu"]:visible').click();
+    await page.locator('button[aria-label^="Account menu"]:visible').click();
     await page.getByRole('menuitem', { name: 'Sign out' }).click();
     await page.waitForURL(/login/);
     await page.getByLabel('Email').fill(email);
@@ -55,6 +55,6 @@ test.describe('TOTP enrolment and MFA sign-in (R2-07/TI-36)', () => {
     await page.getByPlaceholder('Recovery code').fill(recovery[0]!);
     await page.getByRole('button', { name: /Verify/ }).click();
     await expect(page).not.toHaveURL(/login/);
-    await expect(page.locator('button[aria-label="Account menu"]:visible')).toBeVisible();
+    await expect(page.locator('button[aria-label^="Account menu"]:visible')).toBeVisible();
   });
 });

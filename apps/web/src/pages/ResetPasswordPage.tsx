@@ -100,6 +100,13 @@ export function ResetPasswordPage() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    // W11: the URL token is the whole proof of the reset request — refuse to
+    // send anything without it, instead of letting the API reject an empty
+    // token.
+    if (!token) {
+      setError('Missing verification token.');
+      return;
+    }
     setBusy(true);
     try {
       await api('/api/v1/auth/reset-password', { method: 'POST', body: { token, password } });

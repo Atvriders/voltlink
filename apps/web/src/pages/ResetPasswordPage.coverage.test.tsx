@@ -186,4 +186,15 @@ describe('Password reset and verification pages', () => {
 
     expect(await screen.findByText('Missing verification token.')).toBeTruthy();
   });
+
+  it('web-9 (W11): the reset page itself refuses a missing URL token', async () => {
+    renderPage('/reset-password', <ResetPasswordPage />);
+
+    const password = await screen.findByLabelText(/new password/i);
+    fireEvent.change(password, { target: { value: 'verysecurepassword' } });
+    fireEvent.click(screen.getByRole('button', { name: /set new password/i }));
+
+    expect(await screen.findByText('Missing verification token.')).toBeTruthy();
+    expect(apiMock).not.toHaveBeenCalled();
+  });
 });

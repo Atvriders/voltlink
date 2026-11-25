@@ -92,4 +92,18 @@ describe('contrast boundaries (F-CONTRAST)', () => {
       }
     }
   });
+
+  it('web-9: the .text-<tone> classes bind the checked tokens (live usage)', () => {
+    // The token ratios above only matter if the classes real pages use are
+    // bound to those tokens — a detached token pair could pass while a page
+    // ships an unbound tone colour.
+    const css = readFileSync(path.resolve('apps/web/src/index.css'), 'utf8');
+    for (const tone of ['ok', 'warn', 'danger', 'info']) {
+      const cls = css.match(new RegExp(`\\.text-${tone}\\s*\\{([\\s\\S]*?)\\}`));
+      expect(cls, `.text-${tone} defined`).toBeTruthy();
+      expect(cls![1], `.text-${tone} uses the tone token`).toMatch(
+        new RegExp(`color:\\s*var\\(--vl-${tone}\\)`),
+      );
+    }
+  });
 });

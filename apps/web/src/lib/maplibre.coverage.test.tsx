@@ -135,18 +135,27 @@ import { configureMapLibre, prefersReducedMotion, hasWebGL2 } from './maplibre';
 describe('mapLibre configuration module', () => {
   it('reports the reduced-motion preference from matchMedia', async () => {
     const original = window.matchMedia;
-    window.matchMedia = ((query: string) => ({
-      matches: query.includes('prefers-reduced-motion'),
-      media: query,
-      onchange: null,
-      addListener: () => undefined,
-      removeListener: () => undefined,
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
-      dispatchEvent: () => false,
-    })) as unknown as typeof window.matchMedia;
+    const queries: string[] = [];
+    window.matchMedia = ((query: string) => {
+      // web-9: record the REAL query and answer only the exact one — the old
+      // mock answered any query containing the substring, so a wrong media
+      // string still passed.
+      queries.push(query);
+      const matches = query === '(prefers-reduced-motion: reduce)';
+      return {
+        matches,
+        media: query,
+        onchange: null,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        dispatchEvent: () => false,
+      } as unknown as MediaQueryList;
+    }) as unknown as typeof window.matchMedia;
 
     expect(prefersReducedMotion()).toBe(true);
+    expect(queries).toContain('(prefers-reduced-motion: reduce)');
 
     window.matchMedia = original;
   });
