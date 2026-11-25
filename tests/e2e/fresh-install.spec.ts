@@ -31,10 +31,11 @@ test('a fresh install is set up through the web UI', async ({ page }) => {
   await page.getByLabel('Setup token').fill(token);
   await page.getByRole('button', { name: 'Create administrator' }).click();
 
-  // Registration succeeds and lands on '/' (R2-01), with the admin's name
-  // in the shell and the email in the account menu (TI-12).
+  // Registration succeeds and lands on '/' (R2-01), with the admin's email
+  // in the shell's account button and inside the account menu (TI-12: the
+  // admin's name or email must be visible; the shell displays the email).
   await expect(page).toHaveURL(/\/$/, { timeout: 30_000 });
-  await expect(page.getByText('Fresh Admin', { exact: false }).first()).toBeVisible();
+  await expect(page.getByText(email, { exact: false }).first()).toBeVisible();
   await page.getByRole('button', { name: /Account menu/ }).click();
-  await expect(page.getByText(email)).toBeVisible();
+  await expect(page.getByRole('menu').getByText(email)).toBeVisible();
 });

@@ -22,6 +22,7 @@ export { THEMES, normalizeThemeId } from './themes';
 interface AuthState {
   user: UserPublic | null;
   loading: boolean;
+  needsSetup: boolean;
   login: (
     email: string,
     password: string,
@@ -39,6 +40,7 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserPublic | null>(null);
   const [loading, setLoading] = useState(true);
+  const [needsSetup, setNeedsSetup] = useState(false);
   const qc = useQueryClient();
   const navigate = useNavigate();
 
@@ -55,9 +57,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const payload = await api<{ user: UserPublic }>('/api/v1/auth/me');
       setUser(payload.user);
+      setNeedsSetup(false);
       applyTheme(payload.user);
     } catch {
       setUser(null);
+      // R2-01/TI-12: while setup is pending the app must send visitors to
+      // /setup, not /login, so the install path starts at '/'.
+      try {
+        const s = await api<{ needsSetup: boolean }>('/api/v1/auth/setup-status');
+        setNeedsSetup(s.needsSetup);
+      } catch {
+        setNeedsSetup(false);
+      }
     } finally {
       setLoading(false);
     }
@@ -89,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (res.user) {
         resetClientState();
         setUser(res.user);
+        setNeedsSetup(false);
         applyTheme(res.user);
       }
       return {};
@@ -128,8 +140,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [resetClientState, navigate]);
 
   const value = useMemo(
-    () => ({ user, loading, login, loginMfa, logout, refresh }),
-    [user, loading, login, loginMfa, logout, refresh],
+    () => ({ user, loading, needsSetup, login, loginMfa, logout, refresh }),
+    [user, loading, needsSetup, login, loginMfa, logout, refresh],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

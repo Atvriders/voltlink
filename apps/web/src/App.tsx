@@ -86,9 +86,11 @@ function PageFallback() {
 }
 
 function Protected({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, needsSetup } = useAuth();
   if (loading) return <PageFallback />;
-  if (!user) return <Navigate to="/login" replace />;
+  // R2-01/TI-12: a pending setup sends visitors to /setup, so the install
+  // path starts at '/' — never to /login.
+  if (!user) return <Navigate to={needsSetup ? '/setup' : '/login'} replace />;
   return <>{children}</>;
 }
 
