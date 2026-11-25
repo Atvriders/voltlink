@@ -32,6 +32,7 @@ function parseArgs(argv) {
     else if (a === '--compose-src') out.composeSrc = argv[++i];
     else if (a === '--env-example-src') out.envExampleSrc = argv[++i];
     else if (a === '--ci-overlay') out.ciOverlay = argv[++i];
+    else if (a === '--image-digest') out.imageDigest = argv[++i];
     else if (a === '--only') out.only = argv[++i];
     else if (a === '--from') out.from = argv[++i];
     else if (a === '--until') out.until = argv[++i];
@@ -132,6 +133,14 @@ const main = () => {
     console.log(body);
     if (opts.dryRun) continue;
     execSync(`set -e\n${body}`, { cwd: opts.workdir, stdio: 'inherit', env: kept });
+    // verify-published only: after the guarded .env block, pin the exact
+    // digest (printed substitution — the block itself stays verbatim).
+    if (block.name === 'create-env' && opts.imageDigest) {
+      const pin = `printf 'VOLTLINK_IMAGE_DIGEST=%s\\n' '${opts.imageDigest}' >> .env`;
+      console.log(`\n== run block create-env:image-digest (substitution) ==`);
+      console.log(pin);
+      execSync(`set -e\n${pin}`, { cwd: opts.workdir, stdio: 'inherit', env: kept });
+    }
   }
   console.log(`\ninstalled from ${all.length} guide block(s).`);
 };

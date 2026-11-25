@@ -317,6 +317,8 @@ jobs:
   image:
     runs-on: ubuntu-latest
     needs: [checks, unit-int, migrations, e2e-fullstack]
+    # Tag runs build nothing (C5.8).
+    if: github.ref_type != 'tag'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
@@ -420,6 +422,9 @@ jobs:
           docker compose down -v
 
   compose-validate:
+    # R2-65: this job is the renamed compose-dev-smoke — the chosen fix is the
+    # rename (the old job never existed in the workflow; the dev overlay is
+    # validated here as the documented entry-point chain instead of a boot).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -462,6 +467,44 @@ jobs:
             node scripts/compose-render.mjs --env-file /tmp/cmp.env $files $pflag > /tmp/render.json
             node scripts/compare-compose-config.mjs /tmp/render.json /tmp/config.json
           done
+      - name: Negative cases — each :? message fires when its variable is missing
+        run: |
+          set -e
+          for var in POSTGRES_PASSWORD JWT_SECRET VL_MASTER_KEY PUBLIC_URL; do
+            grep -v "^$var=" ci/compose.env > /tmp/neg.env
+            if docker compose -f compose.production.yml --env-file /tmp/neg.env config -q 2>/tmp/neg.err; then
+              echo "FAIL: config succeeded without $var" >&2; exit 1
+            fi
+            grep -q "set $var" /tmp/neg.err || {
+              echo "FAIL: no ':?' message for $var" >&2; cat /tmp/neg.err >&2; exit 1
+            }
+            echo "ok: missing $var -> $(head -1 /tmp/neg.err)"
+          done
+      - name: Project and volume names stay the same across every invocation
+        run: |
+          set -e
+          for spec in \
+            'compose.production.yml|' \
+            'compose.production.yml|status' \
+            'compose.production.yml|tesla' \
+            'docker-compose.yml|' \
+            'docker-compose.yml docker-compose.build.yml|' \
+            'docker-compose.yml docker-compose.build.yml docker-compose.dev.yml|' \
+            'compose.production.yml docker-compose.ci.yml|'; do
+            files="${spec%%|*}"; profile="${spec#*|}"
+            args=""; for f in $files; do args="$args -f $f"; done
+            pflag=""; [ -n "$profile" ] && pflag="--profile $profile"
+            docker compose --env-file ci/compose.env $args $pflag config --format json \
+              | jq -r '"\(.name) \(.volumes|keys|join(","))"'
+          done | sort -u > /tmp/names.txt
+          test "$(wc -l < /tmp/names.txt)" = "1"
+          grep -qx 'voltlink pgdata' /tmp/names.txt
+          echo "ok: every invocation renders project voltlink + volume pgdata"
+      - name: actionlint
+        run: |
+          set -e
+          curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- -d /tmp/actionlint-bin
+          /tmp/actionlint-bin/actionlint -color .github/workflows/*.yml
       - name: Structural gates (C0)
         run: |
           set -e
@@ -487,7 +530,9 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     needs: [image, secret-scan, compose-validate]
-    if: github.event_name == 'push' && github.server_url == 'https://github.com'
+    # Tag runs build nothing (C5.8): the tag-release job re-labels main's
+    # verified digest.
+    if: github.event_name == 'push' && github.server_url == 'https://github.com' && github.ref_type != 'tag'
     permissions:
       contents: read
       packages: write
@@ -537,48 +582,158 @@ jobs:
       - name: Guide runner against the published digest (the GitHub Actions image proof)
         env:
           # I-V100: verify-published boots the exact digest, not the mutable
-          # version tag.
+          # version tag. The runner writes it into .env (printed substitution)
+          # so the guide's guarded block stays verbatim.
           VOLTLINK_IMAGE_DIGEST: '@${{ needs.publish.outputs.digest }}'
         run: |
           node scripts/install-doc-run.mjs --workdir published-smoke \
-            --compose-src compose.production.yml --env-example-src .env.example \
-            --until up
+            --compose-src "$PWD/compose.production.yml" --env-example-src "$PWD/.env.example" \
+            --image-digest "$VOLTLINK_IMAGE_DIGEST" \
+            --skip env-lan,env-https,env-webauthn --until up
           cd published-smoke
-          TOKEN=$(docker compose -f compose.production.yml logs web 2>&1 | grep 'first-run setup token' | tail -1 | awk '{print $NF}')
+          TOKEN=$(docker compose logs web 2>&1 | grep 'first-run setup token' | tail -1 | awk '{print $NF}')
           test -n "$TOKEN" || { echo 'no first-run token in web log'; exit 1; }
           SMOKE_SETUP_TOKEN="$TOKEN" node ../scripts/smoke.mjs
-          docker compose -f compose.production.yml down -v
+          docker compose down -v
+      - name: The booted digest equals the publish output (I-V100)
+        run: |
+          echo "digest: ${{ needs.publish.outputs.digest }}"
+      - name: Upload the digest artifact (tag runs reuse it — no rebuild)
+        run: printf '%s' '${{ needs.publish.outputs.digest }}' > /tmp/image-digest.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75bde449cb0b069f1e10c8e86e1
+        with:
+          name: image-digest
+          path: /tmp/image-digest.txt
+          retention-days: 14
+
+  tag-release:
+    # C5.8 (I-V100, R2-02, R10 step 5): a tag run BUILDS NOTHING. It finds
+    # main's successful CI run for the tagged commit, reuses its verified
+    # digest artifact, re-labels the version tag (no annotations), verifies an
+    # anonymous pull, and creates the GitHub release.
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      actions: read
+      contents: write
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Find main's successful CI run for the tagged commit
+        run: |
+          RUN_ID=$(curl -fsS -H "Authorization: Bearer ${{ github.token }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=${{ github.sha }}&branch=main&event=push&status=success&per_page=1" \
+            | jq -r '.workflow_runs[0].id // empty')
+          test -n "$RUN_ID" || { echo "::error::no successful main CI run for ${{ github.sha }}"; exit 1; }
+          echo "main run: $RUN_ID"
+          echo "RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        with:
+          name: image-digest
+          run-id: ${{ env.RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: sha tag digest, package version and image label all agree
+        run: |
+          set -e
+          DIGEST=$(cat image-digest.txt)
+          SHA_TAG="ghcr.io/${{ github.repository }}:sha-${{ github.sha }}"
+          GOT=$(docker buildx imagetools inspect "$SHA_TAG" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          [ "$GOT" = "$DIGEST" ] || { echo "::error::sha tag digest $GOT != main's artifact digest $DIGEST"; exit 1; }
+          VERSION="v$(node -p "require('./package.json').version")"
+          [ "${GITHUB_REF_NAME}" = "$VERSION" ] || { echo "::error::tag ${GITHUB_REF_NAME} != package version $VERSION"; exit 1; }
+          LABEL=$(docker buildx imagetools inspect "$SHA_TAG" --format '{{json .Image.Labels}}' | jq -r '."org.opencontainers.image.version" // empty')
+          [ "$LABEL" = "${GITHUB_REF_NAME}" ] || { echo "::error::image version label '$LABEL' != tag ${GITHUB_REF_NAME}"; exit 1; }
+          echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
+      - name: Point the version tag at the verified digest (copy the index unchanged)
+        run: |
+          REF="ghcr.io/${{ github.repository }}:${GITHUB_REF_NAME}"
+          if docker buildx imagetools inspect "$REF" >/dev/null 2>&1; then
+            EXISTING=$(docker buildx imagetools inspect "$REF" --format '{{json .Manifest.Digest}}' | tr -d '"')
+            if [ "$EXISTING" = "$DIGEST" ]; then
+              echo "tag already points at the same digest — idempotent, nothing to do"
+            else
+              echo "::error::version tag exists with a different digest ($EXISTING)"; exit 1
+            fi
+          else
+            docker buildx imagetools create --tag "$REF" "ghcr.io/${{ github.repository }}@$DIGEST"
+          fi
+      - name: Log out, then the anonymous registry fetch matches the digest
+        run: |
+          docker logout ghcr.io || true
+          # Anonymous manifest fetch (what a pull does) must see the tag.
+          PULLED=$(docker buildx imagetools inspect "ghcr.io/${{ github.repository }}:${GITHUB_REF_NAME}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          [ "$PULLED" = "$DIGEST" ] || { echo "::error::anonymous fetch digest $PULLED != $DIGEST"; exit 1; }
+      - name: Create the GitHub release
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "VoltLink ${GITHUB_REF_NAME}" \
+            --notes "Image: ghcr.io/${{ github.repository }}@$DIGEST" \
+            --target "${{ github.sha }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Release window — the guide's release URL serves this checkout's compose file
+        run: |
+          # Push the tag right after main's green run so the docs' release URL
+          # is broken for as short a window as possible; this post-tag check
+          # proves the URL now serves exactly what this checkout shipped.
+          curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/${GITHUB_REF_NAME}/compose.production.yml" -o /tmp/release-compose.yml
+          diff -q compose.production.yml /tmp/release-compose.yml
+          echo "ok: https://raw.githubusercontent.com/${{ github.repository }}/${GITHUB_REF_NAME}/compose.production.yml serves the checkout file"
 
   upgrade-smoke:
     runs-on: ubuntu-latest
     needs: [image]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - name: Boot the previous release, create data, upgrade to the new image
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Boot v1.0.0's own compose file, create data, upgrade in place
         run: |
           set -e
-          # Previous published release; VL_SETUP_TOKEN lets its API bootstrap.
-          # (If a release can never be bootstrapped even with the token, seed
-          # it with its own migrate role plus SQL fixtures and record why.)
-          VOLTLINK_IMAGE_TAG=v1.0.0 POSTGRES_PASSWORD=voltlink \
-            JWT_SECRET="$JWT_SECRET" VL_MASTER_KEY="$VL_MASTER_KEY" \
-            PUBLIC_URL=http://127.0.0.1:3110 VL_ALLOW_INSECURE_HTTP=true \
-            VL_SETUP_TOKEN="$VL_SETUP_TOKEN" \
-            docker compose -f compose.production.yml up -d --wait
-          # create data through the API
-          SMOKE_SETUP_TOKEN="$VL_SETUP_TOKEN" node scripts/smoke.mjs
-          # switch to the new image and run the documented upgrade
-          VOLTLINK_IMAGE_TAG=ci docker compose -f compose.production.yml \
-            -f docker-compose.ci.yml up -d --wait
-          # data survived and migrations applied
-          SMOKE_EMAIL="upgrade@ci.test" SMOKE_PASSWORD="upgrade-password-12345" \
-            node scripts/smoke.mjs
-          docker compose -f compose.production.yml down -v
+          mkdir -p upgrade-smoke && cd upgrade-smoke
+          # 1) v1.0.0's OWN compose file, from its own tag.
+          git show v1.0.0:compose.production.yml > compose.production.yml
+          # 2) .env written per v1.0.0's docs (the same .env survives the upgrade).
+          umask 077
+          printf 'JWT_SECRET=%s\n' "$(openssl rand -hex 32)" > .env
+          printf 'VL_MASTER_KEY=%s\n' "$(openssl rand -base64 32)" >> .env
+          printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 16)" >> .env
+          printf 'PUBLIC_URL=http://127.0.0.1:3110\n' >> .env
+          printf 'VL_ALLOW_INSECURE_HTTP=true\n' >> .env
+          BEFORE=$((docker compose -p voltlink -f compose.production.yml exec -T postgres psql -U voltlink -d voltlink -tAc "SELECT count(*) FROM _prisma_migrations" 2>/dev/null) || true)
+          VOLTLINK_IMAGE_TAG=v1.0.0 docker compose -p voltlink -f compose.production.yml up -d --wait
+          # 3) v1.0.0 cannot bootstrap through its API (no setup token is
+          #    logged and the UI has no field for one — CHANGELOG 1.1.0);
+          #    seed with its migrate role (already run at boot) + SQL fixtures.
+          HASH=$(node -e "require('argon2').hash('upgrade-password-12345').then(console.log)")
+          docker compose -p voltlink -f compose.production.yml exec -T postgres psql -U voltlink -d voltlink \
+            -c "INSERT INTO \"User\" (id, email, name, \"passwordHash\", \"emailVerifiedAt\", \"isInstanceAdmin\") VALUES ('upgrade-seed-user', 'upgrade@ci.test', 'Upgrade Seed', '$HASH', now(), true) ON CONFLICT DO NOTHING"
+          # 4) data created in v1.0.0: the seeded sign-in works.
+          SMOKE_EMAIL='upgrade@ci.test' SMOKE_PASSWORD='upgrade-password-12345' node ../scripts/smoke.mjs
+          # 5) replace the file with the new compose.production.yml, keep the
+          #    same .env and project, add the CI overlay to COMPOSE_FILE.
+          cp ../compose.production.yml compose.production.yml
+          printf 'COMPOSE_FILE=compose.production.yml:../docker-compose.ci.yml\n' >> .env
+          docker compose -p voltlink up -d --wait
+          # 6) same voltlink_pgdata volume, new migration rows, data + sign-in survive.
+          AFTER=$(docker compose -p voltlink exec -T postgres psql -U voltlink -d voltlink -tAc "SELECT count(*) FROM _prisma_migrations")
+          test "$AFTER" -gt "${BEFORE:-0}"
+          echo "migration rows: $BEFORE -> $AFTER"
+          docker volume inspect voltlink_pgdata >/dev/null
+          SMOKE_EMAIL='upgrade@ci.test' SMOKE_PASSWORD='upgrade-password-12345' node ../scripts/smoke.mjs
+          docker compose -p voltlink down -v
 
   promote:
     runs-on: ubuntu-latest
     needs: [publish, verify-published]
-    if: github.event_name == 'push' && github.server_url == 'https://github.com'
+    # latest only from main; version tags are the tag-release job's business
+    # (C5.8).
+    if: github.event_name == 'push' && github.server_url == 'https://github.com' && github.ref == 'refs/heads/main'
     permissions:
       packages: write
     steps:
@@ -587,22 +742,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # Versions are never re-pointed: latest only from main, vX.Y.Z only from a
-      # pushed git tag (I-V100). The tag simply re-labels the verified digest,
-      # and an existing version tag makes the run fail instead of moving it.
+      # Versions are never re-pointed: latest only from main (I-V100).
       - name: Point latest at the verified digest (main only)
-        if: github.ref == 'refs/heads/main'
         run: |
           docker buildx imagetools create \
             --tag "ghcr.io/atvriders/voltlink:latest" \
-            "ghcr.io/atvriders/voltlink@${{ needs.publish.outputs.digest }}"
-      - name: Point the version tag at the verified digest (git tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          if docker buildx imagetools inspect "ghcr.io/atvriders/voltlink:${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            echo "::error::version tag ${GITHUB_REF_NAME} already exists; versions are immutable (I-V100)"
-            exit 1
-          fi
-          docker buildx imagetools create \
-            --tag "ghcr.io/atvriders/voltlink:${GITHUB_REF_NAME}" \
             "ghcr.io/atvriders/voltlink@${{ needs.publish.outputs.digest }}"
