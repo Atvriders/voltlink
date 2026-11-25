@@ -1,16 +1,24 @@
-# VoltLink production stack — consumes the published GHCR image and performs no
-# local build. Every variable the app reads (ENV_SPEC) is passed to every role;
-# `npm run check:compose` proves it (I-COMPOSEENV).
+# VoltLink production stack — THE canonical Docker Compose install file.
+# It only PULLS the published GHCR image and never builds (guide 08 §14,
+# I-CINOIMAGE, I-V100). The single install guide is docs/DOCKER_COMPOSE.md:
+# download this file from the release tag's URL so file and image always match.
 #
-#   curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/main/compose.production.yml -o compose.production.yml
-#   docker compose -f compose.production.yml up -d
+#   curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/compose.production.yml -o compose.production.yml
+#   docker compose -f compose.production.yml up -d --wait
+#
+# Required values (set them in .env next to this file; compose fails fast with
+# a message if one is missing): POSTGRES_PASSWORD, JWT_SECRET, VL_MASTER_KEY,
+# PUBLIC_URL. VL_MASTER_KEY is exactly 32 random bytes in standard base64:
+#   umask 077; printf 'JWT_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
+#   printf 'VL_MASTER_KEY=%s\n' "$(openssl rand -base64 32)" >> .env
 
 name: voltlink
 
 x-voltlink-common: &voltlink
   # VOLTLINK_IMAGE_DIGEST pins the exact digest (I-V100): the reference
   # becomes repo:tag@sha256:<digest> and verify-published boots by digest.
-  image: ghcr.io/atvriders/voltlink:${VOLTLINK_IMAGE_TAG:-latest}${VOLTLINK_IMAGE_DIGEST:-}
+  # The default tag is the release this file ships with (v + package.json).
+  image: ghcr.io/atvriders/voltlink:${VOLTLINK_IMAGE_TAG:-v1.1.1}${VOLTLINK_IMAGE_DIGEST:-}
   restart: unless-stopped
   pull_policy: always
   init: true
@@ -19,24 +27,27 @@ x-voltlink-common: &voltlink
     - /tmp
   security_opt:
     - no-new-privileges:true
-  networks: [internal]
   environment: &app_env
     NODE_ENV: production
     PORT: '3000'
     HOST: 0.0.0.0
-    DATABASE_URL: '${DATABASE_URL:-postgresql://voltlink:${POSTGRES_PASSWORD}@postgres:5432/voltlink}'
+    DATABASE_URL: 'postgresql://voltlink:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/voltlink'
     REDIS_URL: 'redis://redis:6379'
-    PUBLIC_URL: '${PUBLIC_URL:-https://voltlink.example.com}'
+    PUBLIC_URL: '${PUBLIC_URL:?set PUBLIC_URL in .env}'
     VL_ALLOW_INSECURE_HTTP: '${VL_ALLOW_INSECURE_HTTP:-false}'
     TRUST_PROXY: '${TRUST_PROXY:-false}'
     VL_WEBAUTHN_RP_ID: '${VL_WEBAUTHN_RP_ID:-}'
     VL_CSP_CONNECT_ORIGINS: '${VL_CSP_CONNECT_ORIGINS:-}'
     STATUS_PORT: '3001'
-    JWT_SECRET: '${JWT_SECRET:-}'
+    JWT_SECRET: '${JWT_SECRET:?set JWT_SECRET in .env (openssl rand -hex 32)}'
     JWT_EXPIRES_SEC: '${JWT_EXPIRES_SEC:-1209600}'
-    VL_MASTER_KEY: '${VL_MASTER_KEY:-}'
+    VL_MASTER_KEY: '${VL_MASTER_KEY:?set VL_MASTER_KEY in .env (openssl rand -base64 32)}'
     VL_MASTER_KEYS: '${VL_MASTER_KEYS:-}'
-    VL_MASTER_KEY_VERSION: '${VL_MASTER_KEY_VERSION:-}'
+    # R2-67: default is the product default; empty is treated as unset at boot.
+    VL_MASTER_KEY_VERSION: '${VL_MASTER_KEY_VERSION:-1}'
+    VL_QUEUE_PREFIX: '${VL_QUEUE_PREFIX:-voltlink}'
+    VL_TEST_FROZEN_NOW: '${VL_TEST_FROZEN_NOW:-}'
+    VL_POLLER_ENABLED: '${VL_POLLER_ENABLED:-true}'
     TESSIE_API_KEY: '${TESSIE_API_KEY:-}'
     VL_RATE_LIMIT_PER_MIN: '${VL_RATE_LIMIT_PER_MIN:-900}'
     VL_STEPUP_WINDOW_SEC: '${VL_STEPUP_WINDOW_SEC:-300}'
@@ -60,6 +71,9 @@ x-voltlink-common: &voltlink
     TESLA_COMMAND_PROXY_URL: '${TESLA_COMMAND_PROXY_URL:-}'
     TESLA_ALLOW_TEST_ENDPOINTS: '${TESLA_ALLOW_TEST_ENDPOINTS:-false}'
     TESLA_DAILY_BUDGET_USD: '${TESLA_DAILY_BUDGET_USD:-}'
+    # Tesla proxy CA: copy the proxy CA into the app roles (see TESLA_SETUP.md
+    # and docker-compose.ci.yml's tesla-profile mounts for the exact shape).
+    NODE_EXTRA_CA_CERTS: '${NODE_EXTRA_CA_CERTS:-}'
     VL_GEOCODER: '${VL_GEOCODER:-off}'
     VL_GEOCODER_URL: '${VL_GEOCODER_URL:-}'
     VL_MAP_MODE: '${VL_MAP_MODE:-demo}'
@@ -84,7 +98,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: voltlink
-      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD:-}'
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}'
       POSTGRES_DB: voltlink
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -110,6 +124,7 @@ services:
     environment:
       <<: *app_env
       VL_ROLE: migrate
+    networks: [internal]
     healthcheck:
       test: ['CMD', '/usr/local/bin/voltlink-healthcheck']
       interval: 30s
@@ -126,6 +141,7 @@ services:
     environment:
       <<: *app_env
       VL_ROLE: web
+    networks: [internal, egress]
     depends_on:
       postgres:
         condition: service_healthy
@@ -134,7 +150,7 @@ services:
       migrate:
         condition: service_completed_successfully
     ports:
-      - '127.0.0.1:${WEB_PORT:-3110}:3000'
+      - '${VOLTLINK_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-3110}:3000'
     healthcheck:
       test: ['CMD', '/usr/local/bin/voltlink-healthcheck']
       interval: 30s
@@ -147,6 +163,7 @@ services:
     environment:
       <<: *app_env
       VL_ROLE: worker
+    networks: [internal, egress]
     depends_on:
       postgres:
         condition: service_healthy
@@ -166,6 +183,7 @@ services:
     environment:
       <<: *app_env
       VL_ROLE: scheduler
+    networks: [internal, egress]
     depends_on:
       postgres:
         condition: service_healthy
@@ -187,13 +205,14 @@ services:
     environment:
       <<: *app_env
       VL_ROLE: status
+    networks: [internal]
     depends_on:
       postgres:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
     ports:
-      - '127.0.0.1:${STATUS_PORT:-3001}:3001'
+      - '${VOLTLINK_BIND_ADDRESS:-127.0.0.1}:${STATUS_PORT:-3001}:3001'
     healthcheck:
       test: ['CMD', '/usr/local/bin/voltlink-healthcheck']
       interval: 30s
@@ -220,7 +239,12 @@ services:
     networks: [egress]
 
 networks:
+  # Backend network: only postgres, redis and the app roles. No route out.
   internal:
+    internal: true
+  # Egress network: app roles that reach the internet (providers, push, maps)
+  # and the Tesla proxy share this network (R2-03, NEW-17).
+  egress:
 
 volumes:
   pgdata:

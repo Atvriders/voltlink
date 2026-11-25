@@ -36,6 +36,11 @@ export const ENV_SPEC = z.object({
   VL_TEST_FROZEN_NOW: optionalString,
   // Guide 08 §11.2: visual mode boots the scheduler without the provider poller.
   VL_POLLER_ENABLED: bool,
+  // R2-49/I-COMPOSEENV: BullMQ key prefix, passed to every role by compose.
+  VL_QUEUE_PREFIX: z.string().default('voltlink'),
+  // R2-03: Tesla proxy CA for the app roles (read by Node itself; declared
+  // here so compose passes it and check:compose can verify every role).
+  NODE_EXTRA_CA_CERTS: optionalString,
   SMTP_URL: optionalString,
   MAIL_FROM: optionalString,
   MAIL_TO_CONSOLE: z.string().default('true'),

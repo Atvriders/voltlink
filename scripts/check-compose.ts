@@ -195,8 +195,10 @@ function parseCompose(src: string, file: string): ComposeFile {
       if (inAnchor) anchors.get(inAnchor)!.push(key);
       const r = roleOf();
       if (r) r.keys.add(key);
-      // Empty default on a master-key variable (R2-67).
-      if (/^VL_MASTER_KEY/.test(key) && /'\$\{[A-Za-z0-9_]*:-?\}'\s*$/.test(value)) {
+      // Empty default on the boot-breaking master-key variable (R2-67).
+      // (VL_MASTER_KEYS keeps an empty default: the product treats it as
+      // unset, and compose cannot omit an anchored key.)
+      if (key === 'VL_MASTER_KEY_VERSION' && /'\$\{[A-Za-z0-9_]*:-?\}'\s*$/.test(value)) {
         errors.push(
           `✖ ${file}: '${key}: ${value}' renders an empty string — treat empty as unset in the product (R2-67).`,
         );
@@ -228,8 +230,25 @@ async function main(): Promise<void> {
   const expectedTag = `v${pkg.version}`;
   let failed = false;
 
+  // `include:` resolution: docker-compose.yml includes the canonical file,
+  // so its effective source is the concatenation of every included file.
+  const includeSeen = new Set<string>();
+  function loadEffective(file: string, stack: string[] = []): string {
+    if (stack.includes(file))
+      throw new Error(`compose include cycle: ${[...stack, file].join(' -> ')}`);
+    includeSeen.add(file);
+    let src = readFileSync(file, 'utf8');
+    const inc = src.match(/^include:\s*$\n((?:^\s*-\s*\S.*$\n?)+)/m);
+    if (inc) {
+      for (const m of inc[1]!.matchAll(/^\s*-\s*(\S+)\s*$/gm)) {
+        src += '\n' + loadEffective(m[1]!, [...stack, file]);
+      }
+    }
+    return src;
+  }
+
   for (const file of INSTALL_FILES) {
-    const src = readFileSync(file, 'utf8');
+    const src = loadEffective(file);
     const parsed = parseCompose(src, file);
 
     for (const e of parsed.errors) {
@@ -320,7 +339,7 @@ async function main(): Promise<void> {
       console.error(`✖ .env.example: '${key}' must not be a compose-layer value (R2-70).`);
       continue;
     }
-    if (!ENV_KEYS.includes(key) && !ENV_EXAMPLE_INFRA.has(key)) {
+    if (!(ENV_KEYS as readonly string[]).includes(key) && !ENV_EXAMPLE_INFRA.has(key)) {
       failed = true;
       console.error(`✖ .env.example: key '${key}' is not in ENV_SPEC nor the infra allow-list.`);
     }

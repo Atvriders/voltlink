@@ -1,7 +1,10 @@
-# docker-compose.dev.yml — development overrides (spec L1701). Brings source
-# code from the host and runs the web role in development mode with live
-# reload. Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml
-# up web  (API/worker/scheduler still come from the published image).
+# docker-compose.dev.yml — development overlay (spec L1701). Every service it
+# touches is BUILT LOCALLY (use with docker-compose.build.yml), and there is
+# NO live reload: after `npm run build` the freshly built web bundle is mounted
+# read-only where the image reads it. It must never be part of an install path.
+#
+#   docker compose -f compose.production.yml -f docker-compose.build.yml \
+#     -f docker-compose.dev.yml up web
 services:
   web:
     environment:

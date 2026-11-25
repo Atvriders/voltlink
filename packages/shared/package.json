@@ -1,6 +1,6 @@
 {
   "name": "@voltlink/shared",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "private": true,
   "description": "VoltLink shared contract \u2014 Zod schemas, inferred types, roles, and API shapes used by both API and web.",
   "type": "module",
