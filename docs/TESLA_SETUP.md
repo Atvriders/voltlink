@@ -49,6 +49,14 @@ docker compose --profile tesla up -d
 # via the API: POST /api/v1/admin/tesla/partner-registration {"regions":"na,eu"}
 ```
 
+The profile mounts your `tesla/keys/fleet-key.pem` and the proxy CA
+(`tesla/proxy-tls`) READ-ONLY into the app roles and exports
+`NODE_EXTRA_CA_CERTS`, so web and worker reach `https://tesla-proxy:4443`
+over the shared `egress` network with the mounted CA. The proxy certificate
+must carry `subjectAltName=DNS:tesla-proxy` (the command in section 2 does).
+Set `TESLA_COMMAND_PROXY_URL` (`https://tesla-proxy:4443`, the default in the
+profile) — empty means Tesla commands stay unsupported.
+
 ## 4. Environment
 
 | Var                                           | Meaning                                                     |

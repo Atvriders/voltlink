@@ -40,6 +40,23 @@ Run the production-like server locally:
 cd apps/api && PORT=3111 node dist/index.cjs
 ```
 
+## Compose overlays
+
+The install path never builds. For local image builds use the overlay chain,
+in exactly this order:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml build
+# development overlay on top (no live reload; the built bundle is mounted read-only):
+docker compose -f docker-compose.yml -f docker-compose.build.yml \
+  -f docker-compose.dev.yml up web
+```
+
+`docker-compose.build.yml` swaps in `voltlink:local` with `pull_policy: build`;
+`docker-compose.dev.yml` mounts `apps/api/dist` and `apps/api/web-dist` where
+the image reads them and sets `NODE_ENV=development` + `DEBUG=voltlink:*`. The
+dev overlay publishes no ports of its own — the canonical file's mapping wins.
+
 ## Database & migrations
 
 ```bash
