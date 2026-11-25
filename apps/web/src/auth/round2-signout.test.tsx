@@ -52,7 +52,7 @@ beforeEach(() => {
   qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['user-preferences'], { theme: 'secret' });
   apiMock.mockImplementation(async (path: string) => {
-    if (path === '/api/v1/auth/me') return { user: { id: 'u1', email: 'a@test.dev' } };
+    if (path === '/api/v1/auth/me') return { user: { id: 'u1', email: 'a@example.invalid' } };
     if (path === '/api/v1/auth/logout') return { ok: true };
     return {};
   });

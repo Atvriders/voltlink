@@ -34,7 +34,7 @@ afterAll(async () => {
 async function world() {
   const owner = await prisma.user.create({
     data: {
-      email: `r257.${Date.now()}@test.dev`,
+      email: `r257.${Date.now()}@example.invalid`,
       name: 'r257',
       passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
       webauthnUserId: randomId(),

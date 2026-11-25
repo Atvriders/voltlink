@@ -30,7 +30,7 @@ describe('dev echo gate', () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const user = await prisma.user.create({
       data: {
-        email: `echo-${randomId()}@test.dev`,
+        email: `echo-${randomId()}@example.invalid`,
         name: 'Echo',
         passwordHash: await hashPassword('long-enough-123'),
         webauthnUserId: randomId(),

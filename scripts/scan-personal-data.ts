@@ -42,6 +42,18 @@ const EMAIL_SKIP_FILES = new Set(['package-lock.json']);
 const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const PHONE_RE = /\b(\+?1[-. ]?)?\(?([2-9]\d{2})\)?[-. ]?(\d{3})[-. ]?(\d{4})\b/g;
 const VIN_RE = /\b[A-HJ-NPR-Z0-9]{17}\b/g;
+// R2-40/TI-60 real-format fictional VIN fixtures (WMI/check-digit tests in
+// tesla-contract.test.ts). Exact strings only — real VINs still flag.
+const FICTIONAL_VIN_FIXTURES = new Set([
+  '5YJ3E1EA2NF000001',
+  '5YJSA7E26RF000001',
+  '5YJYGDEE1MF000001',
+  '5YJXCBE44KF000001',
+  '5YJ3000000N0KEY01',
+  '1N4BL4BV7KC000001',
+  '7G2CEHED5RA000001',
+  '7SAYGDEE9PF000001',
+]);
 const COORD_RE =
   /(?:lat|latitude)\s*[:=]\s*(-?\d{1,3}\.\d{3,})|(-?\d{1,3}\.\d{3,}),\s*(-?\d{1,3}\.\d{3,})/g;
 const PRIVATE_IP_RE =
@@ -99,6 +111,10 @@ export function scanPersonalData(root = ROOT): Finding[] {
       // NEXUS series used by the Tesla/Tessie fakes.
       if (/^(.)\1{16}$/.test(vin)) continue;
       if (/NEXUS\d{2}$/.test(vin)) continue;
+      // R2-40/TI-60: the VIN-format fixtures in tesla-contract.test.ts are
+      // real-FORMAT but fictional VINs (the tests parse WMI/check digits);
+      // they are exact fixtures, never real vehicles.
+      if (FICTIONAL_VIN_FIXTURES.has(vin)) continue;
       findings.push({ file: rel, kind: 'vin', value: vin });
     }
     const sanitized = text.replace(RFC5737, '');

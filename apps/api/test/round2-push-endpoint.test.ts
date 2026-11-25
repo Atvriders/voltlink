@@ -66,7 +66,7 @@ describe('push subscription endpoint allow-list (N-PUSH)', () => {
   it('rejects a non-https localhost endpoint', async () => {
     const user = await prisma.user.create({
       data: {
-        email: `push-${Date.now()}-${randomId()}@test.dev`,
+        email: `push-${Date.now()}-${randomId()}@example.invalid`,
         name: 'Push',
         passwordHash: 'x',
         webauthnUserId: randomId(),
@@ -85,7 +85,7 @@ describe('push subscription endpoint allow-list (N-PUSH)', () => {
   it('accepts the exact body the SPA enable() sends (TI-10)', async () => {
     const user = await prisma.user.create({
       data: {
-        email: `push2-${Date.now()}-${randomId()}@test.dev`,
+        email: `push2-${Date.now()}-${randomId()}@example.invalid`,
         name: 'Push2',
         passwordHash: 'x',
         webauthnUserId: randomId(),

@@ -81,7 +81,7 @@ async function sessionFor(userId: string, stepped = false) {
 
 describe('R2-28 inbound webhook dispatch is bound to its automation', () => {
   it('fires only the bound automation, not every webhook automation of the owner', async () => {
-    const bob = await mkUser(`r228bob.${Date.now()}@test.dev`);
+    const bob = await mkUser(`r228bob.${Date.now()}@example.invalid`);
     const org = await prisma.organization.create({
       data: {
         kind: 'TEAM',
@@ -143,8 +143,8 @@ describe('R2-28 inbound webhook dispatch is bound to its automation', () => {
 
 describe('R2-29 target-none write routes reject read-only members', () => {
   it('VIEWER cannot create automations or connect providers', async () => {
-    const alice = await mkUser(`r229alice.${Date.now()}@test.dev`);
-    const carol = await mkUser(`r229carol.${Date.now()}@test.dev`);
+    const alice = await mkUser(`r229alice.${Date.now()}@example.invalid`);
+    const carol = await mkUser(`r229carol.${Date.now()}@example.invalid`);
     const org = await prisma.organization.create({
       data: {
         kind: 'TEAM',
@@ -191,8 +191,8 @@ describe('R2-29 target-none write routes reject read-only members', () => {
 
 describe('R2-30 re-authentication gates', () => {
   it('API-key creation, org deletion and role changes require step-up', async () => {
-    const owner = await mkUser(`r230owner.${Date.now()}@test.dev`);
-    const member = await mkUser(`r230member.${Date.now()}@test.dev`);
+    const owner = await mkUser(`r230owner.${Date.now()}@example.invalid`);
+    const member = await mkUser(`r230member.${Date.now()}@example.invalid`);
     const org = await prisma.organization.create({
       data: {
         kind: 'TEAM',

@@ -30,7 +30,7 @@ afterAll(async () => {
 async function newSession() {
   const u = await prisma.user.create({
     data: {
-      email: `ob-${Date.now()}-${randomId()}@test.dev`,
+      email: `ob-${Date.now()}-${randomId()}@example.invalid`,
       name: 'OB',
       passwordHash: 'x',
       webauthnUserId: randomId(),

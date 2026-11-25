@@ -30,7 +30,7 @@ describe('admin role change (R2-22)', () => {
   it('PATCH /admin/users/:id/role grants and revokes instance admin', async () => {
     const admin = await prisma.user.create({
       data: {
-        email: `r222a-${Date.now()}-${randomId()}@test.dev`,
+        email: `r222a-${Date.now()}-${randomId()}@example.invalid`,
         name: 'Admin',
         passwordHash: 'x',
         webauthnUserId: randomId(),
@@ -39,7 +39,7 @@ describe('admin role change (R2-22)', () => {
     });
     const member = await prisma.user.create({
       data: {
-        email: `r222m-${Date.now()}-${randomId()}@test.dev`,
+        email: `r222m-${Date.now()}-${randomId()}@example.invalid`,
         name: 'Member',
         passwordHash: 'x',
         webauthnUserId: randomId(),

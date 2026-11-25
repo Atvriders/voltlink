@@ -139,7 +139,10 @@ async function switchVehicle(page: import('@playwright/test').Page, name: string
   if (await switcher.isVisible().catch(() => false)) {
     await switcher.click();
   }
-  await page.getByRole('menuitem', { name: new RegExp(name) }).first().click();
+  await page
+    .getByRole('menuitem', { name: new RegExp(name) })
+    .first()
+    .click();
 }
 
 async function uniqueColors(page: import('@playwright/test').Page): Promise<number> {

@@ -33,7 +33,7 @@ vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({
     user: {
       id: 'u1',
-      email: 'a@test.dev',
+      email: 'a@example.invalid',
       name: 'A',
       units: 'metric',
       timezone: tzState.value,

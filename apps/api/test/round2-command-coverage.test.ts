@@ -41,7 +41,7 @@ beforeAll(async () => {
   await initRedis();
   const user = await prisma.user.create({
     data: {
-      email: `cov.${Date.now()}@test.dev`,
+      email: `cov.${Date.now()}@example.invalid`,
       name: 'cov',
       passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
       webauthnUserId: randomId(),
@@ -158,7 +158,7 @@ describe('issueCommand guards (M4)', { tags: ['command-validation'] }, () => {
     // A fresh vehicle+user key only exists per process; use a throwaway user.
     const u2 = await prisma.user.create({
       data: {
-        email: `rate.${Date.now()}@test.dev`,
+        email: `rate.${Date.now()}@example.invalid`,
         name: 'rate',
         passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
         webauthnUserId: randomId(),

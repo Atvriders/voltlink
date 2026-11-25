@@ -27,7 +27,7 @@ afterAll(async () => {
 async function mkWorld() {
   const user = await prisma.user.create({
     data: {
-      email: `au-${Date.now()}-${randomId()}@test.dev`,
+      email: `au-${Date.now()}-${randomId()}@example.invalid`,
       name: 'Auto',
       passwordHash: await hashPassword('long-enough-123'),
       webauthnUserId: randomId(),

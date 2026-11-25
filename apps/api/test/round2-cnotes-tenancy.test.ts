@@ -59,7 +59,7 @@ beforeAll(async () => {
     where: { key: { in: ['instance.bootstrappedAt', 'instance.operatorOrgId'] } },
   });
   // Bootstrap the instance admin: this creates the OPERATOR org (M1c target).
-  adminEmail = `cnotes-admin-${uniq()}@test.dev`;
+  adminEmail = `cnotes-admin-${uniq()}@example.invalid`;
   await bootstrapInstanceAdmin({
     email: adminEmail,
     name: 'CN Admin',
@@ -77,7 +77,7 @@ afterAll(async () => {
 describe('C-NOTESTS M1c: open registrant stays out of the operator org', () => {
   it('a fresh open registration owns ONLY its own personal org', async () => {
     await setRegistrationMode('open');
-    const email = `cnotes-open-${uniq()}@test.dev`;
+    const email = `cnotes-open-${uniq()}@example.invalid`;
     const res = await registerUser({
       email,
       name: 'Open Registrant',
@@ -149,7 +149,7 @@ describe('C-NOTESTS M2b: anonymous MFA completion cannot sign anyone in', () => 
   }
 
   it('anonymous {email, current valid code} at /login/mfa signs nobody in', async () => {
-    const { user, secret } = await mkEnrolledUser(`cnotes-m2b-${uniq()}@test.dev`);
+    const { user, secret } = await mkEnrolledUser(`cnotes-m2b-${uniq()}@example.invalid`);
     const code = await moduleTotp.generate({ secret });
     const res = await postAnonymousMfa({ email: user.email, code });
     const bodyText = await res.text();
@@ -160,7 +160,7 @@ describe('C-NOTESTS M2b: anonymous MFA completion cannot sign anyone in', () => 
   });
 
   it('anonymous {email, unused recovery code} at /login/mfa signs nobody in and consumes nothing', async () => {
-    const { user, recoveryCodes } = await mkEnrolledUser(`cnotes-m2br-${uniq()}@test.dev`);
+    const { user, recoveryCodes } = await mkEnrolledUser(`cnotes-m2br-${uniq()}@example.invalid`);
     const res = await postAnonymousMfa({ email: user.email, recoveryCode: recoveryCodes[0] });
     const bodyText = await res.text();
     expect(res.status, bodyText).toBe(401);
@@ -185,7 +185,7 @@ describe("C-NOTESTS M3b: drive lists never leak another org's drives", () => {
     // Org B: a second user with its own org and a drive.
     const userB = await prisma.user.create({
       data: {
-        email: `cnotes-b-${uniq()}@test.dev`,
+        email: `cnotes-b-${uniq()}@example.invalid`,
         name: 'Org B user',
         passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
         webauthnUserId: randomId(),
@@ -295,7 +295,7 @@ describe('R2-19 A-TOTPLOGIN: ceremony negatives (self-contained)', () => {
   }
 
   it('R2-19: a consumed ceremony cannot be replayed even with a correct code (M2c red answers 200 with Set-Cookie)', async () => {
-    const user = await mkUser(`cnotes-r19-${uniq()}@test.dev`);
+    const user = await mkUser(`cnotes-r19-${uniq()}@example.invalid`);
     const setup = await totpSetup(user.id);
     await totpConfirm(user.id, await moduleTotp.generate({ secret: setup.secret }));
 
@@ -329,8 +329,8 @@ describe('R2-19 A-TOTPLOGIN: ceremony negatives (self-contained)', () => {
   // even under B's session — that is specified behaviour, not a defect; the
   // previous test asserted the opposite and was rewritten per review 1a.)
   it("R2-19: B's session + A's ceremony + B's code is refused", async () => {
-    const userA = await mkUser(`cnotes-r19a-${uniq()}@test.dev`);
-    const userB = await mkUser(`cnotes-r19b-${uniq()}@test.dev`);
+    const userA = await mkUser(`cnotes-r19a-${uniq()}@example.invalid`);
+    const userB = await mkUser(`cnotes-r19b-${uniq()}@example.invalid`);
     const setupA = await totpSetup(userA.id);
     await totpConfirm(userA.id, await moduleTotp.generate({ secret: setupA.secret }));
     const setupB = await totpSetup(userB.id);

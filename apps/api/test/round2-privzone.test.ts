@@ -57,7 +57,7 @@ describe('Z-PRIVZONE read redaction', () => {
   it('list, detail and route reads redact in-zone coordinates', async () => {
     const owner = await prisma.user.create({
       data: {
-        email: `zpz.${Date.now()}@test.dev`,
+        email: `zpz.${Date.now()}@example.invalid`,
         name: 'zpz',
         passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
         webauthnUserId: randomId(),

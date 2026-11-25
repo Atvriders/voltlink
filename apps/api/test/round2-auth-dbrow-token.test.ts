@@ -37,7 +37,7 @@ describe('setup token DB row path', () => {
     await expect(setupStatus()).resolves.toMatchObject({ needsSetup: false });
     await expect(
       bootstrapInstanceAdmin({
-        email: 'a@test.dev',
+        email: 'a@example.invalid',
         name: 'A',
         password: 'long-enough-123',
         setupToken: TOKEN,
@@ -53,12 +53,12 @@ describe('setup token DB row path', () => {
     // bootstrap below can take the success path.
     await prisma.appSetting.deleteMany({ where: { key: 'instance.bootstrappedAt' } });
     const result = await bootstrapInstanceAdmin({
-      email: 'owner@test.dev',
+      email: 'owner@example.invalid',
       name: '   ',
       password: 'long-enough-123',
       setupToken: TOKEN,
     });
-    expect(result.user.email).toBe('owner@test.dev');
+    expect(result.user.email).toBe('owner@example.invalid');
     expect(result.user.name).toBe('owner');
     // The first bootstrap consumed the token row; restore it so the second
     // call reaches the duplicate-bootstrap (P2002) guard.
@@ -69,7 +69,7 @@ describe('setup token DB row path', () => {
     });
     await expect(
       bootstrapInstanceAdmin({
-        email: 'second@test.dev',
+        email: 'second@example.invalid',
         name: 'S',
         password: 'long-enough-123',
         setupToken: TOKEN,
@@ -87,7 +87,7 @@ describe('setup token DB row path', () => {
     });
     await expect(
       bootstrapInstanceAdmin({
-        email: 'x@test.dev',
+        email: 'x@example.invalid',
         name: 'X',
         password: 'long-enough-123',
         setupToken: 'wrong-token-9999999999999999999999',
@@ -108,7 +108,7 @@ describe('setup token DB row path', () => {
     });
     await expect(
       registerUser({
-        email: `fresh-${randomId()}@test.dev`,
+        email: `fresh-${randomId()}@example.invalid`,
         name: 'F',
         password: 'long-enough-123',
       }),
@@ -146,7 +146,7 @@ describe('setup token DB row path', () => {
     });
     await expect(
       registerUser({
-        email: `req-${randomId()}@test.dev`,
+        email: `req-${randomId()}@example.invalid`,
         name: 'R',
         password: 'long-enough-123',
       }),

@@ -30,7 +30,7 @@ describe('fleet report CSV (N-FLEETRPT)', () => {
   it('GET /report?format=csv returns text/csv with real rows', async () => {
     const user = await prisma.user.create({
       data: {
-        email: `fr-${Date.now()}-${randomId()}@test.dev`,
+        email: `fr-${Date.now()}-${randomId()}@example.invalid`,
         name: 'FR',
         passwordHash: 'x',
         webauthnUserId: randomId(),

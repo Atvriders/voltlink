@@ -108,7 +108,7 @@ beforeAll(async () => {
     where: { key: { in: ['instance.bootstrappedAt', 'instance.operatorOrgId'] } },
   });
   await prisma.user.deleteMany({ where: { email: 'test-bootstrap@voltlink.test' } });
-  adminEmail = `r20-admin-${uniq()}@test.dev`;
+  adminEmail = `r20-admin-${uniq()}@example.invalid`;
 }, 30_000);
 
 afterAll(async () => {
@@ -165,7 +165,7 @@ describe('R2-20 first-run setup over HTTP on an unseeded database', () => {
 
   it('register WITHOUT the setup token is refused in setup mode (M20a)', async () => {
     const res = await csrfAndPost('/api/v1/auth/register', {
-      email: `r20-x-${uniq()}@test.dev`,
+      email: `r20-x-${uniq()}@example.invalid`,
       name: 'No Token',
       password: 'r20-password-123',
     });
@@ -202,7 +202,7 @@ describe('R2-20 first-run setup over HTTP on an unseeded database', () => {
 
   it('TI-53: after bootstrap the setup token no longer registers anyone', async () => {
     const res = await csrfAndPost('/api/v1/auth/register', {
-      email: `r20-post-${uniq()}@test.dev`,
+      email: `r20-post-${uniq()}@example.invalid`,
       name: 'Second Admin',
       password: 'r20-password-123',
       setupToken: process.env.VL_SETUP_TOKEN,
@@ -215,14 +215,14 @@ describe('R2-20 first-run setup over HTTP on an unseeded database', () => {
   it('invite mode: a valid invitation token is required over HTTP', async () => {
     await setRegistrationMode('invite');
     const noToken = await csrfAndPost('/api/v1/auth/register', {
-      email: `r20-i-${uniq()}@test.dev`,
+      email: `r20-i-${uniq()}@example.invalid`,
       name: 'Invitee',
       password: 'r20-password-123',
     });
     expect(noToken.status).toBe(403);
     expect(await noToken.text()).toContain('INVITE_REQUIRED');
 
-    const email = `r20-i-${uniq()}@test.dev`;
+    const email = `r20-i-${uniq()}@example.invalid`;
     const token = `inv-${uniq()}`;
     const admin = await prisma.user.findUniqueOrThrow({ where: { email: adminEmail } });
     const org = await prisma.organization.findFirstOrThrow({
@@ -251,7 +251,7 @@ describe('R2-20 first-run setup over HTTP on an unseeded database', () => {
 
   it('open mode: registration answers check_email over HTTP', async () => {
     await setRegistrationMode('open');
-    const email = `r20-o-${uniq()}@test.dev`;
+    const email = `r20-o-${uniq()}@example.invalid`;
     const res = await csrfAndPost('/api/v1/auth/register', {
       email,
       name: 'Open User',
@@ -279,7 +279,7 @@ describe('R2-20 first-run setup over HTTP on an unseeded database', () => {
   it('closed mode: registration is refused over HTTP', async () => {
     await setRegistrationMode('closed');
     const res = await csrfAndPost('/api/v1/auth/register', {
-      email: `r20-c-${uniq()}@test.dev`,
+      email: `r20-c-${uniq()}@example.invalid`,
       name: 'Closed User',
       password: 'r20-password-123',
     });
@@ -318,7 +318,7 @@ it('R2-20 generated token (VL_SETUP_TOKEN unset) completes first-run setup', asy
     expect(row, 'generated token must be hashed at rest').toBeTruthy();
     expect(row!.value).toBe(sha256hex(token!));
 
-    const email = `r20g-${uniq()}@test.dev`;
+    const email = `r20g-${uniq()}@example.invalid`;
     const res = await csrfAndPost('/api/v1/auth/register', {
       email,
       name: 'Generated Token User',
@@ -377,7 +377,7 @@ it('R2-01/TI-53: every pending boot reissues a usable token; bootstrap stops it'
     });
     expect(row.value, 'the stored hash must match the LATEST token').toBe(sha256hex(second!));
     // The latest token completes first-run setup.
-    const email = `r20g2-${uniq()}@test.dev`;
+    const email = `r20g2-${uniq()}@example.invalid`;
     const res = await csrfAndPost('/api/v1/auth/register', {
       email,
       name: 'Reboot User',
@@ -465,7 +465,7 @@ it(
       expect(row!.value).not.toBe(token);
 
       // Register with the boot-log token against this file's own server (same DB).
-      const email = `r20boot-${uniq()}@test.dev`;
+      const email = `r20boot-${uniq()}@example.invalid`;
       const res = await fetch(`http://127.0.0.1:${port}/api/v1/auth/csrf`);
       const setCookies = res.headers.getSetCookie?.() ?? [];
       const csrf = setCookies.join(';').match(/vl_csrf=([^;]+)/)?.[1] ?? '';

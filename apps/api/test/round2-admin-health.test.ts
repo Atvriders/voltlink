@@ -37,7 +37,7 @@ describe('admin health (NEW-10)', () => {
   it('migrationsCurrent reflects the real applied migration set', async () => {
     const admin = await prisma.user.create({
       data: {
-        email: `ah-${Date.now()}-${randomId()}@test.dev`,
+        email: `ah-${Date.now()}-${randomId()}@example.invalid`,
         name: 'AH',
         passwordHash: 'x',
         webauthnUserId: randomId(),
@@ -64,7 +64,7 @@ describe('admin health (NEW-10)', () => {
   it('reports stale beats as inactive', async () => {
     const admin = await prisma.user.create({
       data: {
-        email: `ah2-${Date.now()}-${randomId()}@test.dev`,
+        email: `ah2-${Date.now()}-${randomId()}@example.invalid`,
         name: 'AH2',
         passwordHash: 'x',
         webauthnUserId: randomId(),
@@ -84,7 +84,7 @@ describe('admin health (NEW-10)', () => {
   it('NEW-10: rolled-back migration rows do not count against migrationsCurrent', async () => {
     const admin = await prisma.user.create({
       data: {
-        email: `ah3-${Date.now()}-${randomId()}@test.dev`,
+        email: `ah3-${Date.now()}-${randomId()}@example.invalid`,
         name: 'AH3',
         passwordHash: 'x',
         webauthnUserId: randomId(),
@@ -197,7 +197,7 @@ describe('admin health (NEW-10)', () => {
       expect(csrfRes.status).toBe(200);
       const csrf = (csrfRes.body as { data?: { token?: string } }).data?.token;
       expect(csrf, 'csrf token').toBeTruthy();
-      const email = `n10-${Date.now()}@test.dev`;
+      const email = `n10-${Date.now()}@example.invalid`;
       const reg = await agent.post('/api/v1/auth/register').set('x-vl-csrf', csrf!).send({
         email,
         name: 'Built Dist Admin',

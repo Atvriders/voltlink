@@ -128,7 +128,7 @@ describe('setup and registration modes', () => {
     ).rejects.toMatchObject({ code: 'INVALID_EMAIL' });
     await expect(
       bootstrapInstanceAdmin({
-        email: `bs.${Date.now()}@test.dev`,
+        email: `bs.${Date.now()}@example.invalid`,
         name: '',
         password: 'short',
         setupToken: 'x',
@@ -136,14 +136,14 @@ describe('setup and registration modes', () => {
     ).rejects.toMatchObject({ code: 'WEAK_PASSWORD' });
     await expect(
       bootstrapInstanceAdmin({
-        email: `bs.${Date.now()}@test.dev`,
+        email: `bs.${Date.now()}@example.invalid`,
         name: '',
         password: 'long-enough-123',
         setupToken: 'wrong-token-wrong-token-wrong-token!',
       }),
     ).rejects.toMatchObject({ code: 'SETUP_TOKEN_INVALID' });
 
-    const email = `bs.${Date.now()}@test.dev`;
+    const email = `bs.${Date.now()}@example.invalid`;
     const { user } = await bootstrapInstanceAdmin({
       email,
       name: '  ',
@@ -154,7 +154,7 @@ describe('setup and registration modes', () => {
     expect(user.name).toBe(email.split('@')[0]);
     await expect(
       bootstrapInstanceAdmin({
-        email: `bs2.${Date.now()}@test.dev`,
+        email: `bs2.${Date.now()}@example.invalid`,
         name: '',
         password: 'long-enough-123',
         setupToken: process.env.VL_SETUP_TOKEN!,
@@ -203,7 +203,7 @@ describe('setup and registration modes', () => {
       update: { value: 'invite' },
       create: { key: 'instance.registrationMode', value: 'invite' },
     });
-    const host = await mkUser(`host.${Date.now()}@test.dev`);
+    const host = await mkUser(`host.${Date.now()}@example.invalid`);
     const org = await prisma.organization.create({
       data: {
         kind: 'PERSONAL',
@@ -212,7 +212,7 @@ describe('setup and registration modes', () => {
         memberships: { create: { userId: host.id, role: 'OWNER' } },
       },
     });
-    const email = `inv.${Date.now()}@test.dev`;
+    const email = `inv.${Date.now()}@example.invalid`;
     const token = `inv-${randomId()}`;
     await prisma.invitation.create({
       data: {
@@ -242,7 +242,7 @@ describe('setup and registration modes', () => {
     ).rejects.toMatchObject({ code: 'INVITE_REQUIRED' });
     await expect(
       registerUser({
-        email: 'other@test.dev',
+        email: 'other@example.invalid',
         name: 'I',
         password: 'long-enough-123',
         inviteToken: token,
@@ -295,14 +295,14 @@ describe('setup and registration modes', () => {
       create: { key: 'instance.registrationMode', value: 'closed' },
     });
     await expect(
-      registerUser({ email: `c.${Date.now()}@test.dev`, name: 'C', password: 'long-enough-123' }),
+      registerUser({ email: `c.${Date.now()}@example.invalid`, name: 'C', password: 'long-enough-123' }),
     ).rejects.toMatchObject({ code: 'REGISTRATION_CLOSED' });
 
     await prisma.appSetting.update({
       where: { key: 'instance.registrationMode' },
       data: { value: 'open' },
     });
-    const email = `open.${Date.now()}@test.dev`;
+    const email = `open.${Date.now()}@example.invalid`;
     // Open mode answers uniformly for new and existing emails.
     const created = await registerUser({ email, name: 'Open', password: 'long-enough-123' });
     expect(created.kind).toBe('check_email');
@@ -318,7 +318,7 @@ describe('verification and password reset mail flows', () => {
   it('issues and consumes verification tokens', async () => {
     const user = await prisma.user.create({
       data: {
-        email: `v.${Date.now()}@test.dev`,
+        email: `v.${Date.now()}@example.invalid`,
         name: 'v',
         passwordHash: await hashPassword('x-123456789'),
         webauthnUserId: randomId(),
@@ -334,7 +334,7 @@ describe('verification and password reset mail flows', () => {
   });
 
   it('requests a reset, rejects bad tokens and resets the password', async () => {
-    const user = await mkUser(`rp.${Date.now()}@test.dev`);
+    const user = await mkUser(`rp.${Date.now()}@example.invalid`);
     await requestPasswordReset(user.email);
     const row = await prisma.passwordReset.findFirstOrThrow({ where: { userId: user.id } });
     const token = `rp-token-${randomId()}`;
@@ -374,7 +374,7 @@ describe('verification and password reset mail flows', () => {
 
 describe('TOTP and recovery codes', () => {
   it('sets up, confirms, regenerates and disables TOTP', async () => {
-    const user = await mkUser(`t.${Date.now()}@test.dev`);
+    const user = await mkUser(`t.${Date.now()}@example.invalid`);
     const setup = await totpSetup(user.id);
     expect(setup.secret).toBeTruthy();
 
@@ -417,7 +417,7 @@ describe('TOTP and recovery codes', () => {
   });
 
   it('rejects wrong passwords without revealing details', async () => {
-    const user = await mkUser(`w.${Date.now()}@test.dev`);
+    const user = await mkUser(`w.${Date.now()}@example.invalid`);
     await expect(
       login({ email: user.email, password: 'wrong-password', ip: '9.9.9.9' }),
     ).rejects.toMatchObject({ code: 'BAD_CREDENTIALS' });
@@ -426,7 +426,7 @@ describe('TOTP and recovery codes', () => {
   });
 
   it('login routes through MFA when TOTP is enabled', async () => {
-    const user = await mkUser(`m.${Date.now()}@test.dev`, { totpEnabled: true });
+    const user = await mkUser(`m.${Date.now()}@example.invalid`, { totpEnabled: true });
     const res = await login({
       email: user.email,
       password: 'correct-horse-battery',
@@ -446,7 +446,7 @@ describe('TOTP and recovery codes', () => {
 
 describe('sessions and passkey ceremonies', () => {
   it('creates, lists, touches and revokes sessions', async () => {
-    const user = await mkUser(`s.${Date.now()}@test.dev`);
+    const user = await mkUser(`s.${Date.now()}@example.invalid`);
     const a = await createSession(user.id, '1.2.3.4', 'ua');
     const b = await createSession(user.id, '5.6.7.8', 'ua2');
     const pub = publicUser(
@@ -469,7 +469,7 @@ describe('sessions and passkey ceremonies', () => {
   });
 
   it('issues passkey options and rejects malformed registrations', async () => {
-    const user = await mkUser(`p.${Date.now()}@test.dev`);
+    const user = await mkUser(`p.${Date.now()}@example.invalid`);
     const reg = await passkeyRegistrationOptions(user.id);
     expect(reg.challenge).toBeTruthy();
     const loginOpts = await passkeyLoginOptions();
@@ -493,7 +493,7 @@ describe('TOTP/session/passkey edge branches', () => {
   void cookie;
 
   it('covers revoke/touch/delete NOT_FOUND and the anon throttle key', async () => {
-    const user = await mkUser(`edge.${Date.now()}@test.dev`);
+    const user = await mkUser(`edge.${Date.now()}@example.invalid`);
     await expect(revokeSession(user.id, 'does-not-exist')).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
@@ -506,7 +506,7 @@ describe('TOTP/session/passkey edge branches', () => {
   });
 
   it('verifyTotpForUser guards against malformed/missing secrets', async () => {
-    const user = await mkUser(`totp.${Date.now()}@test.dev`);
+    const user = await mkUser(`totp.${Date.now()}@example.invalid`);
     expect(await verifyTotpForUser(user.id, 'abc')).toBe(false);
     expect(await verifyTotpForUser(user.id, '123456')).toBe(false);
     await prisma.user.update({
@@ -518,13 +518,13 @@ describe('TOTP/session/passkey edge branches', () => {
   });
 
   it('totpSetup/totpConfirm guard errors', async () => {
-    const user = await mkUser(`tg.${Date.now()}@test.dev`);
+    const user = await mkUser(`tg.${Date.now()}@example.invalid`);
     const { secret } = await totpSetup(user.id);
     const code = await moduleTotp.generate({ secret });
     await totpConfirm(user.id, code);
     await expect(totpSetup(user.id)).rejects.toMatchObject({ code: 'TOTP_ALREADY_ENABLED' });
 
-    const other = await mkUser(`tg2.${Date.now()}@test.dev`);
+    const other = await mkUser(`tg2.${Date.now()}@example.invalid`);
     await expect(totpConfirm(other.id, '123456')).rejects.toMatchObject({ code: 'NO_TOTP' });
     await prisma.user.update({
       where: { id: other.id },
@@ -538,7 +538,7 @@ describe('TOTP/session/passkey edge branches', () => {
   });
 
   it('loginMfa consumes the ceremony after five bad codes', async () => {
-    const user = await mkUser(`mfa.${Date.now()}@test.dev`);
+    const user = await mkUser(`mfa.${Date.now()}@example.invalid`);
     const { jar, res } = cookieJar();
     await createMfaCeremony(res as never, user.id);
     const req = { cookies: { vl_ceremony: jar['vl_ceremony'] } } as unknown as Request;
@@ -554,7 +554,7 @@ describe('TOTP/session/passkey edge branches', () => {
   });
 
   it('passkey login: unknown credential, success, and soft failure', async () => {
-    const user = await mkUser(`pk.${Date.now()}@test.dev`);
+    const user = await mkUser(`pk.${Date.now()}@example.invalid`);
     await expect(
       passkeyLogin(
         { cookies: {} } as unknown as Request,
@@ -606,7 +606,7 @@ describe('TOTP/session/passkey edge branches', () => {
   });
 
   it('passkey registration success and soft failures', async () => {
-    const user = await mkUser(`pkreg.${Date.now()}@test.dev`);
+    const user = await mkUser(`pkreg.${Date.now()}@example.invalid`);
     const { jar, res } = cookieJar();
     await createCeremony(res as never, {
       purpose: 'passkey_register',
@@ -653,8 +653,8 @@ describe('TOTP/session/passkey edge branches', () => {
   });
 
   it('step-up: passkey success, wrong owner, ceremony mismatch, recovery code, totp, and missing id', async () => {
-    const user = await mkUser(`su.${Date.now()}@test.dev`);
-    const other = await mkUser(`su2.${Date.now()}@test.dev`);
+    const user = await mkUser(`su.${Date.now()}@example.invalid`);
+    const other = await mkUser(`su2.${Date.now()}@example.invalid`);
     const session = await createSession(user.id, '1.1.1.1');
     const actor = { kind: 'session', userId: user.id, sessionId: session.sessionId } as const;
 

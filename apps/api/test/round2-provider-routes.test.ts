@@ -43,7 +43,7 @@ afterAll(async () => {
 async function mkActor(member = true) {
   const user = await prisma.user.create({
     data: {
-      email: `pr-${Date.now()}-${randomId()}@test.dev`,
+      email: `pr-${Date.now()}-${randomId()}@example.invalid`,
       name: 'PR',
       passwordHash: 'x',
       webauthnUserId: randomId(),
@@ -215,7 +215,7 @@ describe('provider routes coverage', () => {
     // A vehicle from a foreign org is treated as nonexistent.
     const stranger = await prisma.user.create({
       data: {
-        email: `pr-s-${Date.now()}-${randomId()}@test.dev`,
+        email: `pr-s-${Date.now()}-${randomId()}@example.invalid`,
         name: 'Stranger',
         passwordHash: 'x',
         webauthnUserId: randomId(),

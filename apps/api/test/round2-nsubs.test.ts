@@ -59,7 +59,7 @@ async function withCsrf(
 async function operatorSession() {
   const user = await prisma.user.create({
     data: {
-      email: `subsop.${Date.now()}@test.dev`,
+      email: `subsop.${Date.now()}@example.invalid`,
       name: 'subsop',
       passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
       webauthnUserId: randomId(),
@@ -89,7 +89,7 @@ describe('N-SUBS double opt-in', () => {
     const agent = request.agent(base);
     const csrfRes = await agent.get('/api/v1/auth/csrf');
     const csrf = csrfRes.body.data.token as string;
-    const subEmail = `subs.${Date.now()}@test.dev`;
+    const subEmail = `subs.${Date.now()}@example.invalid`;
     const res = await agent
       .post('/api/v1/status/subscribe')
       .set('Cookie', `vl_csrf=${csrf}`)
@@ -119,7 +119,7 @@ describe('N-SUBS double opt-in', () => {
     // A confirmed subscriber so delivery attempts are observable.
     await prisma.statusSubscription.create({
       data: {
-        email: `conf.${Date.now()}@test.dev`,
+        email: `conf.${Date.now()}@example.invalid`,
         token: randomId(),
         confirmed: true,
       },

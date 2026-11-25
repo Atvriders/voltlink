@@ -31,7 +31,7 @@ afterAll(async () => {
 async function seedOrgManager() {
   const u = await prisma.user.create({
     data: {
-      email: `g15-${Date.now()}-${randomId()}@test.dev`,
+      email: `g15-${Date.now()}-${randomId()}@example.invalid`,
       name: 'G15',
       passwordHash: 'x',
       webauthnUserId: randomId(),

@@ -74,7 +74,7 @@ describe('fleet assignments (N-ASSIGN)', () => {
   it('a new assignment ends the previous one and PATCH edits the record', async () => {
     const user = await prisma.user.create({
       data: {
-        email: `fa-${Date.now()}-${randomId()}@test.dev`,
+        email: `fa-${Date.now()}-${randomId()}@example.invalid`,
         name: 'FA',
         passwordHash: 'x',
         webauthnUserId: randomId(),
@@ -108,10 +108,10 @@ describe('fleet assignments (N-ASSIGN)', () => {
       },
     });
     const d1 = await prisma.driver.create({
-      data: { organizationId: org.id, name: 'Dana', email: 'dana@x.test' },
+      data: { organizationId: org.id, name: 'Dana', email: 'dana@example.invalid' },
     });
     const d2 = await prisma.driver.create({
-      data: { organizationId: org.id, name: 'Sam', email: 'sam@x.test' },
+      data: { organizationId: org.id, name: 'Sam', email: 'sam@example.invalid' },
     });
     const session = await createSession(user.id, '127.0.0.1');
     const agent = request.agent(base).set('Cookie', `vl_session=${session.token}`);

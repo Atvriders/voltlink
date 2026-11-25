@@ -56,7 +56,7 @@ describe('R2-60 step-up method list', () => {
   it('a bare-password account is offered only password', async () => {
     const user = await prisma.user.create({
       data: {
-        email: `r260.${Date.now()}@test.dev`,
+        email: `r260.${Date.now()}@example.invalid`,
         name: 'r260',
         passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
         webauthnUserId: randomId(),

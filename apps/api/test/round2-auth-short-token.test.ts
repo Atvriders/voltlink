@@ -24,7 +24,7 @@ describe('short setup token', () => {
   it('refuses bootstrap with SETUP_TOKEN_REQUIRED', async () => {
     await expect(
       bootstrapInstanceAdmin({
-        email: 's@test.dev',
+        email: 's@example.invalid',
         name: 'S',
         password: 'long-enough-123',
         setupToken: 'short',

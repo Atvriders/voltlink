@@ -145,7 +145,7 @@ fleet appears. Demo data is clearly marked and fictional.
 per mail, never the body or a link) and the boot log says so. To send real mail:
 
 ```bash
-printf 'SMTP_URL=smtp://user:pass@smtp.example.com:587\n' >> .env
+printf 'SMTP_URL=smtp://user:pass@example.invalid:587\n' >> .env
 ```
 
 **Status page** — the public status site on its own port:

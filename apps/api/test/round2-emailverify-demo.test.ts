@@ -67,7 +67,7 @@ async function mkUser(email: string, verified: boolean) {
 
 describe('A-EMAILVERIFY provider gating and resend throttle', () => {
   it('unverified members cannot connect providers and resend is throttled', async () => {
-    const uma = await mkUser(`ae.${Date.now()}@test.dev`, false);
+    const uma = await mkUser(`ae.${Date.now()}@example.invalid`, false);
     const org = await prisma.organization.create({
       data: {
         kind: 'PERSONAL',
@@ -102,7 +102,7 @@ describe('A-EMAILVERIFY provider gating and resend throttle', () => {
 
 describe('Z-DEMOSCOPE demo incidents stay private', () => {
   it('seedDemoWorld incidents never appear on the public status page', async () => {
-    const owner = await mkUser(`zd.${Date.now()}@test.dev`, true);
+    const owner = await mkUser(`zd.${Date.now()}@example.invalid`, true);
     const org = await prisma.organization.create({
       data: {
         kind: 'PERSONAL',

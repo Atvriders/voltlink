@@ -52,7 +52,7 @@ async function mkWorld(): Promise<{
 }> {
   const user = await prisma.user.create({
     data: {
-      email: `pin-${Date.now()}-${randomId()}@test.dev`,
+      email: `pin-${Date.now()}-${randomId()}@example.invalid`,
       name: 'PIN',
       passwordHash: await hashPassword('long-enough-123'),
       webauthnUserId: randomId(),

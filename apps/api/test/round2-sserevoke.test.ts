@@ -88,7 +88,7 @@ describe('R2-31 / TI-29 A-SSEREVOKE immediate stream termination', { tags: ['rea
   async function mkStreamUser() {
     const owner = await prisma.user.create({
       data: {
-        email: `ssr2.${Date.now()}.${Math.random().toString(36).slice(2, 6)}@test.dev`,
+        email: `ssr2.${Date.now()}.${Math.random().toString(36).slice(2, 6)}@example.invalid`,
         name: 'ssr2',
         passwordHash: await import('../src/core/crypto').then((m) =>
           m.hashPassword('long-enough-123'),
@@ -152,7 +152,7 @@ describe('R2-31 / TI-29 A-SSEREVOKE immediate stream termination', { tags: ['rea
   it('R2-31 revoke-others closes the victim stream with session_revoked and nothing arrives afterwards', async () => {
     const owner = await prisma.user.create({
       data: {
-        email: `ssr.${Date.now()}@test.dev`,
+        email: `ssr.${Date.now()}@example.invalid`,
         name: 'ssr',
         passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
         webauthnUserId: randomId(),
@@ -319,7 +319,7 @@ describe('R2-31 / TI-29 A-SSEREVOKE immediate stream termination', { tags: ['rea
     await new Promise((r) => setTimeout(r, 300));
     const admin = await prisma.user.create({
       data: {
-        email: `ssr3.${Date.now()}.${Math.random().toString(36).slice(2, 6)}@test.dev`,
+        email: `ssr3.${Date.now()}.${Math.random().toString(36).slice(2, 6)}@example.invalid`,
         name: 'ssr3admin',
         passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
         webauthnUserId: randomId(),

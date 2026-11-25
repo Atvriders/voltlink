@@ -30,7 +30,7 @@ describe('Teams Adaptive Card (N-TEAMS)', () => {
     const { pushSimpleWebhook } = await import('../src/notifications/simpleWebhooks');
     const user = await prisma.user.create({
       data: {
-        email: `nt-${Date.now()}-${randomId()}@test.dev`,
+        email: `nt-${Date.now()}-${randomId()}@example.invalid`,
         name: 'NT',
         passwordHash: 'x',
         webauthnUserId: randomId(),

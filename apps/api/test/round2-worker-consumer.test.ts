@@ -39,7 +39,7 @@ beforeAll(async () => {
   });
   const user = await prisma.user.create({
     data: {
-      email: `mw1-${suffix}@test.dev`,
+      email: `mw1-${suffix}@example.invalid`,
       name: 'MW1 user',
       passwordHash: '$argon2id$v=19$m=19456,t=2,p=1$s$s',
       webauthnUserId: randomId(),

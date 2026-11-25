@@ -45,7 +45,7 @@ afterAll(async () => {
 async function mkUser() {
   return prisma.user.create({
     data: {
-      email: `nd-${Date.now()}-${randomId()}@test.dev`,
+      email: `nd-${Date.now()}-${randomId()}@example.invalid`,
       name: 'ND',
       passwordHash: 'x',
       webauthnUserId: randomId(),

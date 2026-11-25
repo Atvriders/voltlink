@@ -28,7 +28,7 @@ vi.mock('./auth/AuthContext', () => ({
   useAuth: () => ({
     user: {
       id: 'u1',
-      email: 'a@test.dev',
+      email: 'a@example.invalid',
       name: 'A',
       units: 'metric',
       timezone: 'UTC',
@@ -183,7 +183,7 @@ describe('missing UI capabilities (F-NOUI)', () => {
       if (path === '/api/v1/vehicles/v1/shares' && init?.method === 'POST')
         return { status: 'invited' };
       if (path === '/api/v1/vehicles/v1/shares')
-        return [{ id: 's1', userEmail: 'b@test.dev', level: 'viewer', allowHighRisk: false }];
+        return [{ id: 's1', userEmail: 'b@example.invalid', level: 'viewer', allowHighRisk: false }];
       if (path.startsWith('/api/v1/vehicles/v1/shares/s1')) return { ok: true };
       if (path.startsWith('/api/v1/commands?')) return { items: [], total: 0 };
       if (path.startsWith('/api/v1/drives')) return { items: [], total: 0 };
@@ -203,14 +203,14 @@ describe('missing UI capabilities (F-NOUI)', () => {
     });
     renderPage('/vehicles/v1', <LiveVehiclePage />, '/vehicles/:id');
     await waitFor(() => expect(screen.getByText('Aurora')).toBeTruthy());
-    await waitFor(() => expect(screen.getByText('b@test.dev')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('b@example.invalid')).toBeTruthy());
     const emailInput = screen.getByLabelText(/email/i);
-    fireEvent.change(emailInput, { target: { value: 'c@test.dev' } });
+    fireEvent.change(emailInput, { target: { value: 'c@example.invalid' } });
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
     await waitFor(() =>
       expect(apiMock).toHaveBeenCalledWith(
         '/api/v1/vehicles/v1/shares',
-        expect.objectContaining({ method: 'POST', body: { email: 'c@test.dev', level: 'viewer' } }),
+        expect.objectContaining({ method: 'POST', body: { email: 'c@example.invalid', level: 'viewer' } }),
       ),
     );
     fireEvent.click(screen.getByRole('button', { name: /revoke/i }));

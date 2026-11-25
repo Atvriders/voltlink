@@ -31,7 +31,7 @@ describe('freshness at read time (F-FRESH)', () => {
   it('recomputes freshness from fetchedAt instead of the stored label', async () => {
     const u = await prisma.user.create({
       data: {
-        email: `ff-${Date.now()}-${randomId()}@test.dev`,
+        email: `ff-${Date.now()}-${randomId()}@example.invalid`,
         name: 'FF',
         passwordHash: 'x',
         webauthnUserId: randomId(),
