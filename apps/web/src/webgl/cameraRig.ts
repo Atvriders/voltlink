@@ -4,3 +4,8 @@
 export function rigShouldFollow(userInteracted: boolean): boolean {
   return !userInteracted;
 }
+
+/** The look-at point the rig eases the camera toward. OrbitControls uses the
+ * SAME point as its target, so the first orbit never jumps (R2-43: the old
+ * controls defaulted to (0,0,0) while the rig aimed at (0,0.7,0)). */
+export const RIG_LOOK_AT: [number, number, number] = [0, 0.7, 0];

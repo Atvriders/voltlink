@@ -332,3 +332,33 @@ test('R2-15: a charging demo vehicle renders on /showroom and /vehicles/<id> wit
 
   expect(errors, 'no page errors while rendering the charging vehicle').toEqual([]);
 });
+
+test('R2-43: the first orbit hands the camera to the user', async ({ page }) => {
+  test.setTimeout(180_000);
+  const email = `e2e-glb43-${Date.now()}@voltlink.test`;
+  await register(page, email);
+  await enableDemo(page);
+
+  const vehiclesRes = await page.request.get('/api/v1/vehicles');
+  const vehicles = ((await vehiclesRes.json()) as { data?: { id: string }[] }).data ?? [];
+  await page.goto(`/vehicles/${vehicles[0]!.id}`);
+  const viewer = page.locator('[data-testid="vehicle-viewer"]');
+  await expect
+    .poll(() => viewer.first().getAttribute('data-asset'), { timeout: 30000 })
+    .toBe('glb');
+  await expect(viewer.first()).toHaveAttribute('data-user-interacted', 'false');
+
+  // Drag the viewer: the controls' onStart must flip the rig off.
+  const canvas = viewer.locator('canvas').first();
+  const box = (await canvas.boundingBox())!;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx + 120, cy + 40, { steps: 8 });
+  await page.mouse.up();
+
+  await expect(viewer.first()).toHaveAttribute('data-user-interacted', 'true', {
+    timeout: 10000,
+  });
+});

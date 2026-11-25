@@ -30,7 +30,7 @@ function meshoptLoader(): GLTFLoader {
 }
 import type { VehicleState, VehicleWithState } from '@voltlink/shared';
 import { lodBaseFor, resolveAssetUrl } from './vehicleAssets';
-import { rigShouldFollow } from './cameraRig';
+import { RIG_LOOK_AT, rigShouldFollow } from './cameraRig';
 import { collectEmissiveMaterials } from './emissivePulse';
 
 import { PRESETS, autoPreset, type GraphicsPreset } from './preset';
@@ -73,11 +73,11 @@ function CameraRig({
     const t = targetRef.current;
     if (reducedMotion()) {
       cam.position.copy(t);
-      cam.lookAt(0, 0.7, 0);
+      cam.lookAt(...RIG_LOOK_AT);
       return;
     }
     cam.position.lerp(t, 0.05);
-    cam.lookAt(0, 0.7, 0);
+    cam.lookAt(...RIG_LOOK_AT);
   });
   return null;
 }
@@ -449,6 +449,8 @@ export default function VehicleViewer({
   // element so the e2e memory test can read them (geometries/textures must
   // return to baseline across vehicle switches — no per-switch GPU leaks).
   const containerRef = useRef<HTMLDivElement>(null);
+  // R2-43: mirrored so the e2e can assert the onStart flip really happened.
+  const [userInteracted, setUserInteracted] = useState(false);
   // Deterministic WebGL preflight: without a context we never mount <Canvas>,
   // so an unavailable renderer cannot crash the whole route (G-14).
   const [webglSupported] = useState(() => {
@@ -526,6 +528,7 @@ export default function VehicleViewer({
       data-asset-state={useGlb ? (glbLoaded ? 'glb' : 'loading') : 'fallback'}
       data-asset-url={useGlb && glbLoaded ? asset : undefined}
       data-parts={useGlb && glbLoaded ? partNames.join(',') : undefined}
+      data-user-interacted={userInteracted}
       ref={containerRef}
     >
       <Canvas
@@ -570,6 +573,7 @@ export default function VehicleViewer({
           {interactive && (
             <OrbitControls
               makeDefault
+              target={RIG_LOOK_AT}
               enablePan={false}
               minDistance={3.2}
               maxDistance={16}
@@ -578,6 +582,7 @@ export default function VehicleViewer({
               autoRotateSpeed={0.6}
               onStart={() => {
                 interactedRef.current = true;
+                setUserInteracted(true);
               }}
             />
           )}
