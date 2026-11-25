@@ -483,7 +483,9 @@ jobs:
         run: |
           set -e
           : > /tmp/empty.env
-          if grep -n ':\?' compose.production.yml; then
+          # -F: fixed strings — GNU grep treats ':\?' as an optional colon and
+          # would match every line, failing this step for the wrong reason.
+          if grep -nF ':?' compose.production.yml; then
             echo "FAIL: a ':?' fail-fast interpolation remains" >&2; exit 1
           fi
           docker compose -f compose.production.yml --env-file /tmp/empty.env config -q
