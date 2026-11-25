@@ -64,16 +64,37 @@ for (const name of services) {
       compare(`env ${k}`, v, ae[k]);
     }
   }
-  if (r.ports?.length)
+  if (r.ports?.length) {
+    // Renderer emits compact strings ("[host:]published:target"); compose
+    // emits objects. Compare published:target for both.
+    const normPort = (s) => {
+      const parts = String(s).split(':');
+      return parts.length >= 2 ? `${parts[parts.length - 2]}:${parts[parts.length - 1]}` : String(s);
+    };
     compare(
       'ports',
-      r.ports.map(String),
-      (a.ports ?? []).map((p) => `${p.published}:${p.target}`),
+      r.ports.map(normPort).sort(),
+      (a.ports ?? []).map((p) => `${p.published}:${p.target}`).sort(),
     );
+  }
   if (r.networks?.length)
     compare('networks', r.networks.slice().sort(), Object.keys(a.networks ?? {}).sort());
-  if (r.volumes?.length)
-    compare('volumes', r.volumes.slice().sort(), (a.volumes ?? []).map((v) => v.source).sort());
+  if (r.volumes?.length) {
+    // Renderer emits compact "source:target[:mode]" strings; compose emits
+    // {source,target,read_only} objects. Compare target + read-only — the
+    // bind-mount source is relative in the files and absolute in compose.
+    const normVol = (s) => {
+      const parts = String(s).split(':');
+      return { t: parts[1], ro: parts[2] === 'ro' };
+    };
+    compare(
+      'volumes',
+      r.volumes.map(normVol).sort((x, y) => x.t.localeCompare(y.t)),
+      (a.volumes ?? [])
+        .map((v) => ({ t: v.target, ro: v.read_only === true }))
+        .sort((x, y) => x.t.localeCompare(y.t)),
+    );
+  }
 }
 if (failed) {
   console.error('renderer and docker compose disagree — fix scripts/compose-render.mjs');

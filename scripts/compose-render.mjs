@@ -301,6 +301,7 @@ function loadEnvFile(file) {
 export function renderCompose(files, options = {}) {
   const envFile = options.envFile ? loadEnvFile(options.envFile) : {};
   const shellEnv = { ...process.env, ...(options.env ?? {}) };
+  const activeProfiles = new Set(options.profiles ?? []);
   let merged = {};
   for (const f of files) {
     merged = deepMerge(merged, loadWithIncludes(f));
@@ -308,6 +309,10 @@ export function renderCompose(files, options = {}) {
   const doc = interpolate(merged, shellEnv, envFile);
   const services = {};
   for (const [name, svc] of Object.entries(doc.services ?? {})) {
+    const profiles = Array.isArray(svc.profiles) ? svc.profiles : [];
+    // Compose semantics: services without a profile are always active;
+    // profiled services render only when --profile activates one of them.
+    if (profiles.length > 0 && !profiles.some((p) => activeProfiles.has(p))) continue;
     services[name] = {
       image: svc.image,
       build: svc.build,
@@ -315,7 +320,7 @@ export function renderCompose(files, options = {}) {
       networks: Array.isArray(svc.networks) ? svc.networks : [],
       ports: Array.isArray(svc.ports) ? svc.ports : [],
       volumes: Array.isArray(svc.volumes) ? svc.volumes : [],
-      profiles: Array.isArray(svc.profiles) ? svc.profiles : [],
+      profiles,
     };
   }
   return { name: doc.name, services, networks: doc.networks ?? {}, volumes: doc.volumes ?? {} };
@@ -328,12 +333,15 @@ if (
   const args = process.argv.slice(2);
   let envFile = null;
   const files = [];
+  const profiles = [];
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--env-file') {
       envFile = args[++i];
+    } else if (args[i] === '--profile') {
+      profiles.push(args[++i]);
     } else {
       files.push(args[i]);
     }
   }
-  console.log(JSON.stringify(renderCompose(files, { envFile }), null, 2));
+  console.log(JSON.stringify(renderCompose(files, { envFile, profiles }), null, 2));
 }

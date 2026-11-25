@@ -427,9 +427,21 @@ jobs:
           cp .env.example /tmp/cmp.env
           printf 'POSTGRES_PASSWORD=ci-pg\nJWT_SECRET=%s\nVL_MASTER_KEY=%s\nPUBLIC_URL=https://voltlink.example.com\n' \
             "$(openssl rand -hex 32)" "$(openssl rand -base64 32)" >> /tmp/cmp.env
-          docker compose -f compose.production.yml --env-file /tmp/cmp.env config --format json > /tmp/config.json
-          node scripts/compose-render.mjs --env-file /tmp/cmp.env compose.production.yml > /tmp/render.json
-          node scripts/compare-compose-config.mjs /tmp/render.json /tmp/config.json
+          for spec in \
+            'compose.production.yml|' \
+            'compose.production.yml|status' \
+            'compose.production.yml|tesla' \
+            'docker-compose.yml|' \
+            'docker-compose.yml docker-compose.build.yml|' \
+            'docker-compose.yml docker-compose.build.yml docker-compose.dev.yml|' \
+            'compose.production.yml docker-compose.ci.yml|'; do
+            files="${spec%%|*}"; profile="${spec#*|}"
+            args=""; for f in $files; do args="$args -f $f"; done
+            pflag=""; [ -n "$profile" ] && pflag="--profile $profile"
+            docker compose --env-file /tmp/cmp.env $args $pflag config --format json > /tmp/config.json
+            node scripts/compose-render.mjs --env-file /tmp/cmp.env $files $pflag > /tmp/render.json
+            node scripts/compare-compose-config.mjs /tmp/render.json /tmp/config.json
+          done
       - name: Structural gates (C0)
         run: |
           set -e

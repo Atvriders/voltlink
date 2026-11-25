@@ -140,7 +140,7 @@ describe('compose-render (C3)', () => {
       `POSTGRES_PASSWORD=pgpw\nJWT_SECRET=${'j'.repeat(64)}\nVL_MASTER_KEY=${Buffer.alloc(32, 6).toString('base64')}\nPUBLIC_URL=https://voltlink.example.com\n`,
     );
     try {
-      const out = renderCompose([production], { envFile, env: {} });
+      const out = renderCompose([production], { envFile, env: {}, profiles: ['status'] });
       for (const role of ['migrate', 'web', 'worker', 'scheduler', 'status']) {
         const env = out.services[role]!.environment;
         const missing = ENV_KEYS.filter((k) => !(k in env));
