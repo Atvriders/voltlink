@@ -287,3 +287,48 @@ test('R2-61: real GLBs load on /vehicles/<id> and /presentation with zero 404s',
     'no 404 console errors on /vehicles/<id> or /presentation (R2-61)',
   ).toEqual([]);
 });
+
+test('R2-15: a charging demo vehicle renders on /showroom and /vehicles/<id> with zero page errors', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const email = `e2e-glb15-${Date.now()}@voltlink.test`;
+  await register(page, email);
+  await enableDemo(page);
+
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+
+  // The demo fleet always seeds one 'charger' role vehicle whose state is
+  // charging — the exact path that pulsed every emissive material once per
+  // frame before the fix.
+  const vehiclesRes = await page.request.get('/api/v1/vehicles');
+  const vehicles =
+    (
+      (await vehiclesRes.json()) as {
+        data?: { id: string; displayName?: string; state?: { chargingState?: string } }[];
+      }
+    ).data ?? [];
+  const charging = vehicles.find((v) => v.state?.chargingState === 'charging');
+  expect(charging, 'the demo fleet seeds a charging vehicle').toBeTruthy();
+
+  await page.goto('/showroom');
+  await page
+    .getByRole('button', { name: new RegExp(charging!.displayName ?? '') })
+    .first()
+    .click();
+  await expect
+    .poll(() => page.locator('[data-testid="vehicle-viewer"]').first().getAttribute('data-asset'), {
+      timeout: 30000,
+    })
+    .toBe('glb');
+
+  await page.goto(`/vehicles/${charging!.id}`);
+  await expect
+    .poll(() => page.locator('[data-testid="vehicle-viewer"]').first().getAttribute('data-asset'), {
+      timeout: 30000,
+    })
+    .toBe('glb');
+
+  expect(errors, 'no page errors while rendering the charging vehicle').toEqual([]);
+});
