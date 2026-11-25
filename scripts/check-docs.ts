@@ -5,7 +5,9 @@
 //   - "builds locally" / local builds in an install path (install must pull
 //     ghcr.io/atvriders/voltlink);
 //   - recommending the v1.0.0 pin (the guide pins the current release);
-//   - `$(` inside a `.env` example (compose never runs commands in .env).
+//   - `$(` inside a `.env` example (compose never runs commands in .env);
+//   - `TRUST_PROXY=true` (R2-25: `true` makes the web role refuse to start —
+//     docs must recommend a hop count or a proxy list instead).
 // Run: npx tsx scripts/check-docs.ts
 
 import { readFileSync, existsSync } from 'node:fs';
@@ -33,6 +35,10 @@ const RULES: { label: string; re: RegExp; envOnly?: boolean }[] = [
   {
     label: 'v1.0.0 recommended as a pin',
     re: /(pin|pinning|recommend\w*|use)[^\n]{0,60}v1\.0\.0/i,
+  },
+  {
+    label: 'TRUST_PROXY=true (the web role refuses to start)',
+    re: /TRUST_PROXY\s*=\s*true/,
   },
 ];
 
