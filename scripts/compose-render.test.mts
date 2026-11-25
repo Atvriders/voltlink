@@ -133,7 +133,7 @@ describe('compose-render (C3)', () => {
   });
 
   it('renders the real files with a filled .env: every role carries every ENV_SPEC key', async () => {
-    const { ENV_KEYS } = await import('../apps/api/src/core/env-spec.ts');
+    const { ENV_KEYS } = await import('../apps/api/src/core/env-spec');
     const envFile = `${repo}scripts/compose-render.test2.env`;
     writeFileSync(
       envFile,

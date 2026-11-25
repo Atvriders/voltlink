@@ -116,22 +116,26 @@ export default function StatusAdminPage() {
               </Button>
             }
           >
-            <ul className="space-y-2">
-              {(bundle?.maintenance ?? []).map((m) => (
-                <li
-                  key={m.id}
-                  className="rounded-lg border border-line bg-panel2 px-3 py-2 text-sm"
-                >
-                  <p className="font-medium">{m.title}</p>
-                  <p className="text-xs text-subtle">
-                    {new Date(m.startsAt).toLocaleString()} → {new Date(m.endsAt).toLocaleString()}
-                  </p>
-                </li>
-              ))}
-              {(bundle?.maintenance ?? []).length === 0 && (
-                <p className="py-2 text-sm text-faint">No scheduled maintenance.</p>
-              )}
-            </ul>
+            {(bundle?.maintenance ?? []).length === 0 ? (
+              // Outside the list: <ul> children must be <li> only (axe
+              // 'list'), so the empty state is not a list child.
+              <p className="py-2 text-sm text-faint">No scheduled maintenance.</p>
+            ) : (
+              <ul className="space-y-2">
+                {(bundle?.maintenance ?? []).map((m) => (
+                  <li
+                    key={m.id}
+                    className="rounded-lg border border-line bg-panel2 px-3 py-2 text-sm"
+                  >
+                    <p className="font-medium">{m.title}</p>
+                    <p className="text-xs text-subtle">
+                      {new Date(m.startsAt).toLocaleString()} →{' '}
+                      {new Date(m.endsAt).toLocaleString()}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
 
           <Card title="Response times (24h)" subtitle="Automated check latency">
@@ -245,53 +249,55 @@ function IncidentList() {
       {incidentsError && (
         <ErrorState error={incidentsErr} onRetry={() => void refetchIncidents()} />
       )}
-      <ul className="space-y-2">
-        {(incidents ?? []).map((i) => (
-          <li key={i.id} className="rounded-lg border border-line bg-panel2 p-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-semibold">{i.title}</span>
-              <Badge
-                tone={
-                  i.severity === 'critical' ? 'danger' : i.severity === 'major' ? 'warn' : 'info'
-                }
-              >
-                {i.severity}
-              </Badge>
-              <Badge tone={i.status === 'resolved' ? 'ok' : 'warn'}>{i.status}</Badge>
-              <Badge tone="neutral">{i.public ? 'public' : 'private'}</Badge>
-              <div className="ml-auto flex gap-1">
-                {i.status !== 'resolved' && (
-                  <Button
-                    variant="secondary"
-                    className="px-2 py-1 text-xs"
-                    onClick={() => setUpdateFor(i)}
-                  >
-                    Update
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  className="px-2 py-1 text-xs"
-                  onClick={() => togglePublic.mutate(i)}
+      {(incidents ?? []).length === 0 ? (
+        // Outside the list: <ul> children must be <li> only (axe 'list').
+        <p className="py-2 text-sm text-faint">No incidents recorded.</p>
+      ) : (
+        <ul className="space-y-2">
+          {(incidents ?? []).map((i) => (
+            <li key={i.id} className="rounded-lg border border-line bg-panel2 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold">{i.title}</span>
+                <Badge
+                  tone={
+                    i.severity === 'critical' ? 'danger' : i.severity === 'major' ? 'warn' : 'info'
+                  }
                 >
-                  Make {i.public ? 'private' : 'public'}
-                </Button>
+                  {i.severity}
+                </Badge>
+                <Badge tone={i.status === 'resolved' ? 'ok' : 'warn'}>{i.status}</Badge>
+                <Badge tone="neutral">{i.public ? 'public' : 'private'}</Badge>
+                <div className="ml-auto flex gap-1">
+                  {i.status !== 'resolved' && (
+                    <Button
+                      variant="secondary"
+                      className="px-2 py-1 text-xs"
+                      onClick={() => setUpdateFor(i)}
+                    >
+                      Update
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    className="px-2 py-1 text-xs"
+                    onClick={() => togglePublic.mutate(i)}
+                  >
+                    Make {i.public ? 'private' : 'public'}
+                  </Button>
+                </div>
               </div>
-            </div>
-            <ul className="mt-2 space-y-1">
-              {i.updates.map((u) => (
-                <li key={u.id} className="text-xs text-subtle">
-                  <span className="font-semibold capitalize">{u.phase}</span> ·{' '}
-                  {fmtClock(u.createdAt)} — {u.message}
-                </li>
-              ))}
-            </ul>
-          </li>
-        ))}
-        {(incidents ?? []).length === 0 && (
-          <p className="py-2 text-sm text-faint">No incidents recorded.</p>
-        )}
-      </ul>
+              <ul className="mt-2 space-y-1">
+                {i.updates.map((u) => (
+                  <li key={u.id} className="text-xs text-subtle">
+                    <span className="font-semibold capitalize">{u.phase}</span> ·{' '}
+                    {fmtClock(u.createdAt)} — {u.message}
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      )}
       <IncidentUpdateModal incident={updateFor} onClose={() => setUpdateFor(null)} />
     </>
   );

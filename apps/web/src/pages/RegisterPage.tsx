@@ -136,7 +136,9 @@ export default function RegisterPage() {
           </Button>
           <p className="text-center text-xs text-subtle">
             Already have an account?{' '}
-            <Link className="text-accent hover:underline" to="/login">
+            {/* Persistent underline: an inline link in running text must be
+                visually distinct (axe link-in-text-block). */}
+            <Link className="text-accent underline hover:underline" to="/login">
               Sign in
             </Link>
           </p>

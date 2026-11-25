@@ -201,12 +201,15 @@ export default function LoginPage() {
             </Link>
           </div>
         </form>
-        <p className="mt-4 text-center text-xs text-faint">
-          Self-hosted and privacy-first.{' '}
-          <Link to="/status" className="text-accent hover:underline">
+        <div className="mt-4 text-center text-xs text-faint">
+          <p>Self-hosted and privacy-first.</p>
+          {/* Standalone line, not inside the text block: link-in-text-block
+              (axe) treats an inline link in running text as a findability
+              problem for keyboard and screen-reader users. */}
+          <Link to="/status" className="text-accent underline hover:underline">
             System status
           </Link>
-        </p>
+        </div>
       </div>
     </div>
   );

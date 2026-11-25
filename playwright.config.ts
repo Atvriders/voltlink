@@ -37,7 +37,7 @@ export default defineConfig({
       name: 'desktop',
       use: { ...devices['Desktop Chrome'] },
       testIgnore:
-        /no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts|visual-mobile\.spec\.ts|visual-no-webgl\.spec\.ts|visual-reduced-motion\.spec\.ts/,
+        /no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts|a11y-phone\.spec\.ts|visual-mobile\.spec\.ts|visual-no-webgl\.spec\.ts|visual-reduced-motion\.spec\.ts/,
     },
     // Gate 7: every page is exercised at desktop, tablet and mobile sizes.
     // Desktop visual snapshots run in the desktop project; the mobile and
@@ -48,19 +48,25 @@ export default defineConfig({
       name: 'tablet',
       use: { ...devices['iPad Pro 11'], defaultBrowserType: 'chromium', browserName: 'chromium' },
       testIgnore:
-        /visual\.spec\.ts|no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts|visual-no-webgl\.spec\.ts|visual-reduced-motion\.spec\.ts/,
+        /visual\.spec\.ts|no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts|a11y-phone\.spec\.ts|visual-no-webgl\.spec\.ts|visual-reduced-motion\.spec\.ts/,
     },
     {
       name: 'mobile',
       use: { ...devices['Pixel 7'] },
       testIgnore:
-        /visual\.spec\.ts|no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts|visual-no-webgl\.spec\.ts|visual-reduced-motion\.spec\.ts/,
+        /visual\.spec\.ts|no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts|a11y-phone\.spec\.ts|visual-no-webgl\.spec\.ts|visual-reduced-motion\.spec\.ts/,
     },
     // Tesla spec runs only through scripts/e2e/tesla-e2e.sh (fake Fleet
     // API + seeded user); the device projects above ignore it.
     { name: 'tesla', use: { ...devices['Desktop Chrome'] }, testMatch: /tesla\.spec\.ts/ },
     // Accessibility scan (guide 08 §12): axe on every core page, desktop only.
     { name: 'a11y', use: { ...devices['Desktop Chrome'] }, testMatch: /a11y\.spec\.ts/ },
+    // PL-05 phone width (web-6): signed-in pages under the real Pixel 7.
+    {
+      name: 'a11y-phone',
+      use: { ...devices['Pixel 7'] },
+      testMatch: /a11y-phone\.spec\.ts/,
+    },
     // Guide 06 §12: WebGL rendering is exercised both on real GL and on the
     // SwiftShader software path, and WebGL-disabled browsers degrade instead
     // of crashing (G-14).
