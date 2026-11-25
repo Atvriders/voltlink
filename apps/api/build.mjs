@@ -36,6 +36,7 @@ await Promise.all([
   build({ ...common, entryPoints: { statusServer: 'src/statusServer.ts' } }),
   build({ ...common, entryPoints: { 'cli/migrate': 'src/cli/migrate.ts' } }),
   build({ ...common, entryPoints: { 'cli/selftest': 'src/cli/selftest.ts' } }),
+  build({ ...common, entryPoints: { 'cli/seed-status': 'src/cli/seed-status.ts' } }),
 ]);
 writeFileSync('dist/externals.json', JSON.stringify(EXTERNALS));
 console.log('api bundle ok');

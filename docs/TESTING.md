@@ -58,7 +58,12 @@ Visual mode resets the dedicated `voltlink_visual` database on every boot,
 runs `NODE_ENV=test` with `VL_TEST_FROZEN_NOW=2026-06-15T15:30:00Z` and
 `VL_POLLER_ENABLED=false`; the API rejects `VL_TEST_FROZEN_NOW` in
 production (the demo clock is test-only, `apps/api/src/core/demoClock.ts`).
-CI's e2e-fullstack job boots this same mode. The Playwright specs freeze the
+After the migrations the stack also seeds the global status content once
+(`node dist/cli/seed-status.cjs`), so the public status page, the status
+admin page and their charts render the same seeded world no matter which
+tests have enabled a demo fleet already — uptime figures, the response-times
+chart and every status timestamp are order-independent. CI's e2e-fullstack
+job boots this same mode. The Playwright specs freeze the
 browser clock with `page.clock.setFixedTime` before navigating, so relative
 times are pixel-stable on any day.
 

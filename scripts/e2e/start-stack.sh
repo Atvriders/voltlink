@@ -130,6 +130,17 @@ done
 
 node dist/cli/migrate.cjs >"$LOG_DIR/migrate.log" 2>&1 || { tail -40 "$LOG_DIR/migrate.log"; exit 1; }
 
+if [ "$VISUAL_MODE" = "1" ]; then
+  # Guide 08 §11.2: seed the global status content once at boot so the status
+  # pages (public page, status admin) render the same seeded world regardless
+  # of which tests have enabled a demo fleet so far. Deterministic order-free
+  # uptime figures and response-time chart.
+  node dist/cli/seed-status.cjs >"$LOG_DIR/seed-status.log" 2>&1 || {
+    tail -40 "$LOG_DIR/seed-status.log"
+    exit 1
+  }
+fi
+
 node dist/index.cjs >"$LOG_DIR/api.log" 2>&1 &
 API_PID=$!
 record_pid api $API_PID
