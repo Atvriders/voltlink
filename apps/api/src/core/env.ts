@@ -7,16 +7,15 @@
 import { z } from 'zod';
 import { assertDemoClockEnv } from './demoClock';
 import { validateKeyRing } from './keyring';
+import { looksLikePlaceholder } from './placeholder';
 import { ENV_SPEC } from './env-spec';
-
-const PLACEHOLDER = /(secret|change.?me|changeme|placeholder|example|your-|xxxx|default)/i;
 
 function requireSecret(name: string, minLen: number): string {
   const v = process.env[name];
   if (!v || v.length < minLen) {
     throw new Error(`${name} is missing or too short (minimum ${minLen} characters).`);
   }
-  if (PLACEHOLDER.test(v)) {
+  if (looksLikePlaceholder(v)) {
     throw new Error(`${name} looks like a placeholder value; refusing to boot with it.`);
   }
   return v;
