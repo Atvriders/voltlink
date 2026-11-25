@@ -2,19 +2,29 @@
 
 ## Production (published image)
 
-```bash
-docker compose -f compose.production.yml pull
-docker compose -f compose.production.yml up -d
-```
+- Back up first ([BACKUP_RESTORE.md](BACKUP_RESTORE.md)) — cheap insurance.
+- Set the new release tag in `.env`, or download the new release's
+  `compose.production.yml` (the file and the image tag always match):
 
-- Back up first (see Backup & restore) — cheap insurance.
-- Migrations apply automatically on boot under an advisory lock; multiple
-  replicas racing is safe.
+  ```bash
+  # in .env
+  VOLTLINK_IMAGE_TAG=v1.1.1
+
+  docker compose -f compose.production.yml pull
+  docker compose -f compose.production.yml up -d --wait
+  ```
+
+- The `migrate` service applies migrations on every boot under an advisory
+  lock; the other roles wait for the migrations to be current.
 - Roll back by pinning the previous tag:
 
   ```bash
-  VOLTLINK_IMAGE_TAG=<previous-tag> docker compose -f compose.production.yml up -d
+  VOLTLINK_IMAGE_TAG=<previous-tag> docker compose -f compose.production.yml pull
+  VOLTLINK_IMAGE_TAG=<previous-tag> docker compose -f compose.production.yml up -d --wait
   ```
+
+  Roll forward-only schema migrations may reject older images — check
+  `CHANGELOG.md` for migration notes before downgrading.
 
 ## Rename to voltlink (technical identifiers)
 

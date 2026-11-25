@@ -64,7 +64,7 @@ export const env = {
   DEV_ECHO_TOKENS:
     process.env.VL_DEV_ECHO_TOKENS === '1' || process.env.VL_DEV_ECHO_TOKENS === 'true',
 
-  DATABASE_URL: process.env.DATABASE_URL,
+  DATABASE_URL: process.env.VOLTLINK_DATABASE_URL || process.env.DATABASE_URL,
   REDIS_URL: process.env.REDIS_URL || '',
   QUEUE_PREFIX: optional('VL_QUEUE_PREFIX', 'voltlink'),
   // Guide 08 §11.2: visual mode disables the provider poller.

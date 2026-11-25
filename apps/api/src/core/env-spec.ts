@@ -16,6 +16,8 @@ export const ENV_SPEC = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   HOST: z.string().default('0.0.0.0'),
   DATABASE_URL: z.string({ error: 'DATABASE_URL is required' }).min(1),
+  // R2-70: an external database overrides the bundled compose database.
+  VOLTLINK_DATABASE_URL: optionalString,
   REDIS_URL: z.string().default(''),
   PUBLIC_URL: z.url().default('http://localhost:3000'),
   VL_ALLOW_INSECURE_HTTP: bool,

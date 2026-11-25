@@ -1,52 +1,56 @@
 # Quick start
 
-Five minutes to a running VoltLink with the fictional demo fleet.
+Five minutes to a running VoltLink with the fictional demo fleet. This is the
+short version of [DOCKER_COMPOSE.md](DOCKER_COMPOSE.md) — the single install
+guide; anything not covered here follows the guide.
 
 ## 1. Requirements
 
-- Docker Engine 24+ with the Compose plugin
-- 2 GB RAM free, ~1 GB disk
-- Nothing else — PostgreSQL and Redis run as containers.
+- Docker Engine with the Compose plugin v2.20 or newer.
+- 2 GB RAM free, ~1 GB disk.
+- Nothing else — PostgreSQL and Redis run as containers on an internal network.
 
-## 2. Clone and configure
-
-```bash
-git clone https://github.com/Atvriders/voltlink.git
-cd voltlink
-cp .env.example .env
-```
-
-Edit `.env` and set at minimum:
+## 2. Get the files and create .env
 
 ```bash
-JWT_SECRET=$(openssl rand -hex 32)      # paste the output
-VL_MASTER_KEY=$(openssl rand -base64 32) # paste the output
-POSTGRES_PASSWORD=<strong database password>
-PUBLIC_URL=http://localhost:3110        # your real https:// URL later
+curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/compose.production.yml -o compose.production.yml
+umask 077
+printf 'JWT_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
+printf 'VL_MASTER_KEY=%s\n' "$(openssl rand -base64 32)" >> .env
+printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 16)" >> .env
+printf 'PUBLIC_URL=http://localhost:3110\n' >> .env
 ```
+
+The commands write literal values into `.env` (compose never runs commands
+there). Use an `https://` PUBLIC_URL for anything beyond a localhost trial.
 
 ## 3. Start
 
 ```bash
-docker compose up -d
+docker compose -f compose.production.yml up -d --wait
 ```
 
 Watch startup:
 
 ```bash
-docker compose logs -f web
+docker compose -f compose.production.yml logs -f web
 ```
 
-Wait for `[voltlink] web listening on 0.0.0.0:3000`. On first boot the web role
-applies database migrations under an advisory lock, so replicas can race
-without harm.
+`--wait` returns after every role is healthy. Migrations apply automatically
+under an advisory lock on boot.
 
-## 4. Create your account
+## 4. First-run setup
 
-Open <http://localhost:3110> and register. The first account becomes the owner
-with every role and permission. Registration sends a verification email; in
-development mode with no SMTP configured the verification link is printed in
-the web container's log.
+Read the setup token from the boot log, then open
+<http://localhost:3110/setup> and create the instance administrator:
+
+```bash
+docker compose -f compose.production.yml logs web | grep 'first-run setup token' | tail -1 | awk '{print $NF}'
+```
+
+The first account created through setup becomes the instance administrator
+with every role and permission. The token is reissued on every boot until
+setup completes, and stops being logged afterwards.
 
 ## 5. Try every feature without a car
 

@@ -72,7 +72,12 @@ for (const file of DOC_FILES) {
   const blocks = envBlocks(src).filter(
     (b) => /\.env/.test(b) || /JWT_SECRET|POSTGRES_PASSWORD|VL_MASTER_KEY/.test(b),
   );
+  // A heredoc (`cat > file <<ENV`) is a shell script that GENERATES the values
+  // while writing the file — that is the documented bare-metal pattern and is
+  // not a compose .env example.
+  const isGenerator = (b: string) => /cat\s*>\s*\S+\s*<</.test(b) || /<<'?ENV/.test(b);
   for (const block of blocks) {
+    if (isGenerator(block)) continue;
     const m = block.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)=\$\(/m);
     if (m) {
       failed = true;

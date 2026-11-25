@@ -103,3 +103,12 @@ URL is visible to every signed-in browser. If you use MapTiler, restrict the key
 with its "Allowed HTTP origins" setting. In `demo` mode the app shows a
 "Fictional demo map" badge, and a notice whenever real vehicles appear on the
 fictional basemap.
+
+## Image reference (Docker Compose)
+
+| Variable                | Default  | Description |
+| ----------------------- | -------- | ----------- |
+| `VOLTLINK_IMAGE_TAG`    | `v1.1.1` | Release tag the compose file ships with; `check:compose` fails if it stops matching the package version. `latest` stays opt-in. |
+| `VOLTLINK_IMAGE_DIGEST` | empty    | Pin the exact `ghcr.io/atvriders/voltlink@sha256:<digest>` for immutable deployments. |
+| `VOLTLINK_BIND_ADDRESS` | `127.0.0.1` | Address the published ports bind to. Use a reverse proxy instead of `0.0.0.0`. |
+| `VOLTLINK_DATABASE_URL` | —        | Optional external PostgreSQL URL; unset = the bundled `postgres` service, whose password is `POSTGRES_PASSWORD`. |

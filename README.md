@@ -24,29 +24,31 @@ VoltLink is an original platform (comparable in scope to hosted telematics produ
 
 ## Quick start
 
-```bash
-# Clone
-git clone https://github.com/Atvriders/voltlink.git && cd voltlink
-
-# Generate secrets
-export JWT_SECRET=$(openssl rand -hex 32)
-export VL_MASTER_KEY=$(openssl rand -base64 32)
-export PUBLIC_URL=http://localhost:3110
-
-# Run (builds locally)
-docker compose up -d
-
-# Open http://localhost:3110 and register — the first account becomes owner.
-# Enable demo mode on the Providers page to try every feature without a car.
-```
-
-Production (published image, no local build):
+The single install guide is [docs/DOCKER_COMPOSE.md](docs/DOCKER_COMPOSE.md).
+The short version (pulls the published image, never builds):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/main/compose.production.yml -o compose.production.yml
-# set JWT_SECRET, VL_MASTER_KEY, POSTGRES_PASSWORD, PUBLIC_URL
-docker compose -f compose.production.yml up -d
+# Get the compose file for the release
+curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/compose.production.yml -o compose.production.yml
+
+# Create .env with real secrets (never put $(...) inside .env)
+umask 077
+printf 'JWT_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
+printf 'VL_MASTER_KEY=%s\n' "$(openssl rand -base64 32)" >> .env
+printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 16)" >> .env
+printf 'PUBLIC_URL=http://localhost:3110\n' >> .env
+
+# Start (image: ghcr.io/atvriders/voltlink)
+docker compose -f compose.production.yml up -d --wait
+
+# Read the first-run setup token, then open /setup in the browser
+docker compose -f compose.production.yml logs web | grep 'first-run setup token' | tail -1 | awk '{print $NF}'
 ```
+
+Open http://localhost:3110/setup, paste the token and create the instance
+administrator. Enable demo mode on the Providers page to try every feature
+without a car. Building from source is a development overlay
+(`docker-compose.build.yml`), never an install step.
 
 ## Architecture
 

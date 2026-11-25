@@ -1,0 +1,24 @@
+# Tesla-profile CI overlay (R2-03): used ONLY by the image job's tesla-profile
+# step, which creates ./tesla/proxy-tls (throwaway TLS + CA) and
+# ./tesla/keys/fleet-key.pem first. Mounts the proxy CA into the app roles
+# read-only and points NODE_EXTRA_CA_CERTS at it so web/worker/scheduler can
+# reach tesla-proxy over the shared egress network with the CA installed.
+services:
+  web:
+    volumes:
+      - ./tesla/proxy-tls:/run/voltlink/tesla/proxy-tls:ro
+    environment:
+      NODE_EXTRA_CA_CERTS: /run/voltlink/tesla/proxy-tls/tls-cert.pem
+      TESLA_COMMAND_PROXY_URL: https://tesla-proxy:4443
+  worker:
+    volumes:
+      - ./tesla/proxy-tls:/run/voltlink/tesla/proxy-tls:ro
+    environment:
+      NODE_EXTRA_CA_CERTS: /run/voltlink/tesla/proxy-tls/tls-cert.pem
+      TESLA_COMMAND_PROXY_URL: https://tesla-proxy:4443
+  scheduler:
+    volumes:
+      - ./tesla/proxy-tls:/run/voltlink/tesla/proxy-tls:ro
+    environment:
+      NODE_EXTRA_CA_CERTS: /run/voltlink/tesla/proxy-tls/tls-cert.pem
+      TESLA_COMMAND_PROXY_URL: https://tesla-proxy:4443

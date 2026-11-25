@@ -330,48 +330,75 @@ jobs:
           ignore-unfixed: true
           exit-code: '1'
           trivyignores: .trivyignore.yaml
-      - name: Boot stack from the image and smoke it
+      - name: Guide runner — get files, create .env, start (docs word for word)
         env:
           SMOKE_EMAIL: smoke@ci.test
           SMOKE_PASSWORD: smoke-password-12345
         run: |
-          POSTGRES_PASSWORD=voltlink JWT_SECRET="$JWT_SECRET" VL_MASTER_KEY="$VL_MASTER_KEY" \
-            PUBLIC_URL=http://127.0.0.1:3110 VL_ALLOW_INSECURE_HTTP=true VL_SETUP_TOKEN="$VL_SETUP_TOKEN" \
-            docker compose -f compose.production.yml -f docker-compose.ci.yml up -d --wait
-          # First smoke: the tenancy migration seeds an already-bootstrapped
-          # instance for upgrade continuity; clear those rows so the smoke
-          # exercises the true first-run path.
-          docker compose -f compose.production.yml exec -T postgres psql -U voltlink -d voltlink \
-            -c "DELETE FROM \"AppSetting\" WHERE key IN ('instance.bootstrappedAt','instance.registrationMode','instance.operatorOrgId','instance.setupTokenHash')"
-          SMOKE_SETUP_TOKEN="$VL_SETUP_TOKEN" node scripts/smoke.mjs
-          # R2-27: the restart smoke signs in with the same account instead of
-          # deleting AppSetting rows; the command must reach a terminal state.
-          docker compose -f compose.production.yml restart worker
-          SMOKE_EMAIL="$SMOKE_EMAIL" SMOKE_PASSWORD="$SMOKE_PASSWORD" node scripts/smoke.mjs
-          docker compose -f compose.production.yml down -v
-      - name: Fresh-install smoke (VL_SETUP_TOKEN unset, token from the log)
+          # Substitutions (printed by the runner): the compose file comes from
+          # the checkout, the .env.example too, and docker-compose.ci.yml swaps
+          # in the voltlink:ci image built above. NO database tampering: a
+          # fresh volume is already a first-run instance (R2-27).
+          node scripts/install-doc-run.mjs --workdir compose-smoke \
+            --compose-src compose.production.yml --env-example-src .env.example \
+            --ci-overlay docker-compose.ci.yml --until up
+          cd compose-smoke
+      - name: Fresh-install smoke (token from the log, setup, demo, command; TI-19/R2-27)
+        env:
+          SMOKE_EMAIL: smoke@ci.test
+          SMOKE_PASSWORD: smoke-password-12345
         run: |
-          POSTGRES_PASSWORD=voltlink JWT_SECRET="$JWT_SECRET" VL_MASTER_KEY="$VL_MASTER_KEY" \
-            PUBLIC_URL=http://127.0.0.1:3110 VL_ALLOW_INSECURE_HTTP=true \
-            docker compose -f compose.production.yml -f docker-compose.ci.yml up -d --wait
-          docker compose -f compose.production.yml exec -T postgres psql -U voltlink -d voltlink \
-            -c "DELETE FROM \"AppSetting\" WHERE key IN ('instance.bootstrappedAt','instance.registrationMode','instance.operatorOrgId','instance.setupTokenHash')"
-          docker compose -f compose.production.yml restart web
-          # The install docs say the one-time token is generated and logged.
+          cd compose-smoke
           TOKEN=$(docker compose -f compose.production.yml logs web 2>&1 | grep 'first-run setup token' | tail -1 | awk '{print $NF}')
           test -n "$TOKEN" || { echo 'no first-run token in web log'; exit 1; }
-          SMOKE_SETUP_TOKEN="$TOKEN" node scripts/smoke.mjs
-          docker compose -f compose.production.yml down -v
-      - name: Boot every compose profile (status + tesla)
+          SMOKE_SETUP_TOKEN="$TOKEN" node ../scripts/smoke.mjs
+          # restart smoke: the same account signs in again and the command
+          # reaches a terminal state.
+          docker compose -f compose.production.yml restart worker
+          SMOKE_EMAIL="$SMOKE_EMAIL" SMOKE_PASSWORD="$SMOKE_PASSWORD" node ../scripts/smoke.mjs
+      - name: Status profile (guide block) serves healthz on its port
         run: |
-          POSTGRES_PASSWORD=voltlink JWT_SECRET="$JWT_SECRET" VL_MASTER_KEY="$VL_MASTER_KEY" \
-            PUBLIC_URL=http://127.0.0.1:3110 VL_ALLOW_INSECURE_HTTP=true VL_SETUP_TOKEN="$VL_SETUP_TOKEN" \
-            docker compose -f compose.production.yml --profile status --profile tesla up -d --wait
-          docker compose -f compose.production.yml --profile status --profile tesla down -v
+          cd compose-smoke
+          docker compose -f compose.production.yml --profile status up -d --wait
+          curl -fsS http://127.0.0.1:3001/healthz
+      - name: Tesla profile — throwaway TLS + proxy reachable from web/worker (R2-03)
+        run: |
+          cd compose-smoke
+          mkdir -p tesla/proxy-tls tesla/keys
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout tesla/proxy-tls/tls-key.pem -out tesla/proxy-tls/tls-cert.pem \
+            -subj '/CN=tesla-proxy' -addext 'subjectAltName=DNS:tesla-proxy'
+          openssl ecparam -name prime256v1 -genkey -noout -out tesla/keys/fleet-key.pem
+          docker compose -f compose.production.yml -f ../docker-compose.ci.yml \
+            -f ../docker-compose.tesla-ci.yml --profile tesla up -d --wait
+          docker compose -f compose.production.yml exec -T web node -e "
+            const https = require('https');
+            const req = https.request({ host: 'tesla-proxy', port: 4443, path: '/', ca: require('fs').readFileSync('/run/voltlink/tesla/proxy-tls/tls-cert.pem') }, (res) => { console.log('web->tesla-proxy status', res.statusCode); process.exit(res.statusCode < 500 ? 0 : 1); });
+            req.on('error', (e) => { console.error(e.message); process.exit(1); });
+            req.end();
+          "
+          docker compose -f compose.production.yml exec -T worker node -e "
+            const https = require('https');
+            const req = https.request({ host: 'tesla-proxy', port: 4443, path: '/', ca: require('fs').readFileSync('/run/voltlink/tesla/proxy-tls/tls-cert.pem') }, (res) => { console.log('worker->tesla-proxy status', res.statusCode); process.exit(res.statusCode < 500 ? 0 : 1); });
+            req.on('error', (e) => { console.error(e.message); process.exit(1); });
+            req.end();
+          "
+      - name: Backup, restore and down/down -v per the docs (R2-52/R2-05)
+        run: |
+          cd compose-smoke
+          # backup per BACKUP_RESTORE.md
+          docker compose -f compose.production.yml exec -T postgres pg_dump -U voltlink -d voltlink -Fc > backup.dump
+          # restore into a fresh database per BACKUP_RESTORE.md
+          docker compose -f compose.production.yml exec -T postgres psql -U voltlink -d postgres -c 'CREATE DATABASE voltlink_restore'
+          docker compose -f compose.production.yml exec -T postgres pg_restore -U voltlink -d voltlink_restore < backup.dump || true
+          # 'down' keeps the volume; boot again and the account must still exist
+          docker compose -f compose.production.yml down
+          docker compose -f compose.production.yml -f ../docker-compose.ci.yml up -d --wait
+          curl -fsS http://127.0.0.1:3110/healthz
+          docker compose -f compose.production.yml down -v
 
-  compose-dev-smoke:
+  compose-validate:
     runs-on: ubuntu-latest
-    needs: [image]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
@@ -379,10 +406,32 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Dev compose parses and interpolates
-        run: docker compose -f docker-compose.yml config -q
-      - name: ENV_SPEC contract
-        run: npm run check:compose
+      - name: Every supported compose invocation parses and interpolates
+        run: |
+          set -e
+          docker compose -f compose.production.yml config -q
+          docker compose -f compose.production.yml --profile status config -q
+          docker compose -f compose.production.yml --profile tesla config -q
+          docker compose -f docker-compose.yml config -q
+          docker compose -f compose.production.yml -f docker-compose.build.yml config -q
+          docker compose -f compose.production.yml -f docker-compose.dev.yml config -q
+          docker compose -f compose.production.yml -f docker-compose.ci.yml config -q
+      - name: Renderer agrees with docker compose config (C3)
+        run: |
+          set -e
+          cp .env.example /tmp/cmp.env
+          printf 'POSTGRES_PASSWORD=ci-pg\nJWT_SECRET=%s\nVL_MASTER_KEY=%s\nPUBLIC_URL=https://voltlink.example.com\n' \
+            "$(openssl rand -hex 32)" "$(openssl rand -base64 32)" >> /tmp/cmp.env
+          docker compose -f compose.production.yml --env-file /tmp/cmp.env config --format json > /tmp/config.json
+          node scripts/compose-render.mjs --env-file /tmp/cmp.env compose.production.yml > /tmp/render.json
+          node scripts/compare-compose-config.mjs /tmp/render.json /tmp/config.json
+      - name: Structural gates (C0)
+        run: |
+          set -e
+          npm run check:compose
+          npm run check:docs
+          npm run check:token-extraction
+          npx vitest run --project scripts
 
   secret-scan:
     runs-on: ubuntu-latest
@@ -400,7 +449,7 @@ jobs:
 
   publish:
     runs-on: ubuntu-latest
-    needs: [image, secret-scan, compose-dev-smoke]
+    needs: [image, secret-scan, compose-validate]
     if: github.event_name == 'push' && github.server_url == 'https://github.com'
     permissions:
       contents: read
@@ -448,20 +497,45 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Boot the published digest and smoke it
+      - name: Guide runner against the published digest (the GitHub Actions image proof)
         env:
           # I-V100: verify-published boots the exact digest, not the mutable
           # version tag.
           VOLTLINK_IMAGE_DIGEST: '@${{ needs.publish.outputs.digest }}'
         run: |
-          POSTGRES_PASSWORD=voltlink JWT_SECRET="$JWT_SECRET" VL_MASTER_KEY="$VL_MASTER_KEY" \
-            PUBLIC_URL=http://127.0.0.1:3110 VL_ALLOW_INSECURE_HTTP=true VL_SETUP_TOKEN="$VL_SETUP_TOKEN" \
+          node scripts/install-doc-run.mjs --workdir published-smoke \
+            --compose-src compose.production.yml --env-example-src .env.example \
+            --until up
+          cd published-smoke
+          TOKEN=$(docker compose -f compose.production.yml logs web 2>&1 | grep 'first-run setup token' | tail -1 | awk '{print $NF}')
+          test -n "$TOKEN" || { echo 'no first-run token in web log'; exit 1; }
+          SMOKE_SETUP_TOKEN="$TOKEN" node ../scripts/smoke.mjs
+          docker compose -f compose.production.yml down -v
+
+  upgrade-smoke:
+    runs-on: ubuntu-latest
+    needs: [image]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Boot the previous release, create data, upgrade to the new image
+        run: |
+          set -e
+          # Previous published release; VL_SETUP_TOKEN lets its API bootstrap.
+          # (If a release can never be bootstrapped even with the token, seed
+          # it with its own migrate role plus SQL fixtures and record why.)
+          VOLTLINK_IMAGE_TAG=v1.0.0 POSTGRES_PASSWORD=voltlink \
+            JWT_SECRET="$JWT_SECRET" VL_MASTER_KEY="$VL_MASTER_KEY" \
+            PUBLIC_URL=http://127.0.0.1:3110 VL_ALLOW_INSECURE_HTTP=true \
+            VL_SETUP_TOKEN="$VL_SETUP_TOKEN" \
             docker compose -f compose.production.yml up -d --wait
-          # First-run state for the smoke (the tenancy migration seeds an
-          # already-bootstrapped instance for upgrade continuity).
-          docker compose -f compose.production.yml exec -T postgres psql -U voltlink -d voltlink \
-            -c "DELETE FROM \"AppSetting\" WHERE key IN ('instance.bootstrappedAt','instance.registrationMode','instance.operatorOrgId','instance.setupTokenHash')"
-          node scripts/smoke.mjs
+          # create data through the API
+          SMOKE_SETUP_TOKEN="$VL_SETUP_TOKEN" node scripts/smoke.mjs
+          # switch to the new image and run the documented upgrade
+          VOLTLINK_IMAGE_TAG=ci docker compose -f compose.production.yml \
+            -f docker-compose.ci.yml up -d --wait
+          # data survived and migrations applied
+          SMOKE_EMAIL="upgrade@ci.test" SMOKE_PASSWORD="upgrade-password-12345" \
+            node scripts/smoke.mjs
           docker compose -f compose.production.yml down -v
 
   promote:

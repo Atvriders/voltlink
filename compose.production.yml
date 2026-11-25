@@ -32,6 +32,7 @@ x-voltlink-common: &voltlink
     PORT: '3000'
     HOST: 0.0.0.0
     DATABASE_URL: 'postgresql://voltlink:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/voltlink'
+    VOLTLINK_DATABASE_URL: '${VOLTLINK_DATABASE_URL:-}'
     REDIS_URL: 'redis://redis:6379'
     PUBLIC_URL: '${PUBLIC_URL:?set PUBLIC_URL in .env}'
     VL_ALLOW_INSECURE_HTTP: '${VL_ALLOW_INSECURE_HTTP:-false}'

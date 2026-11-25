@@ -13,7 +13,8 @@ Common causes:
 | `JWT_SECRET is missing or too short` | Set a real secret, ≥ 32 chars, not a placeholder.                                                                          |
 | `VL_MASTER_KEY is missing…`          | Required in production; `openssl rand -base64 32`.                                                                         |
 | `PUBLIC_URL must be an https:// URL` | Set the real HTTPS origin (or use development mode for local http).                                                        |
-| `Can't reach database`               | PostgreSQL healthcheck failed — check `docker compose ps postgres` and the password in `DATABASE_URL`/`POSTGRES_PASSWORD`. |
+| `Can't reach database`               | PostgreSQL healthcheck failed — check `docker compose ps postgres` and `POSTGRES_PASSWORD` in `.env`. |
+| `VL_WEBAUTHN_RP_ID must equal the PUBLIC_URL host` | Set it to the PUBLIC_URL host or a parent domain. |
 | `Prisma CLI not found`               | Image layout changed — pull the current image, don't hand-build.                                                           |
 | `migration failed`                   | Read the migration error in the log; restore a backup if the schema is damaged.                                            |
 
