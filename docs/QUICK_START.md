@@ -64,9 +64,12 @@ Open **Providers** → click **Enable demo mode**. This seeds:
 - Places, geofences, a privacy zone, electricity rate rules
 - Fleet groups/drivers, automations, notifications, and a status page with an active incident
 
-Now explore: Overview, Live vehicle (honk the horn and watch
-`Queued → … → Confirmed`), Showroom (3D), Drives, Charging, Battery,
-Automations, Fleet, Map, and the public status page at `/status`.
+Now explore: Overview, Live vehicle (honk the horn and watch the command
+lifecycle `Queued → …`), Showroom (3D), Drives, Charging, Battery,
+Automations, Fleet, Map, and the public status page at `/status`. The
+terminal state depends on the command: observable commands (e.g. climate,
+charge controls) reach `Confirmed`; not-observable ones (honk is one) end
+at `accepted` with confirmation `not_observable`.
 
 ## 6. Connect a real provider
 

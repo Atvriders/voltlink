@@ -21,6 +21,8 @@
     '4c1f8e05a9d73b62f0ae14d78c3b95206ea7d41f',
     'ci-e2e-master-key-not-produc',
     'Y2ktZTJlLW1hc3Rlci1rZXktbm90LXByb2R1Y3Rp',
-    'yxsY2ujPvt0ELPAaflL6Dw',
+    # Fictional fixture master key ('not-a-real-master-key-0123456789') used
+    # by ci/compose.env and the NEW-10 boot test.
+    'bm90LWEtcmVhbC1tYXN0ZXIta2V5LTAxMjM0NTY3ODk=',
     '6d1c05e7f38b49a2ce7014b8d5f3a96201e8b7c4d90f523a6e18cb47f0d29a35',
   ]

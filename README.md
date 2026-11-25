@@ -102,4 +102,4 @@ tests/e2e/     Playwright acceptance + WebGL asset tests
 
 ## License
 
-MIT — see [LICENSE](LICENSE). The Blender-generated vehicle assets are original works created for this project (see [docs/ASSET_LICENSES.md](docs/ASSET_LICENSES.md)).
+MIT — see [LICENSE.md](LICENSE.md). The Blender-generated vehicle assets are original works created for this project (see [docs/ASSET_LICENSES.md](docs/ASSET_LICENSES.md)).

@@ -1,0 +1,6 @@
+# R2-64: leaked dev vl_csrf cookie in public history (committed Playwright
+# traces in f0dc416); rewriting history is the owner's decision (rule 7), so
+# only the exact finding fingerprints are ignored here. The same value in any
+# future commit is still caught. Listed under owner follow-ups in the final
+# report.
+f0dc4161fd51b5cd516c3d383de2af3a012b3b27:test-results/.playwright-artifacts-14/traces/resources/1d5eabf79d9ae319c303cfe6f81061892222245b.json:generic-api-key:1
