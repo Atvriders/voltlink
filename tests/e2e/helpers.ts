@@ -92,7 +92,10 @@ export async function enableDemo(page: Page): Promise<void> {
   );
   await demoBtn.click();
   const connectRes = await connectDone;
-  if (!connectRes.ok()) throw new Error(`demo connect failed: ${connectRes.status()}`);
+  // TI-11: require exactly 200, not any 2xx.
+  if (connectRes.status() !== 200) {
+    throw new Error(`demo connect failed: expected 200, got ${connectRes.status()}`);
+  }
   // R2-16 / C-E2EHOLLOW (review #2 point 11): the connect response carries
   // accountId; the fleet is valid only when the user has exactly ONE ACTIVE
   // PERSONAL OWNER membership and exactly five demo vehicles belonging to
@@ -109,7 +112,9 @@ export async function enableDemo(page: Page): Promise<void> {
         const vehRes = await page.request.get('/api/v1/vehicles');
         if (!meRes.ok() || !vehRes.ok()) return false;
         const meBody = (await meRes.json()) as {
-          data?: { memberships?: { organizationId: string; kind: string; role: string }[] };
+          data?: {
+            memberships?: { organizationId: string; kind: string; role: string; status: string }[];
+          };
         };
         const vehBody = (await vehRes.json()) as {
           data?: {

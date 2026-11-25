@@ -18,7 +18,9 @@ function own(count: number): DemoFleetVehicle[] {
 }
 
 describe('demoFleetPredicate (R2-16 / C-E2EHOLLOW)', () => {
-  const memberships = [{ organizationId: orgId, kind: 'PERSONAL', role: 'OWNER' }];
+  const memberships = [
+    { organizationId: orgId, kind: 'PERSONAL', role: 'OWNER', status: 'ACTIVE' },
+  ];
 
   it('accepts exactly five own demo vehicles with state', () => {
     expect(demoFleetPredicate({ accountId, memberships, vehicles: own(5) })).toBe(true);
@@ -38,10 +40,40 @@ describe('demoFleetPredicate (R2-16 / C-E2EHOLLOW)', () => {
     expect(
       demoFleetPredicate({
         accountId,
-        memberships: [{ organizationId: orgId, kind: 'TEAM', role: 'OWNER' }],
+        memberships: [{ organizationId: orgId, kind: 'TEAM', role: 'OWNER', status: 'ACTIVE' }],
         vehicles: own(5),
       }),
     ).toBe(false);
+  });
+
+  it('web-13: rejects a PERSONAL OWNER membership that is not ACTIVE', () => {
+    for (const status of ['SUSPENDED', 'INVITED', 'REVOKED']) {
+      expect(
+        demoFleetPredicate({
+          accountId,
+          memberships: [{ organizationId: orgId, kind: 'PERSONAL', role: 'OWNER', status }],
+          vehicles: own(5),
+        }),
+        `status ${status}`,
+      ).toBe(false);
+    }
+  });
+
+  it('web-13: rejects two PERSONAL OWNER memberships (exactly one required)', () => {
+    expect(
+      demoFleetPredicate({
+        accountId,
+        memberships: [
+          { organizationId: orgId, kind: 'PERSONAL', role: 'OWNER', status: 'ACTIVE' },
+          { organizationId: orgId, kind: 'PERSONAL', role: 'OWNER', status: 'ACTIVE' },
+        ],
+        vehicles: own(5),
+      }),
+    ).toBe(false);
+  });
+
+  it('web-13: rejects four vehicles (exactly five required)', () => {
+    expect(demoFleetPredicate({ accountId, memberships, vehicles: own(4) })).toBe(false);
   });
 
   it('rejects a vehicle from another provider account', () => {

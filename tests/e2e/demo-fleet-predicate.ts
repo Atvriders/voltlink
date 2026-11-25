@@ -11,6 +11,7 @@ export interface DemoFleetMembership {
   organizationId: string;
   kind: string;
   role: string;
+  status: string;
 }
 
 export interface DemoFleetVehicle {
@@ -27,7 +28,11 @@ export interface DemoFleetCheck {
 }
 
 export function demoFleetPredicate({ accountId, memberships, vehicles }: DemoFleetCheck): boolean {
-  const owners = memberships.filter((m) => m.kind === 'PERSONAL' && m.role === 'OWNER');
+  // web-13: the membership must be ACTIVE — a suspended or invited PERSONAL
+  // OWNER membership must not satisfy ownership.
+  const owners = memberships.filter(
+    (m) => m.kind === 'PERSONAL' && m.role === 'OWNER' && m.status === 'ACTIVE',
+  );
   if (owners.length !== 1) return false;
   const orgId = owners[0]!.organizationId;
   if (vehicles.length !== 5) return false;
