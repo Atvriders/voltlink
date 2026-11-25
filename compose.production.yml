@@ -213,7 +213,10 @@ services:
       migrate:
         condition: service_completed_successfully
     ports:
-      - '${VOLTLINK_BIND_ADDRESS:-127.0.0.1}:${STATUS_PORT:-3001}:3001'
+      # Host side uses the compose-only VOLTLINK_STATUS_PORT, never the
+      # in-container STATUS_PORT (they have different meanings; a stack on a
+      # busy host must be able to move only the host side).
+      - '${VOLTLINK_BIND_ADDRESS:-127.0.0.1}:${VOLTLINK_STATUS_PORT:-3001}:3001'
     healthcheck:
       test: ['CMD', '/usr/local/bin/voltlink-healthcheck']
       interval: 30s

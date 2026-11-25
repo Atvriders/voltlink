@@ -37,6 +37,7 @@ const ENV_EXAMPLE_INFRA = new Set([
   'VOLTLINK_IMAGE_TAG',
   'VOLTLINK_IMAGE_DIGEST',
   'VOLTLINK_BIND_ADDRESS',
+  'VOLTLINK_STATUS_PORT',
 ]);
 
 interface RoleEnv {
@@ -331,6 +332,9 @@ async function main(): Promise<void> {
 
   const envExample = readFileSync('.env.example', 'utf8');
   for (const line of envExample.split('\n')) {
+    // Commented keys (`# VOLTLINK_IMAGE_TAG=v1.1.1`) are documentation, not
+    // values; compose already defaults the image reference.
+    if (/^\s*#/.test(line)) continue;
     const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=/);
     if (!m) continue;
     const key = m[1]!;
@@ -338,6 +342,15 @@ async function main(): Promise<void> {
       failed = true;
       console.error(`✖ .env.example: '${key}' must not be a compose-layer value (R2-70).`);
       continue;
+    }
+    if (
+      (key === 'VOLTLINK_IMAGE_TAG' || key === 'VOLTLINK_IMAGE_DIGEST') &&
+      line.slice(key.length + 1).trim() !== ''
+    ) {
+      failed = true;
+      console.error(
+        `✖ .env.example: '${key}' must stay empty — compose already defaults the release image reference, and a copied value would pin an old image forever.`,
+      );
     }
     if (!(ENV_KEYS as readonly string[]).includes(key) && !ENV_EXAMPLE_INFRA.has(key)) {
       failed = true;

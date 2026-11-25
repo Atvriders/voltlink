@@ -59,8 +59,10 @@ jobs:
         run: npm run check:compose
       - name: Compose files parse (G-01)
         run: |
-          docker compose -f docker-compose.yml config -q
-          docker compose -f compose.production.yml config -q
+          # ci/compose.env supplies fictional values for the ${VAR:?message}
+          # required variables, which config-only calls must not fail on.
+          docker compose -f docker-compose.yml --env-file ci/compose.env config -q
+          docker compose -f compose.production.yml --env-file ci/compose.env config -q
       - name: Trivy ignore hygiene (I-TRIVY)
         run: npx tsx scripts/check-trivy-ignore.ts
       - name: Prisma client + migrations
@@ -409,13 +411,16 @@ jobs:
       - name: Every supported compose invocation parses and interpolates
         run: |
           set -e
-          docker compose -f compose.production.yml config -q
-          docker compose -f compose.production.yml --profile status config -q
-          docker compose -f compose.production.yml --profile tesla config -q
-          docker compose -f docker-compose.yml config -q
-          docker compose -f compose.production.yml -f docker-compose.build.yml config -q
-          docker compose -f compose.production.yml -f docker-compose.dev.yml config -q
-          docker compose -f compose.production.yml -f docker-compose.ci.yml config -q
+          # Config-only calls use the committed fixture env so the :? required
+          # values interpolate; the dev overlays are validated only as the
+          # entry-point chain documented in their headers.
+          docker compose -f compose.production.yml --env-file ci/compose.env config -q
+          docker compose -f compose.production.yml --env-file ci/compose.env --profile status config -q
+          docker compose -f compose.production.yml --env-file ci/compose.env --profile tesla config -q
+          docker compose -f docker-compose.yml --env-file ci/compose.env config -q
+          docker compose -f docker-compose.yml -f docker-compose.build.yml --env-file ci/compose.env config -q
+          docker compose -f docker-compose.yml -f docker-compose.build.yml -f docker-compose.dev.yml --env-file ci/compose.env config -q
+          docker compose -f compose.production.yml -f docker-compose.ci.yml --env-file ci/compose.env config -q
       - name: Renderer agrees with docker compose config (C3)
         run: |
           set -e

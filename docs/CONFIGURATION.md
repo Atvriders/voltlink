@@ -29,10 +29,10 @@ All configuration is environment variables. In Docker Compose they come from
 
 ## Email
 
-| Variable          | Description                                                               |
-| ----------------- | ------------------------------------------------------------------------- |
-| `SMTP_URL`        | `smtp://user:pass@host:587`; empty = mail is suppressed (one log line per mail, never the body or a link) |
-| `MAIL_FROM`       | From header                                                                |
+| Variable          | Description                                                                                                           |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `SMTP_URL`        | `smtp://user:pass@host:587`; empty = mail is suppressed (one log line per mail, never the body or a link)             |
+| `MAIL_FROM`       | From header                                                                                                           |
 | `MAIL_TO_CONSOLE` | `false` (default). `true` prints every mail instead of sending — development only; production refuses to boot with it |
 
 ## Authentication extras
@@ -106,9 +106,10 @@ fictional basemap.
 
 ## Image reference (Docker Compose)
 
-| Variable                | Default  | Description |
-| ----------------------- | -------- | ----------- |
-| `VOLTLINK_IMAGE_TAG`    | `v1.1.1` | Release tag the compose file ships with; `check:compose` fails if it stops matching the package version. `latest` stays opt-in. |
-| `VOLTLINK_IMAGE_DIGEST` | empty    | Pin the exact `ghcr.io/atvriders/voltlink@sha256:<digest>` for immutable deployments. |
-| `VOLTLINK_BIND_ADDRESS` | `127.0.0.1` | Address the published ports bind to. Use a reverse proxy instead of `0.0.0.0`. |
-| `VOLTLINK_DATABASE_URL` | —        | Optional external PostgreSQL URL; unset = the bundled `postgres` service, whose password is `POSTGRES_PASSWORD`. |
+| Variable                | Default     | Description                                                                                                                                            |
+| ----------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `VOLTLINK_IMAGE_TAG`    | `v1.1.1`    | Release tag the compose file ships with; leave unset to use it. `check:compose` fails if it stops matching the package version. `latest` stays opt-in. |
+| `VOLTLINK_IMAGE_DIGEST` | empty       | Pin the exact `ghcr.io/atvriders/voltlink@sha256:<digest>` for immutable deployments.                                                                  |
+| `VOLTLINK_BIND_ADDRESS` | `127.0.0.1` | Address the published ports bind to. Use a reverse proxy instead of `0.0.0.0`.                                                                         |
+| `VOLTLINK_STATUS_PORT`  | `3001`      | Host port the `status` profile publishes on (compose-only; the container always listens on `STATUS_PORT`).                                             |
+| `VOLTLINK_DATABASE_URL` | —           | Optional external PostgreSQL URL; unset = the bundled `postgres` service, whose password is `POSTGRES_PASSWORD`.                                       |

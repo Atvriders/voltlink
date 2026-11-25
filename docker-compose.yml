@@ -7,5 +7,11 @@
 # version. Building from source is a separate overlay: see
 # docker-compose.build.yml.
 
+# The project name is set HERE, not in the included file: Compose does not
+# take the project name from an include, and a folder that is not named
+# voltlink would otherwise start a new project with an empty <folder>_pgdata
+# volume. Both entry points resolve to project 'voltlink'.
+name: voltlink
+
 include:
   - compose.production.yml
