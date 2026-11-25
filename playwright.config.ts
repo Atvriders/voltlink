@@ -33,11 +33,16 @@ export default defineConfig({
     viewport: { width: 1360, height: 900 },
   },
   projects: [
+    // TI-12: fresh-install.spec.ts is excluded from the device projects — it
+    // needs a dedicated first-run stack (start-stack.sh with VL_FRESH_SETUP=1
+    // on its own port + FRESH_SETUP_TOKEN) and runs only via the `fresh-install`
+    // project below, which the CI fresh-install step selects explicitly. It
+    // must never run inside the visual matrix.
     {
       name: 'desktop',
       use: { ...devices['Desktop Chrome'] },
       testIgnore:
-        /no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts|a11y-phone\.spec\.ts|visual-mobile\.spec\.ts|visual-no-webgl\.spec\.ts|visual-reduced-motion\.spec\.ts/,
+        /fresh-install\.spec\.ts|no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts|a11y-phone\.spec\.ts|visual-mobile\.spec\.ts|visual-no-webgl\.spec\.ts|visual-reduced-motion\.spec\.ts/,
     },
     // Gate 7: every page is exercised at desktop, tablet and mobile sizes.
     // Desktop visual snapshots run in the desktop project; the mobile and
@@ -48,17 +53,25 @@ export default defineConfig({
       name: 'tablet',
       use: { ...devices['iPad Pro 11'], defaultBrowserType: 'chromium', browserName: 'chromium' },
       testIgnore:
-        /visual\.spec\.ts|no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts|a11y-phone\.spec\.ts|visual-no-webgl\.spec\.ts|visual-reduced-motion\.spec\.ts/,
+        /fresh-install\.spec\.ts|visual\.spec\.ts|no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts|a11y-phone\.spec\.ts|visual-no-webgl\.spec\.ts|visual-reduced-motion\.spec\.ts/,
     },
     {
       name: 'mobile',
       use: { ...devices['Pixel 7'] },
       testIgnore:
-        /visual\.spec\.ts|no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts|a11y-phone\.spec\.ts|visual-no-webgl\.spec\.ts|visual-reduced-motion\.spec\.ts/,
+        /fresh-install\.spec\.ts|visual\.spec\.ts|no-webgl\.spec\.ts|tesla\.spec\.ts|a11y\.spec\.ts|a11y-phone\.spec\.ts|visual-no-webgl\.spec\.ts|visual-reduced-motion\.spec\.ts/,
     },
     // Tesla spec runs only through scripts/e2e/tesla-e2e.sh (fake Fleet
     // API + seeded user); the device projects above ignore it.
     { name: 'tesla', use: { ...devices['Desktop Chrome'] }, testMatch: /tesla\.spec\.ts/ },
+    // Fresh-install spec (TI-12) runs only against the dedicated fresh stack
+    // booted with VL_FRESH_SETUP=1; the CI fresh-install step selects this
+    // project explicitly. The device projects above ignore the spec.
+    {
+      name: 'fresh-install',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: /fresh-install\.spec\.ts/,
+    },
     // Accessibility scan (guide 08 §12): axe on every core page, desktop only.
     { name: 'a11y', use: { ...devices['Desktop Chrome'] }, testMatch: /a11y\.spec\.ts/ },
     // PL-05 phone width (web-6): signed-in pages under the real Pixel 7.

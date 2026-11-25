@@ -178,11 +178,16 @@ if [ "${VL_FRESH_SETUP:-}" = "1" ]; then
   if [ -n "${VL_SETUP_TOKEN:-}" ]; then
     FRESH_TOKEN="$VL_SETUP_TOKEN"
   else
-    grep -o 'first-run setup token [A-Za-z0-9_-]*' "$LOG_DIR/api.log" | head -1 | awk '{print $NF}' > "$RUN_DIR/fresh-token"
+    # Same shape as the documented command (docs/DOCKER_COMPOSE.md, ci.yml):
+    # the token is the LAST field of the boot line, so a plain awk picks it
+    # up no matter what hint text the line carries.
+    grep 'first-run setup token' "$LOG_DIR/api.log" | tail -1 | awk '{print $NF}' > "$RUN_DIR/fresh-token"
     FRESH_TOKEN="$(cat "$RUN_DIR/fresh-token")"
     [ -n "$FRESH_TOKEN" ] || { echo "no first-run token in api.log" >&2; exit 1; }
   fi
-  echo "FRESH_SETUP_TOKEN=$FRESH_TOKEN" > "$RUN_DIR/fresh-setup.env"
+  # `export` so that `source`ing this file (CI fresh step: `. run-fresh/
+  # fresh-setup.env`) puts the token in the environment of child processes.
+  echo "export FRESH_SETUP_TOKEN=$FRESH_TOKEN" > "$RUN_DIR/fresh-setup.env"
   echo "stack up (fresh setup): web on :$PORT; setup token written to $RUN_DIR/fresh-setup.env"
   exit 0
 fi

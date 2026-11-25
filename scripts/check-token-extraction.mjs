@@ -73,5 +73,33 @@ for (const { file, cmd } of candidates) {
     console.error(`✖ ${file}: the extraction command yields '${result}', not the token.`);
   }
 }
+
+// 3. start-stack.sh (fresh-install path) must use the same last-field shape.
+// Its pipeline reads the api.log file, so verify it against a temp file that
+// contains the real boot line.
+{
+  const startSrc = readFileSync('scripts/e2e/start-stack.sh', 'utf8');
+  const mStart = startSrc.match(/grep[^\n]*first-run setup token[^\n]*/);
+  if (!mStart) {
+    failed = true;
+    console.error('✖ no token extraction command found in scripts/e2e/start-stack.sh');
+  } else {
+    const tmp = `/tmp/check-token-extraction-${process.pid}.log`;
+    execSync(`printf '%s' '${rendered.replace(/'/g, `'\\''`)}' > '${tmp}'`);
+    const cmd = mStart[0]
+      .trim()
+      .replace(/\s*>.*$/, '')
+      .replace(/"\$LOG_DIR\/api\.log"/g, `'${tmp}'`);
+    const result = execSync(`printf '' | ${cmd}`, { encoding: 'utf8' }).trim();
+    execSync(`rm -f '${tmp}'`);
+    console.log(`scripts/e2e/start-stack.sh: ${mStart[0].trim()} -> '${result}'`);
+    if (result !== known) {
+      failed = true;
+      console.error(
+        `✖ scripts/e2e/start-stack.sh: the extraction command yields '${result}', not the token.`,
+      );
+    }
+  }
+}
 if (failed) process.exit(1);
 console.log('✓ the documented command extracts the setup token from a real boot line.');

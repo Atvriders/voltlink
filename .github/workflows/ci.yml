@@ -139,6 +139,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink
+      TEST_DATABASE_ADMIN_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/postgres
     services:
       postgres:
         image: postgres:17-alpine
@@ -162,8 +163,11 @@ jobs:
       - name: Migration tests (throwaway databases)
         env:
           CHECKPOINT_DISABLE: '1'
-        run: npx vitest run test/migration.test.ts test/migrations.test.ts
-        working-directory: apps/api
+        # The root config's api-int project declares the tags these files
+        # carry; apps/api/vitest.config.ts does not (it broke the migrations
+        # job in the v1.1.0 run), and vitest would also pick that config up
+        # from a apps/api working directory. Tags are kept.
+        run: npx vitest run --project api-int apps/api/test/migration.test.ts apps/api/test/migrations.test.ts
 
   backup-restore:
     runs-on: ubuntu-latest
@@ -291,7 +295,7 @@ jobs:
             VL_FRESH_SETUP=1 VL_SETUP_TOKEN= bash scripts/e2e/start-stack.sh
           . scripts/e2e/run-fresh/fresh-setup.env
           npx playwright install --with-deps chromium
-          npx playwright test tests/e2e/fresh-install.spec.ts --project=desktop
+          npx playwright test tests/e2e/fresh-install.spec.ts --project=fresh-install
           RUN_DIR="$PWD/scripts/e2e/run-fresh" bash scripts/e2e/start-stack.sh stop
         env:
           E2E_BASE_URL: http://127.0.0.1:3112
@@ -341,7 +345,7 @@ jobs:
           trivyignores: .trivyignore.yaml
       - name: Guide runner — get files, create .env, start (docs word for word)
         env:
-          SMOKE_EMAIL: smoke@ci.test
+          SMOKE_EMAIL: smoke@example.invalid
           SMOKE_PASSWORD: smoke-password-12345
         run: |
           # Substitutions (printed by the runner): the compose file and the
@@ -356,7 +360,7 @@ jobs:
             --skip env-lan,env-https,env-webauthn --until up
       - name: Fresh-install web UI spec against the compose stack (TI-12, first-run)
         env:
-          FRESH_E2E_EMAIL: smoke@ci.test
+          FRESH_E2E_EMAIL: smoke@example.invalid
           FRESH_E2E_PASSWORD: smoke-password-12345
         run: |
           cd compose-smoke
@@ -365,10 +369,10 @@ jobs:
           cd ..
           npx playwright install --with-deps chromium
           FRESH_SETUP_TOKEN="$FRESH_SETUP_TOKEN" E2E_BASE_URL=http://127.0.0.1:3110 \
-            npx playwright test tests/e2e/fresh-install.spec.ts --project=desktop
+            npx playwright test tests/e2e/fresh-install.spec.ts --project=fresh-install
       - name: Smoke — sign in, demo, a command to a terminal state (TI-19/R2-27)
         env:
-          SMOKE_EMAIL: smoke@ci.test
+          SMOKE_EMAIL: smoke@example.invalid
           SMOKE_PASSWORD: smoke-password-12345
         run: |
           cd compose-smoke
@@ -712,9 +716,9 @@ jobs:
           #    seed with its migrate role (already run at boot) + SQL fixtures.
           HASH=$(node -e "require('argon2').hash('upgrade-password-12345').then(console.log)")
           docker compose -p voltlink -f compose.production.yml exec -T postgres psql -U voltlink -d voltlink \
-            -c "INSERT INTO \"User\" (id, email, name, \"passwordHash\", \"emailVerifiedAt\", \"isInstanceAdmin\") VALUES ('upgrade-seed-user', 'upgrade@ci.test', 'Upgrade Seed', '$HASH', now(), true) ON CONFLICT DO NOTHING"
+            -c "INSERT INTO \"User\" (id, email, name, \"passwordHash\", \"emailVerifiedAt\", \"isInstanceAdmin\") VALUES ('upgrade-seed-user', 'upgrade@example.invalid', 'Upgrade Seed', '$HASH', now(), true) ON CONFLICT DO NOTHING"
           # 4) data created in v1.0.0: the seeded sign-in works.
-          SMOKE_EMAIL='upgrade@ci.test' SMOKE_PASSWORD='upgrade-password-12345' node ../scripts/smoke.mjs
+          SMOKE_EMAIL='upgrade@example.invalid' SMOKE_PASSWORD='upgrade-password-12345' node ../scripts/smoke.mjs
           # 5) replace the file with the new compose.production.yml, keep the
           #    same .env and project, add the CI overlay to COMPOSE_FILE.
           cp ../compose.production.yml compose.production.yml
@@ -725,7 +729,7 @@ jobs:
           test "$AFTER" -gt "${BEFORE:-0}"
           echo "migration rows: $BEFORE -> $AFTER"
           docker volume inspect voltlink_pgdata >/dev/null
-          SMOKE_EMAIL='upgrade@ci.test' SMOKE_PASSWORD='upgrade-password-12345' node ../scripts/smoke.mjs
+          SMOKE_EMAIL='upgrade@example.invalid' SMOKE_PASSWORD='upgrade-password-12345' node ../scripts/smoke.mjs
           docker compose -p voltlink down -v
 
   promote:
