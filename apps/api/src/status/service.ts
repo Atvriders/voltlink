@@ -7,6 +7,7 @@ import { env } from '../core/env';
 import { poller } from '../telemetry/poller';
 import { getSetting } from '../core/settings';
 import { sseCount } from '../core/sse';
+import { demoClockIsFrozen } from '../core/demoClock';
 import type { ComponentStatus } from '@voltlink/shared';
 
 export const STATUS_GROUPS = ['Core', 'Data', 'Vehicle', 'Integrations', 'Providers'] as const;
@@ -283,15 +284,21 @@ export async function runStatusChecks(): Promise<void> {
         data: { status: newStatus, updatedAt: new Date() },
       });
     }
-    await prisma.statusCheck.create({
-      data: {
-        componentKey: c.key,
-        ok: result.ok,
-        latencyMs: result.latencyMs ?? null,
-        detail: result.detail?.slice(0, 400),
-        at: new Date(),
-      },
-    });
+    // R2-35/C-VISUAL: in the frozen visual world no live check rows are
+    // recorded — their real timestamps and measured latencies would drift the
+    // status-admin "Response times (24h)" chart between runs. The seeded
+    // history (frozen demo clock) is the only series the chart shows.
+    if (!demoClockIsFrozen()) {
+      await prisma.statusCheck.create({
+        data: {
+          componentKey: c.key,
+          ok: result.ok,
+          latencyMs: result.latencyMs ?? null,
+          detail: result.detail?.slice(0, 400),
+          at: new Date(),
+        },
+      });
+    }
   }
   // prune old checks beyond 90d happens in retention
 }

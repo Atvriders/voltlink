@@ -26,3 +26,10 @@ export function assertDemoClockEnv(): void {
     throw new Error('VL_TEST_FROZEN_NOW is test-only; refusing to boot in production.');
   }
 }
+
+/** True when the scripted visual stack froze the demo clock (guide 08 §11.2).
+ * Used to keep wall-clock side effects (status check history rows) out of the
+ * frozen world so visual baselines never drift with the run's real time. */
+export function demoClockIsFrozen(): boolean {
+  return Boolean(process.env.VL_TEST_FROZEN_NOW) && process.env.NODE_ENV === 'test';
+}

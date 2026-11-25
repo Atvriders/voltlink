@@ -13,6 +13,7 @@ import {
 import { randomToken } from '../core/crypto';
 import { renderBadgeSvg, renderRssXml } from '../status/format';
 import { ssePublish } from '../core/sse';
+import { demoClockNow } from '../core/demoClock';
 import { sendMail } from '../auth/service';
 
 export const statusRouter = policyRouter('/api/v1/status');
@@ -122,7 +123,9 @@ statusRouter.get(
   async (req, res) => {
     const key = typeof req.query.key === 'string' ? req.query.key : undefined;
     const hours = Math.min(24 * 30, Math.max(1, Number(req.query.hours) || 24));
-    const from = new Date(Date.now() - hours * 3600000);
+    // R2-35/C-VISUAL: the window starts at the demo clock so the frozen
+    // visual world serves its seeded history (production sees real time).
+    const from = new Date(demoClockNow().getTime() - hours * 3600000);
     const rows = await prisma.statusCheck.findMany({
       where: { at: { gte: from }, ...(key ? { componentKey: String(key) } : {}) },
       orderBy: { at: 'desc' },
