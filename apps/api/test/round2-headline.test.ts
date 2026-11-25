@@ -299,10 +299,14 @@ describe('round2 headline defects', () => {
     const mod = await import('../src/auth/setup-token');
     const token = await mod.ensureSetupToken();
     expect(token).toMatch(/^[A-Za-z0-9_-]{24,}$/);
-    // The plaintext is shown once and never re-revealed.
+    // R2-01 (guide 05:115): while setup is STILL PENDING every boot reissues
+    // a fresh token and invalidates the previous one — the operator can never
+    // be locked out by a lost first-boot log. The old 'shown once and never
+    // re-revealed' contract would lock the owner out.
     const again = await mod.ensureSetupToken();
-    expect(again).toBeNull();
-    // Only the hash is persisted.
+    expect(again).toMatch(/^[A-Za-z0-9_-]{24,}$/);
+    expect(again).not.toBe(token);
+    // Only the hash of the CURRENT token is persisted.
     const row = await prisma.appSetting.findUniqueOrThrow({
       where: { key: 'instance.setupTokenHash' },
     });

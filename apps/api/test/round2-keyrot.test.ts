@@ -205,14 +205,25 @@ describe('A-KEYROT credential envelopes', () => {
     await prisma.user.deleteMany({ where: { id: { in: [a.user.id, b.user.id] } } });
   });
 
-  // TI-25: a blank VL_MASTER_KEY_VERSION must refuse to boot, not silently
-  // fall back to v1 (the round-1 defect made rotation a no-op).
+  // TI-25 + R2-67: an EMPTY VL_MASTER_KEY_VERSION means unset (product
+  // default 1) — the R2-67 contract. A NON-INTEGER value must refuse, and
+  // a version absent from the ring must refuse, so rotation can never be a
+  // silent no-op.
   it('rejects a blank VL_MASTER_KEY_VERSION (TI-25 boot)', async () => {
     const saved = process.env.VL_MASTER_KEY_VERSION;
     try {
       process.env.VL_MASTER_KEY_VERSION = '';
       resetRingForTests();
       const { seal } = await import('../src/core/keyring');
+      // Empty = unset: seals with the default v1 ring (R2-67), no crash.
+      expect(() => seal('x', 'ctx')).not.toThrow();
+
+      process.env.VL_MASTER_KEY_VERSION = 'abc';
+      resetRingForTests();
+      expect(() => seal('x', 'ctx')).toThrow(/positive integer/);
+
+      process.env.VL_MASTER_KEY_VERSION = '0';
+      resetRingForTests();
       expect(() => seal('x', 'ctx')).toThrow(/positive integer/);
     } finally {
       if (saved === undefined) delete process.env.VL_MASTER_KEY_VERSION;

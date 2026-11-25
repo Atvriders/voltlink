@@ -82,6 +82,21 @@ function CameraRig({
   return null;
 }
 
+/** Mirrors the per-frame GPU memory counters onto the viewer wrapper element
+ * (R2-44): the e2e memory test reads data-gpu-geometries/data-gpu-textures. */
+function GpuStats({ target }: { target: React.RefObject<HTMLDivElement | null> }) {
+  useFrame(({ gl }) => {
+    const info = (gl as unknown as { info?: { memory?: { geometries: number; textures: number } } })
+      .info;
+    const mem = info?.memory;
+    if (target.current && mem) {
+      target.current.dataset.gpuGeometries = String(mem.geometries);
+      target.current.dataset.gpuTextures = String(mem.textures);
+    }
+  });
+  return null;
+}
+
 function findPart(obj: THREE.Object3D, name: string): THREE.Object3D | null {
   if (obj.name === name || obj.name.toLowerCase().endsWith(name.toLowerCase())) return obj;
   for (const child of obj.children) {
@@ -430,6 +445,10 @@ export default function VehicleViewer({
   const p = preset ?? autoPreset();
   const cfg = PRESETS[p];
   const [missing, setMissing] = useState(false);
+  // R2-44: the per-frame GPU memory counters are mirrored onto the wrapper
+  // element so the e2e memory test can read them (geometries/textures must
+  // return to baseline across vehicle switches — no per-switch GPU leaks).
+  const containerRef = useRef<HTMLDivElement>(null);
   // Deterministic WebGL preflight: without a context we never mount <Canvas>,
   // so an unavailable renderer cannot crash the whole route (G-14).
   const [webglSupported] = useState(() => {
@@ -507,6 +526,7 @@ export default function VehicleViewer({
       data-asset-state={useGlb ? (glbLoaded ? 'glb' : 'loading') : 'fallback'}
       data-asset-url={useGlb && glbLoaded ? asset : undefined}
       data-parts={useGlb && glbLoaded ? partNames.join(',') : undefined}
+      ref={containerRef}
     >
       <Canvas
         dpr={cfg.pxRatio}
@@ -524,6 +544,7 @@ export default function VehicleViewer({
         frameloop="always"
       >
         <CanvasBoundary height={height}>
+          <GpuStats target={containerRef} />
           <PerspectiveCamera makeDefault position={classCamera(vehicle.vehicleClass)} fov={40} />
           <CameraRig target={classCamera(vehicle.vehicleClass)} interacted={interactedRef} />
           <StudioLights hour={new Date().getHours()} />
