@@ -8,9 +8,10 @@ the install path builds an image locally. Building from source is a separate,
 documented overlay (`docker-compose.build.yml`), never an install step.
 
 Runnable blocks are marked with `<!-- run: <name> -->`; CI's compose acceptance
-runs them verbatim with printed substitutions (the compose file comes from the
-checkout, the image is the run's image via the CI overlay appended to
-`COMPOSE_FILE`, and only the localhost `PUBLIC_URL` case runs).
+runs them verbatim with printed substitutions (the compose files come from the
+checkout, the image is the run's image via a `COMPOSE_FILE` the runner exports
+with the CI overlay, and the in-file defaults mean no env file and no `PUBLIC_URL`
+case are needed).
 
 ## 1. Requirements
 
@@ -26,27 +27,34 @@ checkout, the image is the run's image via the CI overlay appended to
 
 ## 2. Get the files
 
-Download the compose file from the release tag's URL so the file and the image
-always match:
+Download both files from the release tag's URL so the files and the image
+always match (`docker-compose.yml` is the entry point; it includes the
+production file):
 
 <!-- run: get-files -->
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/docker-compose.yml -o docker-compose.yml
 curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/compose.production.yml -o compose.production.yml
 curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/.env.example -o .env.example
 ```
 
-The compose file's image reference defaults to `v1.1.1`. Pin the exact digest
-for immutable deployments (see
+The image reference is `ghcr.io/atvriders/voltlink` — the exact image the
+GitHub Actions CI pipeline builds, verifies and publishes; the tag defaults to
+`v1.1.1` and nothing in the install path ever builds an image. Pin the exact
+CI-verified digest for immutable deployments (see
 [Configuration](CONFIGURATION.md#image-reference)).
 
-## 3. Create `.env`
+## 3. Secrets (no `.env` required)
 
-Compose reads `.env` from the same directory as the compose file. Create it in
-one guarded block — the guard refuses to overwrite an existing `.env`, so a
-re-run can never destroy your secrets:
+Every required value already has a default inside the compose file — the stack
+starts with no `.env` file at all. The defaults are local-trial quality: the
+web role binds to `127.0.0.1`, `PUBLIC_URL` defaults to
+`http://localhost:3110`, and the three secrets are published defaults. Before
+exposing the stack to anything but localhost, replace them in one guarded
+block (the guard refuses to overwrite an existing `.env`):
 
-<!-- run: create-env -->
+<!-- run: rotate-secrets -->
 
 ```bash
 [ ! -e .env ] || { echo '.env already exists — refusing to overwrite it' >&2; exit 1; }
@@ -54,24 +62,15 @@ umask 077
 printf 'JWT_SECRET=%s\n' "$(openssl rand -hex 32)" > .env
 printf 'VL_MASTER_KEY=%s\n' "$(openssl rand -base64 32)" >> .env
 printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 16)" >> .env
-printf 'COMPOSE_FILE=compose.production.yml\n' >> .env
 ```
 
 `VL_MASTER_KEY` must be exactly 32 random bytes in standard base64 — the
-command above is the canonical way. `COMPOSE_FILE` makes every command below a
-bare `docker compose`; it also means a later copy of `docker-compose.yml`
-(which includes the production file) needs no command changes. Back up `.env`
-with the rest of your secrets.
+command above is the canonical way. `.env` is an override file: any variable
+in it wins over the compose-file default. Back it up with the rest of your
+secrets.
 
-Then set `PUBLIC_URL` for one of the three supported cases:
-
-**Localhost trial (plain HTTP):**
-
-<!-- run: env-localhost -->
-
-```bash
-printf 'PUBLIC_URL=http://localhost:3110\n' >> .env
-```
+`PUBLIC_URL` needs no `.env` entry for a localhost trial — it is the default.
+For the other two supported cases:
 
 **Plain-HTTP LAN deployment** (passkeys and web push stay unavailable without
 HTTPS):
@@ -103,8 +102,8 @@ a parent domain of it (boot refuses anything else). For
 printf 'VL_WEBAUTHN_RP_ID=example.net\n' >> .env
 ```
 
-Missing required values fail `docker compose` itself with a message naming the
-variable; placeholder-looking secrets are refused at boot.
+Placeholder-looking secrets are refused at boot, so a `change-me` value fails
+loudly instead of running silently.
 
 ## 4. Start
 
@@ -225,15 +224,15 @@ so the project name (and the `voltlink_pgdata` volume) stays the same.
 Boot refuses to start with a clear message for each of these; the fix is in the
 message itself:
 
-| Boot error                                                       | Fix                                                                              |
-| ---------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `PUBLIC_URL must be an https:// URL in production…`              | Use HTTPS, or set `VL_ALLOW_INSECURE_HTTP=true` for a plain-HTTP LAN deployment. |
-| `VL_WEBAUTHN_RP_ID (…) must equal the PUBLIC_URL host…`          | Set `VL_WEBAUTHN_RP_ID` to the host or a parent domain.                          |
-| `JWT_SECRET is missing or too short` / placeholder refusal       | Generate a real secret (`openssl rand -hex 32`), never a placeholder.            |
-| `VL_MASTER_KEY must be 32 bytes when base64-decoded`             | `openssl rand -base64 32`.                                                       |
-| `VL_MASTER_KEY_VERSION must be a positive integer` / ring errors | Fix `VL_MASTER_KEY_VERSION` or the `VL_MASTER_KEYS` entries (`vN:base64`).       |
-| `MAIL_TO_CONSOLE=true is not allowed in production`              | Set `SMTP_URL` and remove `MAIL_TO_CONSOLE`.                                     |
-| `VL_DEV_ECHO_TOKENS=1 …`                                         | Development-only switch; remove it in production.                                |
-| Required variable `…` is not set (compose)                       | Add the named variable to `.env`.                                                |
+| Boot error                                                       | Fix                                                                                     |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `PUBLIC_URL must be an https:// URL in production…`              | Use HTTPS, or set `VL_ALLOW_INSECURE_HTTP=true` for a plain-HTTP LAN deployment.        |
+| `VL_WEBAUTHN_RP_ID (…) must equal the PUBLIC_URL host…`          | Set `VL_WEBAUTHN_RP_ID` to the host or a parent domain.                                 |
+| `JWT_SECRET is missing or too short` / placeholder refusal       | Generate a real secret (`openssl rand -hex 32`), never a placeholder.                   |
+| `VL_MASTER_KEY must be 32 bytes when base64-decoded`             | `openssl rand -base64 32`.                                                              |
+| `VL_MASTER_KEY_VERSION must be a positive integer` / ring errors | Fix `VL_MASTER_KEY_VERSION` or the `VL_MASTER_KEYS` entries (`vN:base64`).              |
+| `MAIL_TO_CONSOLE=true is not allowed in production`              | Set `SMTP_URL` and remove `MAIL_TO_CONSOLE`.                                            |
+| `VL_DEV_ECHO_TOKENS=1 …`                                         | Development-only switch; remove it in production.                                       |
+| Stack boots with the published default secrets                   | Local-trial defaults; run the §3 rotation before exposing it to anything but localhost. |
 
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for runtime issues.

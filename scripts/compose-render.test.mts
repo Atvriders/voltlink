@@ -52,16 +52,25 @@ describe('compose-render (C3)', () => {
     expect(web.environment.LOG_LEVEL).toBe('info');
   });
 
-  it('throws for a missing required value (${VAR:?msg})', () => {
-    expect(() =>
-      renderCompose([production], {
-        env: {
-          JWT_SECRET: 's'.repeat(64),
-          VL_MASTER_KEY: Buffer.alloc(32, 2).toString('base64'),
-          PUBLIC_URL: 'https://x.example.com',
-        },
-      }),
-    ).toThrow(/Required variable POSTGRES_PASSWORD is not set/);
+  it('renders the in-file defaults with an empty environment (no .env flow)', () => {
+    const out = renderCompose([production], { env: {} });
+    const web = out.services.web!;
+    expect(web.environment.PUBLIC_URL).toBe('http://localhost:3110');
+    expect(web.environment.DATABASE_URL).toContain('0273562be8b07bd887cce80c59cc66e4');
+    expect(web.environment.JWT_SECRET).toBe('c4ed0b963a2d89dad3387e59110914f76b9b48dc02864964559a4eb37a277049');
+  });
+
+  it('still throws for a `${VAR:?msg}` fail-fast (the model keeps the form)', () => {
+    const file = `${repo}scripts/compose-render.test-fixture.yml`;
+    writeFileSync(
+      file,
+      "services:\n  probe:\n    environment:\n      A: '${REQ:?need REQ}'\n",
+    );
+    try {
+      expect(() => renderCompose([file], { env: {} })).toThrow(/Required variable REQ is not set/);
+    } finally {
+      unlinkSync(file);
+    }
   });
 
   it('keeps a literal $$ as $', () => {

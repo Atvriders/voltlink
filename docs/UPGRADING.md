@@ -1,20 +1,22 @@
 # Upgrading
 
-> v1.1.1 changes the install commands to a bare `docker compose` driven by
-> `COMPOSE_FILE=compose.production.yml` in `.env` (the new guide's guarded
-> block writes it). Scripts that pass `-f compose.production.yml` explicitly
-> keep working, and `docker-compose.yml` now sets the project name `voltlink`.
-> The upgrade path below is unchanged; the v1.0.0-file upgrade is verified in
-> CI (the upgrade-smoke job boots v1.0.0's own compose file first).
+> v1.1.1 changed the install to need no `.env` file at all: every required
+> value has a default inside the compose file, and `docker-compose.yml` (which
+> includes `compose.production.yml` and sets the project name `voltlink`) is
+> downloaded together with it, so every command is a bare `docker compose`.
+> Scripts that pass `-f compose.production.yml` explicitly keep working. The
+> upgrade path below is unchanged; the v1.0.0-file upgrade is verified in CI
+> (the upgrade-smoke job boots v1.0.0's own compose file first).
 
 ## Production (published image)
 
 - Back up first ([BACKUP_RESTORE.md](BACKUP_RESTORE.md)) — cheap insurance.
-- Set the new release tag in `.env`, or download the new release's
-  `compose.production.yml` (the file and the image tag always match):
+- Download the new release's `docker-compose.yml` and `compose.production.yml`
+  (the file and the image tag always match), or pin the tag in an optional
+  `.env` override:
 
   ```bash
-  # in .env
+  # optional .env override
   VOLTLINK_IMAGE_TAG=v1.1.1
 
   docker compose pull

@@ -10,20 +10,18 @@ guide; anything not covered here follows the guide.
 - 2 GB RAM free, ~1 GB disk.
 - Nothing else — PostgreSQL and Redis run as containers on an internal network.
 
-## 2. Get the files and create .env
+## 2. Get the files
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/docker-compose.yml -o docker-compose.yml
 curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/compose.production.yml -o compose.production.yml
-umask 077
-printf 'JWT_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
-printf 'VL_MASTER_KEY=%s\n' "$(openssl rand -base64 32)" >> .env
-printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 16)" >> .env
-printf 'COMPOSE_FILE=compose.production.yml\n' >> .env
-printf 'PUBLIC_URL=http://localhost:3110\n' >> .env
 ```
 
-The commands write literal values into `.env` (compose never runs commands
-there). Use an `https://` PUBLIC_URL for anything beyond a localhost trial.
+No `.env` file — every required value has a default inside the compose file
+(web on `127.0.0.1:3110`, `PUBLIC_URL=http://localhost:3110`). The secret
+defaults are published local-trial values: run the guarded rotation in
+[DOCKER_COMPOSE.md](DOCKER_COMPOSE.md) §3 before exposing the stack, and use an
+`https://` PUBLIC_URL for anything beyond a localhost trial.
 
 ## 3. Start
 

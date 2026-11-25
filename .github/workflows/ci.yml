@@ -50,10 +50,11 @@ jobs:
         run: npm run check:compose
       - name: Compose files parse (G-01)
         run: |
-          # ci/compose.env supplies fictional values for the ${VAR:?message}
-          # required variables, which config-only calls must not fail on.
-          docker compose -f docker-compose.yml --env-file ci/compose.env config -q
-          docker compose -f compose.production.yml --env-file ci/compose.env config -q
+          # No .env file is needed: every required value has a default inside
+          # the compose file, so config-only calls run against an empty env.
+          : > /tmp/empty.env
+          docker compose -f docker-compose.yml --env-file /tmp/empty.env config -q
+          docker compose -f compose.production.yml --env-file /tmp/empty.env config -q
       - name: Trivy ignore hygiene (I-TRIVY)
         run: npx tsx scripts/check-trivy-ignore.ts
       - name: Prisma client + migrations
@@ -348,12 +349,13 @@ jobs:
           SMOKE_EMAIL: smoke@example.invalid
           SMOKE_PASSWORD: smoke-password-12345
         run: |
-          # Substitutions (printed by the runner): the compose file and the
-          # .env.example come from the checkout, and the CI overlay rides along
-          # in the COMPOSE_FILE the guarded .env block writes. Only the
-          # localhost PUBLIC_URL case runs; the runner executes every block
-          # under env -i (PATH, HOME, DOCKER_* only). NO database tampering: a
-          # fresh volume is already a first-run instance (R2-27).
+          # Substitutions (printed by the runner): the compose files and the
+          # .env.example come from the checkout, and the CI overlay travels as
+          # a COMPOSE_FILE exported for every block so the run boots the CI
+          # image swap instead of pulling from GHCR (the guide stays bare
+          # `docker compose` and needs no env file). The runner executes every
+          # block under env -i (PATH, HOME, DOCKER_* only). NO database
+          # tampering: a fresh volume is already a first-run instance (R2-27).
           node scripts/install-doc-run.mjs --workdir compose-smoke \
             --compose-src "$PWD/compose.production.yml" --env-example-src "$PWD/.env.example" \
             --ci-overlay docker-compose.ci.yml \
@@ -440,9 +442,10 @@ jobs:
       - name: Every supported compose invocation parses and interpolates
         run: |
           set -e
-          # Config-only calls use the committed fixture env so the :? required
-          # values interpolate; the dev overlays are validated only as the
-          # entry-point chain documented in their headers.
+          # Config-only calls use the committed fixture env so the values stay
+          # deterministic; the in-file defaults are what make any of these
+          # succeed with an empty environment. The dev overlays are validated
+          # only as the entry-point chain documented in their headers.
           docker compose -f compose.production.yml --env-file ci/compose.env config -q
           docker compose -f compose.production.yml --env-file ci/compose.env --profile status config -q
           docker compose -f compose.production.yml --env-file ci/compose.env --profile tesla config -q
@@ -471,19 +474,16 @@ jobs:
             node scripts/compose-render.mjs --env-file /tmp/cmp.env $files $pflag > /tmp/render.json
             node scripts/compare-compose-config.mjs /tmp/render.json /tmp/config.json
           done
-      - name: Negative cases — each :? message fires when its variable is missing
+      - name: No-env defaults — config renders with an empty environment
         run: |
           set -e
-          for var in POSTGRES_PASSWORD JWT_SECRET VL_MASTER_KEY PUBLIC_URL; do
-            grep -v "^$var=" ci/compose.env > /tmp/neg.env
-            if docker compose -f compose.production.yml --env-file /tmp/neg.env config -q 2>/tmp/neg.err; then
-              echo "FAIL: config succeeded without $var" >&2; exit 1
-            fi
-            grep -q "set $var" /tmp/neg.err || {
-              echo "FAIL: no ':?' message for $var" >&2; cat /tmp/neg.err >&2; exit 1
-            }
-            echo "ok: missing $var -> $(head -1 /tmp/neg.err)"
-          done
+          : > /tmp/empty.env
+          if grep -n ':\?' compose.production.yml; then
+            echo "FAIL: a ':?' fail-fast interpolation remains" >&2; exit 1
+          fi
+          docker compose -f compose.production.yml --env-file /tmp/empty.env config -q
+          docker compose -f compose.production.yml --env-file /tmp/empty.env config --format json > /tmp/noenv.json
+          node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('/tmp/noenv.json','utf8'));const env=j.services.web.environment;const req=['JWT_SECRET','VL_MASTER_KEY','PUBLIC_URL','DATABASE_URL'];for(const k of req){const v=env[k];if(!v){console.error('FAIL: '+k+' empty or missing with no env file');process.exit(1);}console.log('ok: '+k+' rendered from defaults');}if(!env.DATABASE_URL.includes('0273562be8b07bd887cce80c59cc66e4')){console.error('FAIL: POSTGRES_PASSWORD default not applied');process.exit(1);}"
       - name: Project and volume names stay the same across every invocation
         run: |
           set -e
@@ -586,8 +586,8 @@ jobs:
       - name: Guide runner against the published digest (the GitHub Actions image proof)
         env:
           # I-V100: verify-published boots the exact digest, not the mutable
-          # version tag. The runner writes it into .env (printed substitution)
-          # so the guide's guarded block stays verbatim.
+          # version tag. The runner exports it as VOLTLINK_IMAGE_DIGEST for
+          # every block (printed) so the guide's blocks stay verbatim.
           VOLTLINK_IMAGE_DIGEST: '@${{ needs.publish.outputs.digest }}'
         run: |
           node scripts/install-doc-run.mjs --workdir published-smoke \

@@ -1,16 +1,24 @@
 # VoltLink production stack — THE canonical Docker Compose install file.
-# It only PULLS the published GHCR image and never builds (guide 08 §14,
+# It only PULLS the image the GitHub Actions CI pipeline built, verified and
+# published to the GitHub Container Registry (ghcr.io/atvriders/voltlink) —
+# nothing in this file or the install path ever builds an image (guide 08 §14,
 # I-CINOIMAGE, I-V100). The single install guide is docs/DOCKER_COMPOSE.md:
-# download this file from the release tag's URL so file and image always match.
+# download docker-compose.yml TOGETHER WITH this file (the entry file includes
+# this one) from the release tag's URL so file and image always match.
 #
+#   curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/docker-compose.yml -o docker-compose.yml
 #   curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/compose.production.yml -o compose.production.yml
-#   docker compose -f compose.production.yml up -d --wait
+#   docker compose up -d --wait
 #
-# Required values (set them in .env next to this file; compose fails fast with
-# a message if one is missing): POSTGRES_PASSWORD, JWT_SECRET, VL_MASTER_KEY,
-# PUBLIC_URL. VL_MASTER_KEY is exactly 32 random bytes in standard base64:
+# NO .env FILE IS NEEDED: every required value has a default right here. The
+# defaults are local-trial quality — the web role binds to 127.0.0.1 by
+# default and PUBLIC_URL defaults to http://localhost:3110. Before exposing
+# the stack anywhere, override the three secret defaults with real random
+# values (JWT_SECRET, VL_MASTER_KEY, POSTGRES_PASSWORD) via .env or the
+# environment; the install guide shows the guarded one-liner:
 #   umask 077; printf 'JWT_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
 #   printf 'VL_MASTER_KEY=%s\n' "$(openssl rand -base64 32)" >> .env
+#   printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 16)" >> .env
 
 name: voltlink
 
@@ -31,18 +39,18 @@ x-voltlink-common: &voltlink
     NODE_ENV: production
     PORT: '3000'
     HOST: 0.0.0.0
-    DATABASE_URL: 'postgresql://voltlink:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/voltlink'
+    DATABASE_URL: 'postgresql://voltlink:${POSTGRES_PASSWORD:-0273562be8b07bd887cce80c59cc66e4}@postgres:5432/voltlink'
     VOLTLINK_DATABASE_URL: '${VOLTLINK_DATABASE_URL:-}'
     REDIS_URL: 'redis://redis:6379'
-    PUBLIC_URL: '${PUBLIC_URL:?set PUBLIC_URL in .env}'
+    PUBLIC_URL: '${PUBLIC_URL:-http://localhost:3110}'
     VL_ALLOW_INSECURE_HTTP: '${VL_ALLOW_INSECURE_HTTP:-false}'
     TRUST_PROXY: '${TRUST_PROXY:-false}'
     VL_WEBAUTHN_RP_ID: '${VL_WEBAUTHN_RP_ID:-}'
     VL_CSP_CONNECT_ORIGINS: '${VL_CSP_CONNECT_ORIGINS:-}'
     STATUS_PORT: '3001'
-    JWT_SECRET: '${JWT_SECRET:?set JWT_SECRET in .env (openssl rand -hex 32)}'
+    JWT_SECRET: '${JWT_SECRET:-c4ed0b963a2d89dad3387e59110914f76b9b48dc02864964559a4eb37a277049}'
     JWT_EXPIRES_SEC: '${JWT_EXPIRES_SEC:-1209600}'
-    VL_MASTER_KEY: '${VL_MASTER_KEY:?set VL_MASTER_KEY in .env (openssl rand -base64 32)}'
+    VL_MASTER_KEY: '${VL_MASTER_KEY:-7lJee8kLzmhXwiZ4unoDcNovLtdFe0kupkb3xXqTiRg=}'
     VL_MASTER_KEYS: '${VL_MASTER_KEYS:-}'
     # R2-67: default is the product default; empty is treated as unset at boot.
     VL_MASTER_KEY_VERSION: '${VL_MASTER_KEY_VERSION:-1}'
@@ -99,7 +107,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: voltlink
-      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}'
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD:-0273562be8b07bd887cce80c59cc66e4}'
       POSTGRES_DB: voltlink
     volumes:
       - pgdata:/var/lib/postgresql/data

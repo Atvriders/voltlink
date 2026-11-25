@@ -1,16 +1,18 @@
 # Configuration
 
 All configuration is environment variables. In Docker Compose they come from
-`.env` (copy `.env.example`); bare-metal exports them directly.
+the defaults baked into `compose.production.yml`, overridden by `.env` or the
+environment (`.env.example` lists every variable); bare-metal exports them
+directly.
 
 ## Required
 
-| Variable        | Description                                                                                                                                |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `JWT_SECRET`    | Session-token signing secret, ≥ 32 chars. `openssl rand -hex 32`. Required in every environment.                                           |
-| `VL_MASTER_KEY` | 32-byte base64 master key for envelope encryption of provider credentials. `openssl rand -base64 32`. Required when `NODE_ENV=production`. |
-| `DATABASE_URL`  | PostgreSQL connection string, e.g. `postgresql://voltlink:pass@host:5432/voltlink`.                                                        |
-| `PUBLIC_URL`    | Public HTTPS origin; must be `https://` in production (secure cookies).                                                                    |
+| Variable        | Description                                                                                                                                                                                                                   |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `JWT_SECRET`    | Session-token signing secret, ≥ 32 chars. `openssl rand -hex 32`. Required in every environment (Docker Compose ships a local-trial default — rotate it before exposing the stack).                                           |
+| `VL_MASTER_KEY` | 32-byte base64 master key for envelope encryption of provider credentials. `openssl rand -base64 32`. Required when `NODE_ENV=production` (Docker Compose ships a local-trial default — rotate it before exposing the stack). |
+| `DATABASE_URL`  | PostgreSQL connection string, e.g. `postgresql://voltlink:pass@host:5432/voltlink`.                                                                                                                                           |
+| `PUBLIC_URL`    | Public HTTPS origin; must be `https://` in production (secure cookies). Docker Compose defaults to `http://localhost:3110`.                                                                                                   |
 
 ## Core
 
@@ -106,11 +108,11 @@ fictional basemap.
 
 ## Image reference (Docker Compose)
 
-| Variable                | Default     | Description                                                                                                                                            |
-| ----------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `COMPOSE_FILE`          | unset       | Compose entry point. The install guide writes `COMPOSE_FILE=compose.production.yml` into `.env` so every command is a bare `docker compose`.           |
-| `VOLTLINK_IMAGE_TAG`    | `v1.1.1`    | Release tag the compose file ships with; leave unset to use it. `check:compose` fails if it stops matching the package version. `latest` stays opt-in. |
-| `VOLTLINK_IMAGE_DIGEST` | empty       | Pin the exact `ghcr.io/atvriders/voltlink@sha256:<digest>` for immutable deployments.                                                                  |
-| `VOLTLINK_BIND_ADDRESS` | `127.0.0.1` | Address the published ports bind to. Use a reverse proxy instead of `0.0.0.0`.                                                                         |
-| `VOLTLINK_STATUS_PORT`  | `3001`      | Host port the `status` profile publishes on (compose-only; the container always listens on `STATUS_PORT`).                                             |
-| `VOLTLINK_DATABASE_URL` | —           | Optional external PostgreSQL URL; unset = the bundled `postgres` service, whose password is `POSTGRES_PASSWORD`.                                       |
+| Variable                | Default     | Description                                                                                                                                                                                                   |
+| ----------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `COMPOSE_FILE`          | unset       | Compose entry point. `docker-compose.yml` (downloaded together with `compose.production.yml`) includes the production file, so every command is a bare `docker compose` with no `.env` and no `COMPOSE_FILE`. |
+| `VOLTLINK_IMAGE_TAG`    | `v1.1.1`    | Release tag the compose file ships with; leave unset to use it. `check:compose` fails if it stops matching the package version. `latest` stays opt-in.                                                        |
+| `VOLTLINK_IMAGE_DIGEST` | empty       | Pin the exact `ghcr.io/atvriders/voltlink@sha256:<digest>` for immutable deployments.                                                                                                                         |
+| `VOLTLINK_BIND_ADDRESS` | `127.0.0.1` | Address the published ports bind to. Use a reverse proxy instead of `0.0.0.0`.                                                                                                                                |
+| `VOLTLINK_STATUS_PORT`  | `3001`      | Host port the `status` profile publishes on (compose-only; the container always listens on `STATUS_PORT`).                                                                                                    |
+| `VOLTLINK_DATABASE_URL` | —           | Optional external PostgreSQL URL; unset = the bundled `postgres` service, whose password is `POSTGRES_PASSWORD`.                                                                                              |

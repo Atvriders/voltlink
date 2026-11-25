@@ -204,10 +204,12 @@ function parseCompose(src: string, file: string): ComposeFile {
           `✖ ${file}: '${key}: ${value}' renders an empty string — treat empty as unset in the product (R2-67).`,
         );
       }
-      // Required values must use `${VAR:?...}` (compose-layer failure).
-      if (REQUIRED.includes(key) && !/'\$\{[A-Za-z0-9_]+:\?[^']*\}'\s*$/.test(value)) {
+      // Required values must carry a NON-EMPTY default right here in the
+      // compose file (`${VAR:-default}`) so the documented flow needs no
+      // .env file at all. A `:?` fail-fast or an empty `:-` is a regression.
+      if (REQUIRED.includes(key) && !/'\$\{[A-Za-z0-9_]+:-[^']+\}'/.test(value)) {
         errors.push(
-          `✖ ${file}: '${key}: ${value}' must be a required interpolation '\${${key}:?message}'.`,
+          `✖ ${file}: '${key}: ${value}' must carry a non-empty default interpolation '\${${key}:-default}' (no .env file is required).`,
         );
       }
       continue;

@@ -6,9 +6,11 @@ optional standalone status site, all built from one Docker image.
 ## Supported paths
 
 1. **Docker Compose (recommended)** — the single install guide is
-   [DOCKER_COMPOSE.md](DOCKER_COMPOSE.md): download `compose.production.yml`
-   for the release, create `.env`, `docker compose up -d --wait`. The stack
-   pulls the published image `ghcr.io/atvriders/voltlink` and never builds.
+   [DOCKER_COMPOSE.md](DOCKER_COMPOSE.md): download `docker-compose.yml` and
+   `compose.production.yml` for the release, then `docker compose up -d
+--wait`. No `.env` file — every required value has a default inside the
+   compose file. The stack pulls the image the CI pipeline built and published
+   (`ghcr.io/atvriders/voltlink`) and never builds.
 2. **From source** — for development or bare-metal servers with existing
    PostgreSQL/Redis. See below and [Development](DEVELOPMENT.md).
 
@@ -59,12 +61,12 @@ on registration and never accepted again.
 ## Docker Compose
 
 The single Docker Compose guide is [DOCKER_COMPOSE.md](DOCKER_COMPOSE.md):
-download `compose.production.yml` from the release tag's URL, create `.env`
-with the documented commands (which write `COMPOSE_FILE`), then the bare
-`docker compose up -d --wait` works. `docker-compose.yml` just includes that
-file, so plain `docker compose up -d` works the same way once `.env` exists.
-Everything pulls `ghcr.io/atvriders/voltlink` at the release version —
-nothing builds.
+download `docker-compose.yml` and `compose.production.yml` from the release
+tag's URL, then the bare `docker compose up -d --wait` works — no `.env` file
+and no `COMPOSE_FILE`, because every required value has a default inside the
+compose file (`docker-compose.yml` includes the production file and sets the
+project name). Everything pulls `ghcr.io/atvriders/voltlink` — the image the
+GitHub Actions CI pipeline builds, verifies and publishes — nothing builds.
 
 The stack:
 

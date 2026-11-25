@@ -25,24 +25,15 @@ VoltLink is an original platform (comparable in scope to hosted telematics produ
 ## Quick start
 
 The single install guide is [docs/DOCKER_COMPOSE.md](docs/DOCKER_COMPOSE.md).
-The short version (pulls the published image, never builds) is the same
-commands, marked so CI's compose acceptance also runs them:
+The short version (pulls the published image, never builds — everything the
+stack needs is already inside the compose file, **no `.env` file**) is the
+same commands, marked so CI's compose acceptance also runs them:
 
 <!-- run: quick-get-files -->
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/docker-compose.yml -o docker-compose.yml
 curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/compose.production.yml -o compose.production.yml
-```
-
-<!-- run: quick-env -->
-
-```bash
-umask 077
-printf 'JWT_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
-printf 'VL_MASTER_KEY=%s\n' "$(openssl rand -base64 32)" >> .env
-printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 16)" >> .env
-printf 'COMPOSE_FILE=compose.production.yml\n' >> .env
-printf 'PUBLIC_URL=http://localhost:3110\n' >> .env
 ```
 
 <!-- run: quick-up -->
@@ -61,6 +52,46 @@ Open http://localhost:3110/setup, paste the token and create the instance
 administrator. Enable demo mode on the Providers page to try every feature
 without a car. Building from source is a development overlay
 (`docker-compose.build.yml`), never an install step.
+
+`docker compose up` pulls `ghcr.io/atvriders/voltlink` — the exact image the
+GitHub Actions CI pipeline builds, verifies and publishes (the compose file
+never builds anything; pin `VOLTLINK_IMAGE_DIGEST` to the CI-verified digest
+for immutable deployments). Requires Docker Compose v2.20+. The in-file
+defaults are local-trial quality (web on `127.0.0.1:3110`, published default
+secrets) — run the guarded rotation in the guide before exposing the stack to
+anything but localhost.
+
+## The API
+
+The web role serves the REST API (and the SPA) at the same base URL —
+`http://localhost:3110/api/v1` locally. Machine-readable spec:
+[docs/openapi.json](docs/openapi.json) (also served at `/api/docs`) and the
+full reference is [docs/API.md](docs/API.md). Getting started:
+
+```bash
+# Is it up? (roles report healthy)
+curl -fsS http://localhost:3110/healthz
+
+# First-run state; returns needsSetup until the instance admin exists
+curl -fsS http://localhost:3110/api/v1/auth/setup-status
+
+# Mutating requests need the CSRF header. This returns {"data":{"token":…}}
+# and sets the session-cookie jar; use the token as the x-vl-csrf header:
+curl -fsSc /tmp/vl.jar http://localhost:3110/api/v1/auth/csrf
+
+# Sign in (PUT the token from the previous call into x-vl-csrf):
+curl -fsS -b /tmp/vl.jar \
+  -H 'content-type: application/json' \
+  -H 'x-vl-csrf: <token from /auth/csrf>' \
+  -d '{"email":"you@example.invalid","password":"your-password"}' \
+  http://localhost:3110/api/v1/auth/login
+
+# Authenticated example — list your vehicles (the SPA adds both automatically)
+curl -fsS -b /tmp/vl.jar http://localhost:3110/api/v1/vehicles
+```
+
+Auth is a `vl_session` cookie plus an `X-VL-CSRF` header on mutating requests.
+See [docs/API.md](docs/API.md) for the full route tables.
 
 ## Architecture
 
