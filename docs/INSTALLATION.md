@@ -60,10 +60,11 @@ on registration and never accepted again.
 
 The single Docker Compose guide is [DOCKER_COMPOSE.md](DOCKER_COMPOSE.md):
 download `compose.production.yml` from the release tag's URL, create `.env`
-with the documented commands, then `docker compose -f compose.production.yml
-up -d --wait`. `docker-compose.yml` just includes that file, so plain
-`docker compose up -d` works the same way once `.env` exists. Everything pulls
-`ghcr.io/atvriders/voltlink` at the release version — nothing builds.
+with the documented commands (which write `COMPOSE_FILE`), then the bare
+`docker compose up -d --wait` works. `docker-compose.yml` just includes that
+file, so plain `docker compose up -d` works the same way once `.env` exists.
+Everything pulls `ghcr.io/atvriders/voltlink` at the release version —
+nothing builds.
 
 The stack:
 

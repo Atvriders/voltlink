@@ -19,6 +19,9 @@ Kept honest and current. File an issue for anything that matters to you.
 
 ## Platform
 
+- **The container image is linux/amd64 only.** The image is built and
+  verified for amd64 (see the Docker Compose guide); arm64 hosts are not
+  supported by the published image today.
 - SSE events fan out cross-process through a Redis stream bus when
   `REDIS_URL` is set; without Redis, publishing is best-effort per web
   instance and the polling fallback covers correctness. Scaling web

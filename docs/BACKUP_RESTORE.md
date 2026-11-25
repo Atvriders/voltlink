@@ -10,7 +10,7 @@ Two things must be backed up together:
 ## Backup (Docker Compose)
 
 ```bash
-docker compose -f compose.production.yml exec -T postgres pg_dump -U voltlink -d voltlink -Fc \
+docker compose exec -T postgres pg_dump -U voltlink -d voltlink -Fc \
   > backup_$(date +%F).dump
 
 # Secrets (one-time export, store securely, e.g. password manager)
@@ -32,17 +32,17 @@ Restoring over the live database is not recommended:
 
 ```bash
 # 1. create a fresh database inside the compose postgres
-docker compose -f compose.production.yml exec -T postgres psql -U voltlink -d postgres \
+docker compose exec -T postgres psql -U voltlink -d postgres \
   -c 'CREATE DATABASE voltlink_restore'
 
 # 2. restore the dump into it (pg_restore reports four benign partition errors)
-docker compose -f compose.production.yml exec -T postgres pg_restore -U voltlink \
+docker compose exec -T postgres pg_restore -U voltlink \
   -d voltlink_restore < backup_2026-11-24.dump
 
 # 3. point the stack at the restored database and boot — the migrate role
 #    applies any newer migrations under the advisory lock
 printf 'VOLTLINK_DATABASE_URL=postgresql://voltlink:...@postgres:5432/voltlink_restore\n' >> .env
-docker compose -f compose.production.yml up -d --wait
+docker compose up -d --wait
 ```
 
 `scripts/backup-restore.sh restore backup_2026-11-24.dump voltlink_restore`

@@ -342,31 +342,45 @@ jobs:
           SMOKE_EMAIL: smoke@ci.test
           SMOKE_PASSWORD: smoke-password-12345
         run: |
-          # Substitutions (printed by the runner): the compose file comes from
-          # the checkout, the .env.example too, and docker-compose.ci.yml swaps
-          # in the voltlink:ci image built above. NO database tampering: a
+          # Substitutions (printed by the runner): the compose file and the
+          # .env.example come from the checkout, and the CI overlay rides along
+          # in the COMPOSE_FILE the guarded .env block writes. Only the
+          # localhost PUBLIC_URL case runs; the runner executes every block
+          # under env -i (PATH, HOME, DOCKER_* only). NO database tampering: a
           # fresh volume is already a first-run instance (R2-27).
           node scripts/install-doc-run.mjs --workdir compose-smoke \
-            --compose-src compose.production.yml --env-example-src .env.example \
-            --ci-overlay docker-compose.ci.yml --until up
+            --compose-src "$PWD/compose.production.yml" --env-example-src "$PWD/.env.example" \
+            --ci-overlay docker-compose.ci.yml \
+            --skip env-lan,env-https,env-webauthn --until up
+      - name: Fresh-install web UI spec against the compose stack (TI-12, first-run)
+        env:
+          FRESH_E2E_EMAIL: smoke@ci.test
+          FRESH_E2E_PASSWORD: smoke-password-12345
+        run: |
           cd compose-smoke
-      - name: Fresh-install smoke (token from the log, setup, demo, command; TI-19/R2-27)
+          FRESH_SETUP_TOKEN=$(docker compose logs web 2>&1 | grep 'first-run setup token' | tail -1 | awk '{print $NF}')
+          test -n "$FRESH_SETUP_TOKEN" || { echo 'no first-run token in web log'; exit 1; }
+          cd ..
+          npx playwright install --with-deps chromium
+          FRESH_SETUP_TOKEN="$FRESH_SETUP_TOKEN" E2E_BASE_URL=http://127.0.0.1:3110 \
+            npx playwright test tests/e2e/fresh-install.spec.ts --project=desktop
+      - name: Smoke — sign in, demo, a command to a terminal state (TI-19/R2-27)
         env:
           SMOKE_EMAIL: smoke@ci.test
           SMOKE_PASSWORD: smoke-password-12345
         run: |
           cd compose-smoke
-          TOKEN=$(docker compose -f compose.production.yml logs web 2>&1 | grep 'first-run setup token' | tail -1 | awk '{print $NF}')
-          test -n "$TOKEN" || { echo 'no first-run token in web log'; exit 1; }
-          SMOKE_SETUP_TOKEN="$TOKEN" node ../scripts/smoke.mjs
+          # Bare `docker compose` — COMPOSE_FILE lives in .env (C6). The admin
+          # exists from the UI spec above, so this is the login-reuse mode.
+          SMOKE_EMAIL="$SMOKE_EMAIL" SMOKE_PASSWORD="$SMOKE_PASSWORD" node ../scripts/smoke.mjs
           # restart smoke: the same account signs in again and the command
           # reaches a terminal state.
-          docker compose -f compose.production.yml restart worker
+          docker compose restart worker
           SMOKE_EMAIL="$SMOKE_EMAIL" SMOKE_PASSWORD="$SMOKE_PASSWORD" node ../scripts/smoke.mjs
       - name: Status profile (guide block) serves healthz on its port
         run: |
           cd compose-smoke
-          docker compose -f compose.production.yml --profile status up -d --wait
+          docker compose --profile status up -d --wait
           curl -fsS http://127.0.0.1:3001/healthz
       - name: Tesla profile — throwaway TLS + proxy reachable from web/worker (R2-03)
         run: |
@@ -376,15 +390,16 @@ jobs:
             -keyout tesla/proxy-tls/tls-key.pem -out tesla/proxy-tls/tls-cert.pem \
             -subj '/CN=tesla-proxy' -addext 'subjectAltName=DNS:tesla-proxy'
           openssl ecparam -name prime256v1 -genkey -noout -out tesla/keys/fleet-key.pem
-          docker compose -f compose.production.yml -f ../docker-compose.ci.yml \
-            -f ../docker-compose.tesla-ci.yml --profile tesla up -d --wait
-          docker compose -f compose.production.yml exec -T web node -e "
+          # The CI overlay stays in COMPOSE_FILE; only the tesla mounts overlay
+          # is added on the command line.
+          docker compose -f ../docker-compose.tesla-ci.yml --profile tesla up -d --wait
+          docker compose exec -T web node -e "
             const https = require('https');
             const req = https.request({ host: 'tesla-proxy', port: 4443, path: '/', ca: require('fs').readFileSync('/run/voltlink/tesla/proxy-tls/tls-cert.pem') }, (res) => { console.log('web->tesla-proxy status', res.statusCode); process.exit(res.statusCode < 500 ? 0 : 1); });
             req.on('error', (e) => { console.error(e.message); process.exit(1); });
             req.end();
           "
-          docker compose -f compose.production.yml exec -T worker node -e "
+          docker compose exec -T worker node -e "
             const https = require('https');
             const req = https.request({ host: 'tesla-proxy', port: 4443, path: '/', ca: require('fs').readFileSync('/run/voltlink/tesla/proxy-tls/tls-cert.pem') }, (res) => { console.log('worker->tesla-proxy status', res.statusCode); process.exit(res.statusCode < 500 ? 0 : 1); });
             req.on('error', (e) => { console.error(e.message); process.exit(1); });
@@ -394,15 +409,15 @@ jobs:
         run: |
           cd compose-smoke
           # backup per BACKUP_RESTORE.md
-          docker compose -f compose.production.yml exec -T postgres pg_dump -U voltlink -d voltlink -Fc > backup.dump
+          docker compose exec -T postgres pg_dump -U voltlink -d voltlink -Fc > backup.dump
           # restore into a fresh database per BACKUP_RESTORE.md
-          docker compose -f compose.production.yml exec -T postgres psql -U voltlink -d postgres -c 'CREATE DATABASE voltlink_restore'
-          docker compose -f compose.production.yml exec -T postgres pg_restore -U voltlink -d voltlink_restore < backup.dump || true
+          docker compose exec -T postgres psql -U voltlink -d postgres -c 'CREATE DATABASE voltlink_restore'
+          docker compose exec -T postgres pg_restore -U voltlink -d voltlink_restore < backup.dump || true
           # 'down' keeps the volume; boot again and the account must still exist
-          docker compose -f compose.production.yml down
-          docker compose -f compose.production.yml -f ../docker-compose.ci.yml up -d --wait
+          docker compose down
+          docker compose up -d --wait
           curl -fsS http://127.0.0.1:3110/healthz
-          docker compose -f compose.production.yml down -v
+          docker compose down -v
 
   compose-validate:
     runs-on: ubuntu-latest

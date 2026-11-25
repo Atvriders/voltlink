@@ -23,11 +23,13 @@ test('a fresh install is set up through the web UI', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Welcome to VoltLink' })).toBeVisible();
 
-  const stamp = Date.now();
-  const email = `fresh-${stamp}@voltlink-e2e.test`;
+  // CI pins the credentials so the smoke can sign in with the same account
+  // afterwards (login-reuse mode); local runs use a fresh timestamp.
+  const email = process.env.FRESH_E2E_EMAIL ?? `fresh-${Date.now()}@voltlink-e2e.test`;
+  const password = process.env.FRESH_E2E_PASSWORD ?? 'fresh-admin-password-123';
   await page.getByLabel('Your name').fill('Fresh Admin');
   await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password (min 10 characters)').fill('fresh-admin-password-123');
+  await page.getByLabel('Password (min 10 characters)').fill(password);
   await page.getByLabel('Setup token').fill(token);
   await page.getByRole('button', { name: 'Create administrator' }).click();
 

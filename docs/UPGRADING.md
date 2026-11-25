@@ -1,5 +1,12 @@
 # Upgrading
 
+> v1.1.1 changes the install commands to a bare `docker compose` driven by
+> `COMPOSE_FILE=compose.production.yml` in `.env` (the new guide's guarded
+> block writes it). Scripts that pass `-f compose.production.yml` explicitly
+> keep working, and `docker-compose.yml` now sets the project name `voltlink`.
+> The upgrade path below is unchanged; the v1.0.0-file upgrade is verified in
+> CI (the upgrade-smoke job boots v1.0.0's own compose file first).
+
 ## Production (published image)
 
 - Back up first ([BACKUP_RESTORE.md](BACKUP_RESTORE.md)) — cheap insurance.
@@ -10,8 +17,8 @@
   # in .env
   VOLTLINK_IMAGE_TAG=v1.1.1
 
-  docker compose -f compose.production.yml pull
-  docker compose -f compose.production.yml up -d --wait
+  docker compose pull
+  docker compose up -d --wait
   ```
 
 - The `migrate` service applies migrations on every boot under an advisory
@@ -19,8 +26,8 @@
 - Roll back by pinning the previous tag:
 
   ```bash
-  VOLTLINK_IMAGE_TAG=<previous-tag> docker compose -f compose.production.yml pull
-  VOLTLINK_IMAGE_TAG=<previous-tag> docker compose -f compose.production.yml up -d --wait
+  VOLTLINK_IMAGE_TAG=<previous-tag> docker compose pull
+  VOLTLINK_IMAGE_TAG=<previous-tag> docker compose up -d --wait
   ```
 
   Roll forward-only schema migrations may reject older images — check

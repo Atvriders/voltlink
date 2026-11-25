@@ -108,6 +108,7 @@ fictional basemap.
 
 | Variable                | Default     | Description                                                                                                                                            |
 | ----------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `COMPOSE_FILE`           | unset       | Compose entry point. The install guide writes `COMPOSE_FILE=compose.production.yml` into `.env` so every command is a bare `docker compose`. |
 | `VOLTLINK_IMAGE_TAG`    | `v1.1.1`    | Release tag the compose file ships with; leave unset to use it. `check:compose` fails if it stops matching the package version. `latest` stays opt-in. |
 | `VOLTLINK_IMAGE_DIGEST` | empty       | Pin the exact `ghcr.io/atvriders/voltlink@sha256:<digest>` for immutable deployments.                                                                  |
 | `VOLTLINK_BIND_ADDRESS` | `127.0.0.1` | Address the published ports bind to. Use a reverse proxy instead of `0.0.0.0`.                                                                         |

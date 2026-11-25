@@ -18,6 +18,7 @@ umask 077
 printf 'JWT_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
 printf 'VL_MASTER_KEY=%s\n' "$(openssl rand -base64 32)" >> .env
 printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 16)" >> .env
+printf 'COMPOSE_FILE=compose.production.yml\n' >> .env
 printf 'PUBLIC_URL=http://localhost:3110\n' >> .env
 ```
 
@@ -27,13 +28,13 @@ there). Use an `https://` PUBLIC_URL for anything beyond a localhost trial.
 ## 3. Start
 
 ```bash
-docker compose -f compose.production.yml up -d --wait
+docker compose up -d --wait
 ```
 
 Watch startup:
 
 ```bash
-docker compose -f compose.production.yml logs -f web
+docker compose logs -f web
 ```
 
 `--wait` returns after every role is healthy. Only the `migrate` role ever
@@ -47,7 +48,7 @@ Read the setup token from the boot log, then open
 <http://localhost:3110/setup> and create the instance administrator:
 
 ```bash
-docker compose -f compose.production.yml logs web | grep 'first-run setup token' | tail -1 | awk '{print $NF}'
+docker compose logs web | grep 'first-run setup token' | tail -1 | awk '{print $NF}'
 ```
 
 The first account created through setup becomes the instance administrator

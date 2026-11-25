@@ -1,18 +1,23 @@
 #!/usr/bin/env node
 // install-doc-run.mjs — executes the RUNNABLE blocks of docs/DOCKER_COMPOSE.md
-// verbatim (C5). A block is a `<!-- run: <name> -->` marker directly above a
-// fenced ```bash block. Two substitutions are allowed, both printed:
+// (and the README quick-start subset) verbatim (C5). A block is a
+// `<!-- run: <name> -->` marker directly above a fenced ```bash block.
+// Each block runs under `env -i`, keeping only PATH, HOME and DOCKER_*.
+// Three substitutions are allowed, all printed:
 //   1. the `curl …/compose.production.yml -o compose.production.yml` line
 //      becomes `cp <--compose-src> compose.production.yml`;
 //   2. the `.env.example` curl becomes `cp <--env-example-src> .env.example`;
-//   3. every `-f compose.production.yml` gets `-f <--ci-overlay>` appended so
-//      the run boots the CI image swap instead of pulling from GHCR.
-// Blocks are executed in a scratch workdir with bash -e.
+//   3. `--ci-overlay` appends `:<overlay>` to the `COMPOSE_FILE=…` line the
+//      guarded .env block writes, so the run boots the CI image swap instead
+//      of pulling from GHCR (the guide stays bare `docker compose`).
+// `--skip` drops named blocks (CI skips the non-localhost PUBLIC_URL cases).
+// `--also` runs the marked quick-start blocks of an extra doc (README).
 //
 // Usage: node scripts/install-doc-run.mjs --workdir <dir>
 //        [--guide docs/DOCKER_COMPOSE.md] [--compose-src <file>]
 //        [--env-example-src <file>] [--ci-overlay docker-compose.ci.yml]
-//        [--only name] [--from name] [--dry-run]
+//        [--also README.md] [--skip env-lan,env-https] [--only name]
+//        [--from name] [--until name] [--dry-run]
 
 import { execSync } from 'node:child_process';
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -22,6 +27,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--guide') out.guide = argv[++i];
+    else if (a === '--also') out.also = argv[++i];
     else if (a === '--workdir') out.workdir = argv[++i];
     else if (a === '--compose-src') out.composeSrc = argv[++i];
     else if (a === '--env-example-src') out.envExampleSrc = argv[++i];
@@ -29,6 +35,7 @@ function parseArgs(argv) {
     else if (a === '--only') out.only = argv[++i];
     else if (a === '--from') out.from = argv[++i];
     else if (a === '--until') out.until = argv[++i];
+    else if (a === '--skip') out.skip = argv[++i].split(',').filter(Boolean);
     else if (a === '--dry-run') out.dryRun = true;
     else throw new Error(`unknown arg ${a}`);
   }
@@ -60,9 +67,12 @@ export function substitute(block, opts) {
     );
   }
   if (opts.ciOverlay) {
-    body = body.replaceAll(
-      '-f compose.production.yml',
-      `-f compose.production.yml -f ${opts.ciOverlay}`,
+    // The guarded .env block writes COMPOSE_FILE=compose.production.yml;
+    // the CI overlay rides along in the same variable so every documented
+    // command stays a bare `docker compose`.
+    body = body.replace(
+      /COMPOSE_FILE=compose\.production\.yml/,
+      `COMPOSE_FILE=compose.production.yml:${opts.ciOverlay}`,
     );
   }
   return body;
@@ -76,30 +86,54 @@ const main = () => {
     console.error(`no runnable blocks found in ${opts.guide}`);
     process.exit(1);
   }
+  const extra = opts.also
+    ? parseGuideBlocks(readFileSync(opts.also, 'utf8')).map((b) => ({
+        ...b,
+        name: `${opts.also.replace(/[^\w-]/g, '_')}:${b.name}`,
+      }))
+    : [];
+  const all = [...blocks, ...extra];
   if (opts.workdir) mkdirSync(opts.workdir, { recursive: true });
-  const runFrom = opts.from ? blocks.findIndex((b) => b.name === opts.from) : 0;
+  const skip = new Set(opts.skip ?? []);
+  const runFrom = opts.from ? all.findIndex((b) => b.name === opts.from) : 0;
   if (runFrom < 0) {
     console.error(`--from ${opts.from}: no such block`);
     process.exit(1);
   }
-  let runUntil = blocks.length;
+  let runUntil = all.length;
   if (opts.until) {
-    const idx = blocks.findIndex((b) => b.name === opts.until);
+    const idx = all.findIndex((b) => b.name === opts.until);
     if (idx < 0) {
       console.error(`--until ${opts.until}: no such block`);
       process.exit(1);
     }
     runUntil = idx + 1;
   }
-  for (const block of blocks.slice(runFrom, runUntil)) {
+  // C5.1: every block runs under `env -i`, keeping only PATH, HOME and
+  // DOCKER_* (variables are unset, never set to empty).
+  const kept = { PATH: process.env.PATH, HOME: process.env.HOME };
+  const dockerKeys = [];
+  for (const [k, v] of Object.entries(process.env)) {
+    if (k.startsWith('DOCKER_') && v) {
+      kept[k] = v;
+      dockerKeys.push(k);
+    }
+  }
+  console.log(`env -i kept: PATH, HOME${dockerKeys.length ? `, ${dockerKeys.join(', ')}` : ''}`);
+  if (skip.size > 0) console.log(`skipped blocks: ${[...skip].join(', ')}`);
+  for (const block of all.slice(runFrom, runUntil)) {
     if (opts.only && block.name !== opts.only) continue;
+    if (skip.has(block.name)) {
+      console.log(`\n== skip block ${block.name} ==`);
+      continue;
+    }
     const body = substitute(block.body, opts);
     console.log(`\n== run block ${block.name} ==`);
     console.log(body);
     if (opts.dryRun) continue;
-    execSync(`set -e\n${body}`, { cwd: opts.workdir, stdio: 'inherit' });
+    execSync(`set -e\n${body}`, { cwd: opts.workdir, stdio: 'inherit', env: kept });
   }
-  console.log(`\ninstalled from ${blocks.length} guide block(s).`);
+  console.log(`\ninstalled from ${all.length} guide block(s).`);
 };
 
 if (

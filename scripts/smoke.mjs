@@ -4,13 +4,15 @@
 // compose stack.
 //
 // Modes:
-//  - First-run: SMOKE_SETUP_TOKEN required (defaults to VL_SETUP_TOKEN).
+//  - First-run: SMOKE_SETUP_TOKEN required — the guide path reads the token
+//    from the web log with the guide's pipeline, and no env fallback exists
+//    (a missing token must fail loudly, C5.1).
 //  - Login reuse (post-restart smoke): SMOKE_EMAIL + SMOKE_PASSWORD log in
 //    with the existing instance instead of registering (no AppSetting rows
 //    are deleted, R2-27).
 
 const base = process.env.SMOKE_BASE ?? 'http://127.0.0.1:3110';
-const setupToken = process.env.SMOKE_SETUP_TOKEN ?? process.env.VL_SETUP_TOKEN ?? '';
+const setupToken = process.env.SMOKE_SETUP_TOKEN ?? '';
 const loginEmail = process.env.SMOKE_EMAIL ?? '';
 const loginPassword = process.env.SMOKE_PASSWORD ?? '';
 const TERMINAL = new Set(['confirmed', 'failed', 'rejected', 'timed_out', 'canceled']);

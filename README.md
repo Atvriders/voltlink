@@ -25,24 +25,36 @@ VoltLink is an original platform (comparable in scope to hosted telematics produ
 ## Quick start
 
 The single install guide is [docs/DOCKER_COMPOSE.md](docs/DOCKER_COMPOSE.md).
-The short version (pulls the published image, never builds):
+The short version (pulls the published image, never builds) is the same
+commands, marked so CI's compose acceptance also runs them:
+
+<!-- run: quick-get-files -->
 
 ```bash
-# Get the compose file for the release
 curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/compose.production.yml -o compose.production.yml
+```
 
-# Create .env with real secrets (never put $(...) inside .env)
+<!-- run: quick-env -->
+
+```bash
 umask 077
 printf 'JWT_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
 printf 'VL_MASTER_KEY=%s\n' "$(openssl rand -base64 32)" >> .env
 printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 16)" >> .env
+printf 'COMPOSE_FILE=compose.production.yml\n' >> .env
 printf 'PUBLIC_URL=http://localhost:3110\n' >> .env
+```
 
-# Start (image: ghcr.io/atvriders/voltlink)
-docker compose -f compose.production.yml up -d --wait
+<!-- run: quick-up -->
 
-# Read the first-run setup token, then open /setup in the browser
-docker compose -f compose.production.yml logs web | grep 'first-run setup token' | tail -1 | awk '{print $NF}'
+```bash
+docker compose up -d --wait
+```
+
+<!-- run: quick-token -->
+
+```bash
+docker compose logs web | grep 'first-run setup token' | tail -1 | awk '{print $NF}'
 ```
 
 Open http://localhost:3110/setup, paste the token and create the instance

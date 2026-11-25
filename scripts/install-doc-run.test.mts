@@ -48,11 +48,38 @@ describe('install-doc-run (C5)', () => {
     expect(out).not.toContain('raw.githubusercontent.com');
   });
 
-  it('the CI overlay substitution covers the start block', () => {
+  it('the CI overlay rides along in the COMPOSE_FILE line the guarded .env block writes', () => {
     const block = parseGuideBlocks(readFileSync(`${repo}docs/DOCKER_COMPOSE.md`, 'utf8')).find(
-      (b) => b.name === 'up',
+      (b) => b.name === 'create-env',
     )!;
     const out = substitute(block.body, { ciOverlay: 'docker-compose.ci.yml' });
-    expect(out).toContain('-f compose.production.yml -f docker-compose.ci.yml up -d --wait');
+    expect(out).toContain(
+      "printf 'COMPOSE_FILE=compose.production.yml:docker-compose.ci.yml\\n' >> .env",
+    );
+    expect(out).not.toContain('COMPOSE_FILE=compose.production.yml\\n');
+  });
+
+  it('every compose command is bare — no -f flags — so a bare command fails without COMPOSE_FILE', () => {
+    const md = readFileSync(`${repo}docs/DOCKER_COMPOSE.md`, 'utf8');
+    for (const b of parseGuideBlocks(md)) {
+      expect(b.body, b.name).not.toContain('-f compose');
+      expect(b.body, b.name).not.toContain('--file');
+    }
+    const env = parseGuideBlocks(md).find((b) => b.name === 'create-env')!;
+    expect(env.body).toContain('COMPOSE_FILE=compose.production.yml');
+  });
+
+  it('the README quick-start blocks are marked and bare', () => {
+    const md = readFileSync(`${repo}README.md`, 'utf8');
+    const blocks = parseGuideBlocks(md);
+    expect(blocks.map((b) => b.name)).toEqual([
+      'quick-get-files',
+      'quick-env',
+      'quick-up',
+      'quick-token',
+    ]);
+    for (const b of blocks) expect(b.body, b.name).not.toContain('-f compose');
+    const up = blocks.find((b) => b.name === 'quick-up')!;
+    expect(substitute(up.body, { ciOverlay: 'docker-compose.ci.yml' })).toBe(up.body);
   });
 });

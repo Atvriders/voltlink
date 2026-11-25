@@ -80,6 +80,12 @@ field for one) — that, plus the whole round-2 review corpus, is fixed here.
   an honest retroactive FOUNDATION_AUDIT.md.
 - Hardened legacy scanner: reads every tracked text file, separator-tolerant
   terms, planted-term self-test.
+- Compose install path rework (the v1.1.1 candidate): the guide writes
+  `COMPOSE_FILE` into `.env` and every documented command is a bare
+  `docker compose`; the `status` profile host port is `VOLTLINK_STATUS_PORT`;
+  worker/scheduler healthchecks verify real heartbeats and fail without
+  `REDIS_URL`; the CI image job runs the guide's marked blocks through
+  `scripts/install-doc-run.mjs` under `env -i` with printed substitutions.
 
 ### Removed
 
@@ -90,6 +96,14 @@ field for one) — that, plus the whole round-2 review corpus, is fixed here.
 ### Changed
 
 - Renamed every technical identifier from the old spelling `voltlank` to `voltlink` (packages, image, database role and name, SQL functions, metrics, Docker user, entrypoint and healthcheck binaries, theme ids, export filenames, env prefix `VOLTLINK_`). The old database objects (`voltlank_ensure_partition`, `voltlank_migrations`) are dropped by the rename migration. Stored themes are normalized to the new ids. This is a breaking change for anyone scraping the old metric names or pinning old volume names; see UPGRADING.md.
+- **Breaking (v1.1.1 candidate, compose):** the install commands are now bare
+  `docker compose` driven by `COMPOSE_FILE=compose.production.yml` in `.env`
+  (scripts that pass `-f compose.production.yml` keep working, but the docs
+  and the CI runner use the `.env` form); `docker-compose.yml` sets the
+  project name `voltlink` so folders not named `voltlink` no longer start an
+  empty `<folder>_pgdata` volume; the dev overlay publishes no ports and is
+  validated only as the documented entry-point chain; `.env.example` no
+  longer pins `VOLTLINK_IMAGE_TAG`. See UPGRADING.md.
 
 ## [1.0.0] — 2026-10-27
 
