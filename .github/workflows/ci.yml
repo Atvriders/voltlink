@@ -224,7 +224,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink
       REDIS_URL: redis://127.0.0.1:6379
-      JWT_SECRET: ci-e2e-jwt-secret-not-a-production-secret-0000
+      JWT_SECRET: d31f4c8a9b2e7f06c5a1d8e3f09b4c7d2e6a5f1c8b3d0e9a7f4c2b6d1e8f5a3c0b9d
       VL_MASTER_KEY: Y2ktZTJlLW1hc3Rlci1rZXktbm90LXByb2R1Y3Rpb24tMDAwMA==
       PUBLIC_URL: http://127.0.0.1:3111
       VL_ALLOW_INSECURE_HTTP: 'true'
@@ -265,7 +265,7 @@ jobs:
           # the built SPA. Plain HTTP is fine on the ephemeral CI network.
           DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink
           REDIS_URL: redis://127.0.0.1:6379
-          JWT_SECRET: ci-e2e-jwt-secret-not-a-production-secret-0000
+          JWT_SECRET: d31f4c8a9b2e7f06c5a1d8e3f09b4c7d2e6a5f1c8b3d0e9a7f4c2b6d1e8f5a3c0b9d
           VL_MASTER_KEY: Y2ktZTJlLW1hc3Rlci1rZXktbm90LXByb2R1Y3Rpb24tMDAwMA==
           PUBLIC_URL: http://127.0.0.1:3111
           VL_ALLOW_INSECURE_HTTP: 'true'
@@ -294,11 +294,11 @@ jobs:
           createdb -h 127.0.0.1 -U voltlink voltlink_fresh
           DATABASE_URL=postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink_fresh \
             REDIS_URL=redis://127.0.0.1:6379 \
-            JWT_SECRET=ci-e2e-jwt-secret-not-a-production-secret-0000 \
+            JWT_SECRET=d31f4c8a9b2e7f06c5a1d8e3f09b4c7d2e6a5f1c8b3d0e9a7f4c2b6d1e8f5a3c0b9d \
             VL_MASTER_KEY=Y2ktZTJlLW1hc3Rlci1rZXktbm90LXByb2R1Y3Rpb24tMDAwMA== \
             PUBLIC_URL=http://127.0.0.1:3112 VL_ALLOW_INSECURE_HTTP=true \
             VL_QUEUE_PREFIX=voltlink-fresh PORT=3112 RUN_DIR="$PWD/scripts/e2e/run-fresh" \
-            VL_FRESH_SETUP=1 VL_SETUP_TOKEN= bash scripts/e2e/start-stack.sh
+            VL_FRESH_SETUP=1 VL_SETUP_TOKEN='' bash scripts/e2e/start-stack.sh
           . scripts/e2e/run-fresh/fresh-setup.env
           npx playwright install --with-deps chromium
           npx playwright test tests/e2e/fresh-install.spec.ts --project=fresh-install
@@ -314,7 +314,7 @@ jobs:
           E2E_USER_PASSWORD: e2e-password-123
           DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink
           REDIS_URL: redis://127.0.0.1:6379
-          JWT_SECRET: ci-e2e-jwt-secret-not-a-production-secret-0000
+          JWT_SECRET: d31f4c8a9b2e7f06c5a1d8e3f09b4c7d2e6a5f1c8b3d0e9a7f4c2b6d1e8f5a3c0b9d
           VL_MASTER_KEY: Y2ktZTJlLW1hc3Rlci1rZXktbm90LXByb2R1Y3Rpb24tMDAwMA==
           PUBLIC_URL: http://127.0.0.1:3111
           VL_ALLOW_INSECURE_HTTP: 'true'
@@ -473,10 +473,11 @@ jobs:
             'docker-compose.yml docker-compose.build.yml docker-compose.dev.yml|' \
             'compose.production.yml docker-compose.ci.yml|'; do
             files="${spec%%|*}"; profile="${spec#*|}"
-            args=""; for f in $files; do args="$args -f $f"; done
-            pflag=""; [ -n "$profile" ] && pflag="--profile $profile"
-            docker compose --env-file /tmp/cmp.env $args $pflag config --format json > /tmp/config.json
-            node scripts/compose-render.mjs --env-file /tmp/cmp.env $files $pflag > /tmp/render.json
+            read -r -a file_list <<< "$files"
+            args=(); for f in "${file_list[@]}"; do args+=(-f "$f"); done
+            pflag=(); [ -n "$profile" ] && pflag=(--profile "$profile")
+            docker compose --env-file /tmp/cmp.env "${args[@]}" "${pflag[@]}" config --format json > /tmp/config.json
+            node scripts/compose-render.mjs --env-file /tmp/cmp.env "${file_list[@]}" "${pflag[@]}" > /tmp/render.json
             node scripts/compare-compose-config.mjs /tmp/render.json /tmp/config.json
           done
       - name: No-env defaults — config renders with an empty environment
@@ -503,9 +504,10 @@ jobs:
             'docker-compose.yml docker-compose.build.yml docker-compose.dev.yml|' \
             'compose.production.yml docker-compose.ci.yml|'; do
             files="${spec%%|*}"; profile="${spec#*|}"
-            args=""; for f in $files; do args="$args -f $f"; done
-            pflag=""; [ -n "$profile" ] && pflag="--profile $profile"
-            docker compose --env-file ci/compose.env $args $pflag config --format json \
+            read -r -a file_list <<< "$files"
+            args=(); for f in "${file_list[@]}"; do args+=(-f "$f"); done
+            pflag=(); [ -n "$profile" ] && pflag=(--profile "$profile")
+            docker compose --env-file ci/compose.env "${args[@]}" "${pflag[@]}" config --format json \
               | jq -r '"\(.name) \(.volumes|keys|join(","))"'
           done | sort -u > /tmp/names.txt
           test "$(wc -l < /tmp/names.txt)" = "1"
@@ -712,12 +714,14 @@ jobs:
           git show v1.0.0:compose.production.yml > compose.production.yml
           # 2) .env written per v1.0.0's docs (the same .env survives the upgrade).
           umask 077
-          printf 'JWT_SECRET=%s\n' "$(openssl rand -hex 32)" > .env
-          printf 'VL_MASTER_KEY=%s\n' "$(openssl rand -base64 32)" >> .env
-          printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 16)" >> .env
-          printf 'PUBLIC_URL=http://127.0.0.1:3110\n' >> .env
-          printf 'VL_ALLOW_INSECURE_HTTP=true\n' >> .env
-          BEFORE=$((docker compose -p voltlink -f compose.production.yml exec -T postgres psql -U voltlink -d voltlink -tAc "SELECT count(*) FROM _prisma_migrations" 2>/dev/null) || true)
+          {
+            printf 'JWT_SECRET=%s\n' "$(openssl rand -hex 32)"
+            printf 'VL_MASTER_KEY=%s\n' "$(openssl rand -base64 32)"
+            printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 16)"
+            printf 'PUBLIC_URL=http://127.0.0.1:3110\n'
+            printf 'VL_ALLOW_INSECURE_HTTP=true\n'
+          } > .env
+          BEFORE="$( (docker compose -p voltlink -f compose.production.yml exec -T postgres psql -U voltlink -d voltlink -tAc "SELECT count(*) FROM _prisma_migrations" 2>/dev/null) || true )"
           VOLTLINK_IMAGE_TAG=v1.0.0 docker compose -p voltlink -f compose.production.yml up -d --wait
           # 3) v1.0.0 cannot bootstrap through its API (no setup token is
           #    logged and the UI has no field for one — CHANGELOG 1.1.0);
