@@ -11,7 +11,14 @@ import { dropOne } from './drop-databases';
 // run without VL_TEST_DB_PREFIX still never touches another run's databases.
 const prefix = inject('dbPrefix');
 const adminUrl = inject('dbAdminUrl');
-const db = `${prefix}w${process.env.VITEST_POOL_ID ?? '1'}`;
+// R2-24 / CI fix: the database is named per FILE (pool slot + random), never
+// per pool slot alone. In CI the two api-int slots both report the same
+// VITEST_POOL_ID, so a slot-only name made two files share one database — the
+// next file's setup FORCE-dropped it while the other file was still running
+// ('database … does not exist' cascades, 820 authz failures). A random suffix
+// makes every file's database unique; the shared prefix keeps the global
+// teardown able to drop the whole run.
+const db = `${prefix}w${process.env.VITEST_POOL_ID ?? '1'}_${randomBytes(3).toString('hex')}`;
 
 /** FNV-1a over the prefix so concurrent runs with different prefixes never
  * serialise on the same advisory lock. */
@@ -63,4 +70,16 @@ afterAll(async () => {
   const { prisma, pool } = await import('../../src/core/db');
   await prisma.$disconnect();
   await pool.end();
+  // Drop this file's own database (unique per file since the CI fix) so the
+  // catalog and connection count stay small during long combined runs.
+  const admin = new pg.Client({ connectionString: adminUrl });
+  try {
+    await admin.connect();
+    await dropOne(admin, db);
+  } catch {
+    // The global teardown still drops every prefix% database — a failed
+    // best-effort drop here must never fail the file.
+  } finally {
+    await admin.end().catch(() => undefined);
+  }
 });
