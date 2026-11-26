@@ -153,15 +153,23 @@ async function uniqueColors(page: import('@playwright/test').Page): Promise<numb
       '[data-testid="vehicle-viewer"] canvas',
     ) as HTMLCanvasElement | null;
     if (!c) return 0;
-    const gl = (c.getContext('webgl2') || c.getContext('webgl')) as WebGLRenderingContext | null;
-    if (!gl) return 0;
-    const w = gl.drawingBufferWidth;
-    const h = gl.drawingBufferHeight;
-    const buf = new Uint8Array(w * h * 4);
-    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+    // Read the COMPOSITED frame, not the GL drawing buffer: the viewer uses
+    // preserveDrawingBuffer=false, so gl.readPixels between frames sees the
+    // cleared buffer — always 1 colour under SwiftShader when another worker
+    // slows the render loop. drawImage + getImageData reads what the
+    // compositor actually showed.
+    const w = Math.min(c.width || 1, 512);
+    const h = Math.min(c.height || 1, 512);
+    const c2 = document.createElement('canvas');
+    c2.width = w;
+    c2.height = h;
+    const g2 = c2.getContext('2d', { willReadFrequently: true });
+    if (!g2) return 0;
+    g2.drawImage(c, 0, 0, w, h);
+    const d = g2.getImageData(0, 0, w, h).data;
     const seen = new Set<number>();
-    for (let i = 0; i < buf.length; i += 4) {
-      const q = ((buf[i]! >> 4) << 8) | ((buf[i + 1]! >> 4) << 4) | (buf[i + 2]! >> 4);
+    for (let i = 0; i < d.length; i += 4) {
+      const q = ((d[i]! >> 4) << 8) | ((d[i + 1]! >> 4) << 4) | (d[i + 2]! >> 4);
       seen.add(q);
     }
     return seen.size;
@@ -169,7 +177,12 @@ async function uniqueColors(page: import('@playwright/test').Page): Promise<numb
 }
 
 test('R2-44: per-class pixels, presets and GPU memory return to baseline', async ({ page }) => {
-  test.setTimeout(240_000);
+  // Five GLB loads, the pixel sweep and the preset/memory phases run on a
+  // 4-core shared runner under SwiftShader where a freshly-mounted model's
+  // first frame can exceed half a minute when the suite runs next to the
+  // rest of the matrix. The budgets below cover that; the assertions
+  // themselves are unchanged.
+  test.setTimeout(600_000);
   const email = `e2e-glb44-${Date.now()}@voltlink.test`;
   await register(page, email);
   await enableDemo(page);
@@ -191,14 +204,14 @@ test('R2-44: per-class pixels, presets and GPU memory return to baseline', async
   for (const name of demoVehicles) {
     await switchVehicle(page, name);
     await expect
-      .poll(() => viewer.first().getAttribute('data-asset'), { timeout: 30000 })
+      .poll(() => viewer.first().getAttribute('data-asset'), { timeout: 60_000 })
       .toBe('glb');
     // Poll rather than sleep: on the shared runner the first rendered frame
     // of a freshly-mounted model can take longer than any fixed wait, and
     // until it lands readPixels sees the cleared buffer (1 colour).
     await expect
       .poll(async () => uniqueColors(page), {
-        timeout: 30000,
+        timeout: 60_000,
         message: `${name} renders real pixels`,
       })
       .toBeGreaterThan(50);
