@@ -25,6 +25,9 @@
     # by ci/compose.env and the NEW-10 boot test.
     'bm90LWEtcmVhbC1tYXN0ZXIta2V5LTAxMjM0NTY3ODk=',
     '6d1c05e7f38b49a2ce7014b8d5f3a96201e8b7c4d90f523a6e18cb47f0d29a35',
+    # CI boot fixture used by the e2e/image jobs (replaces the old value that
+    # the placeholder refusal rejected because it contained the word 'secret').
+    'd31f4c8a9b2e7f06c5a1d8e3f09b4c7d2e6a5f1c8b3d0e9a7f4c2b6d1e8f5a3c0b9d',
     # Published local-trial defaults inside compose.production.yml (the
     # no-.env install flow; the guide tells users to rotate them).
     '0273562be8b07bd887cce80c59cc66e4',
