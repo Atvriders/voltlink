@@ -263,6 +263,9 @@ jobs:
           # start-stack.sh never reads apps/api/.env (R2-24); everything comes
           # from the environment. Public URL is the API itself, which serves
           # the built SPA. Plain HTTP is fine on the ephemeral CI network.
+          # A stable RUN_DIR keeps the stack logs at a known path for the
+          # failure-artifact and log-tail steps below.
+          RUN_DIR: ${{ runner.temp }}/stack-run
           DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink
           REDIS_URL: redis://127.0.0.1:6379
           JWT_SECRET: d31f4c8a9b2e7f06c5a1d8e3f09b4c7d2e6a5f1c8b3d0e9a7f4c2b6d1e8f5a3c0b9d
@@ -320,9 +323,25 @@ jobs:
           VL_ALLOW_INSECURE_HTTP: 'true'
           VL_SETUP_TOKEN: ci-e2e-setup-token-0123456789abcdef
           VL_QUEUE_PREFIX: voltlink-ci
-      - name: API log
+      - name: Stack logs (api/worker/scheduler/smtp)
         if: always()
-        run: tail -60 /tmp/voltlink-api.log
+        run: |
+          for f in api worker scheduler smtp; do
+            echo "===== $f.log ====="
+            tail -60 "$RUNNER_TEMP/stack-run/logs/$f.log" || true
+          done
+      - name: Upload e2e evidence (traces, screenshots, stack logs)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75bde449cb0b069f1e10c8e86e1
+        with:
+          name: e2e-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test-results/pw/**
+            test-results/playwright.json
+            ${{ runner.temp }}/stack-run/logs/**
+            scripts/e2e/run-fresh/logs/**
+          if-no-files-found: ignore
+          retention-days: 14
 
   image:
     runs-on: ubuntu-latest
