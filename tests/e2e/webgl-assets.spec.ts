@@ -53,12 +53,14 @@ test('showroom renders the right GLB per vehicle class, with zero page errors', 
     await expect(viewer).toBeVisible({ timeout: 20000 });
     // C-WEBGLTEST: the loaded asset is the REAL GLB and its URL is the one
     // for THIS class (the old suite passed with any other class's GLB, even
-    // while the requested asset was held unanswered).
+    // while the requested asset was held unanswered). The LOD suffix is the
+    // quality preset's business (low -> _lod2, medium -> _lod, high/ultra ->
+    // LOD0) and varies with the host, so only the class identity is pinned.
     await expect
       .poll(async () => viewer.first().getAttribute('data-asset-url'), {
         timeout: 30000,
       })
-      .toContain(`${cls}.`);
+      .toMatch(new RegExp(`${cls}(_lod2|_lod)?\.`));
     await expect(viewer.first()).toHaveAttribute('data-asset', 'glb', {
       timeout: 30000,
     });
@@ -75,7 +77,7 @@ test('showroom renders the right GLB per vehicle class, with zero page errors', 
   // unanswered (HEAD fulfilled, GET aborted), a later vehicle must recover
   // to its own GLB. The viewer is keyed by vehicle id, so the failed load
   // never sticks to the following vehicles.
-  await page.route('**/sport_sedan.glb', (route) => {
+  await page.route('**/sport_sedan*.glb', (route) => {
     if (route.request().method() === 'HEAD') route.fulfill({ status: 200, body: '' });
     else route.abort();
   });
@@ -85,7 +87,7 @@ test('showroom renders the right GLB per vehicle class, with zero page errors', 
       timeout: 30000,
     })
     .toBe('fallback');
-  await page.unroute('**/sport_sedan.glb');
+  await page.unroute('**/sport_sedan*.glb');
   await page.getByRole('button', { name: /Terra/ }).first().click();
   await expect
     .poll(
@@ -93,7 +95,7 @@ test('showroom renders the right GLB per vehicle class, with zero page errors', 
         page.locator('[data-testid="vehicle-viewer"]').first().getAttribute('data-asset-url'),
       { timeout: 30000 },
     )
-    .toContain('compact_crossover.');
+    .toMatch(/compact_crossover(_lod2|_lod)?\./);
 
   // Context loss (guide 06 s12 / guide 08 s12): lose the context, restore it,
   // and the viewer must keep rendering without a page error.

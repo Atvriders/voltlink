@@ -37,7 +37,33 @@ async function devVerificationToken(email: string): Promise<string> {
   return last[1]!;
 }
 
+/**
+ * Pin the device capability the graphics auto-preset reads. autoPreset()
+ * maps `navigator.hardwareConcurrency` and `navigator.deviceMemory` to a
+ * quality tier: GitHub's 4-core runners land on 'low' (LOD2 assets, 1x
+ * pixel ratio) while the visual baselines and the WebGL asset assertions
+ * were written and reviewed for the 'medium' tier the baseline machine
+ * renders (many cores, headless Chromium reports no deviceMemory -> 4 GB).
+ * The e2e suite must not silently exercise a different product than the one
+ * the baselines show, so every signed-in test pins the same capability
+ * regardless of the host it runs on. The heuristic itself stays covered by
+ * apps/web/src/webgl/preset.test.ts.
+ */
+async function pinDeviceCapability(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'hardwareConcurrency', {
+      get: () => 32,
+      configurable: true,
+    });
+    Object.defineProperty(navigator, 'deviceMemory', {
+      get: () => 4,
+      configurable: true,
+    });
+  });
+}
+
 export async function register(page: Page, email: string): Promise<void> {
+  await pinDeviceCapability(page);
   const hydrated = page.waitForResponse((r) => r.url().includes('/api/v1/auth/me'));
   await page.goto('/register', { waitUntil: 'domcontentloaded' });
   // React mounts and AuthProvider issues /auth/me — only then are handlers attached.
