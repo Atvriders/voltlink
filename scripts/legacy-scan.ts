@@ -47,6 +47,9 @@ const ALLOWED = [
   'scripts/legacy-scan.ts', // the term list itself
   // FM-11: the e2e spec that proves the legacy route list renders NotFound.
   'tests/e2e/legacy-routes.spec.ts',
+  // Binary font blobs embedded as base64 data URIs (visual-snapshot font
+  // pinning); a term match here is encoding noise, not content.
+  'tests/e2e/screenshot.css',
 ];
 
 export interface LegacyFinding {
