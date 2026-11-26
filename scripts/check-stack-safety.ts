@@ -88,8 +88,14 @@ const CHECKS: Record<string, Assertion[]> = {
   ],
   'apps/api/vitest.config.ts': [
     requireMatch(
+      /the worker cap lives on the api-int PROJECT/,
+      'the shared api config must document that the cap lives on api-int',
+    ),
+  ],
+  'vitest.config.mts': [
+    requireMatch(
       /VL_TEST_MAX_WORKERS \?\? 2/,
-      'api workers must be capped (VL_TEST_MAX_WORKERS, default 2)',
+      'the api-int project must cap workers (VL_TEST_MAX_WORKERS, default 2)',
     ),
   ],
   'apps/api/test/setup/worker-db.ts': [
