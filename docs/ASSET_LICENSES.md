@@ -14,6 +14,11 @@ pipeline and is licensed under the project's MIT license (see `LICENSE.md`).
   `apps/web/package.json`, each under its own license
   (`lucide-react` — ISC; others per their packages). Run
   `npm audit` / license tooling in CI for the full dependency license report.
+- The visual-snapshot test font is a subset of DejaVu Sans
+  (`tests/e2e/fonts/`, embedded in `tests/e2e/screenshot.css`), distributed
+  under the Bitstream Vera license; see
+  `tests/e2e/fonts/LICENSE-dejavu.txt`. It is injected only during Playwright
+  screenshots so baselines are independent of the host's system fonts.
 - No textures, photographs, or audio are bundled.
 
 If you redistribute VoltLink assets, keep the MIT notice and do not present
