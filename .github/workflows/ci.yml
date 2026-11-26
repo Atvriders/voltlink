@@ -225,7 +225,7 @@ jobs:
       DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink
       REDIS_URL: redis://127.0.0.1:6379
       JWT_SECRET: d31f4c8a9b2e7f06c5a1d8e3f09b4c7d2e6a5f1c8b3d0e9a7f4c2b6d1e8f5a3c0b9d
-      VL_MASTER_KEY: Y2ktZTJlLW1hc3Rlci1rZXktbm90LXByb2R1Y3Rpb24tMDAwMA==
+      VL_MASTER_KEY: uL2hWy3aGmYKcQI4soDsYMdM2fABx/kO251Dx5uKAps=
       PUBLIC_URL: http://127.0.0.1:3111
       VL_ALLOW_INSECURE_HTTP: 'true'
       VL_SETUP_TOKEN: ci-e2e-setup-token-0123456789abcdef
@@ -266,7 +266,7 @@ jobs:
           DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink
           REDIS_URL: redis://127.0.0.1:6379
           JWT_SECRET: d31f4c8a9b2e7f06c5a1d8e3f09b4c7d2e6a5f1c8b3d0e9a7f4c2b6d1e8f5a3c0b9d
-          VL_MASTER_KEY: Y2ktZTJlLW1hc3Rlci1rZXktbm90LXByb2R1Y3Rpb24tMDAwMA==
+          VL_MASTER_KEY: uL2hWy3aGmYKcQI4soDsYMdM2fABx/kO251Dx5uKAps=
           PUBLIC_URL: http://127.0.0.1:3111
           VL_ALLOW_INSECURE_HTTP: 'true'
           VL_SETUP_TOKEN: ci-e2e-setup-token-0123456789abcdef
@@ -295,7 +295,7 @@ jobs:
           DATABASE_URL=postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink_fresh \
             REDIS_URL=redis://127.0.0.1:6379 \
             JWT_SECRET=d31f4c8a9b2e7f06c5a1d8e3f09b4c7d2e6a5f1c8b3d0e9a7f4c2b6d1e8f5a3c0b9d \
-            VL_MASTER_KEY=Y2ktZTJlLW1hc3Rlci1rZXktbm90LXByb2R1Y3Rpb24tMDAwMA== \
+            VL_MASTER_KEY=uL2hWy3aGmYKcQI4soDsYMdM2fABx/kO251Dx5uKAps= \
             PUBLIC_URL=http://127.0.0.1:3112 VL_ALLOW_INSECURE_HTTP=true \
             VL_QUEUE_PREFIX=voltlink-fresh PORT=3112 RUN_DIR="$PWD/scripts/e2e/run-fresh" \
             VL_FRESH_SETUP=1 VL_SETUP_TOKEN='' bash scripts/e2e/start-stack.sh
@@ -315,7 +315,7 @@ jobs:
           DATABASE_URL: postgresql://voltlink:voltlink@127.0.0.1:5432/voltlink
           REDIS_URL: redis://127.0.0.1:6379
           JWT_SECRET: d31f4c8a9b2e7f06c5a1d8e3f09b4c7d2e6a5f1c8b3d0e9a7f4c2b6d1e8f5a3c0b9d
-          VL_MASTER_KEY: Y2ktZTJlLW1hc3Rlci1rZXktbm90LXByb2R1Y3Rpb24tMDAwMA==
+          VL_MASTER_KEY: uL2hWy3aGmYKcQI4soDsYMdM2fABx/kO251Dx5uKAps=
           PUBLIC_URL: http://127.0.0.1:3111
           VL_ALLOW_INSECURE_HTTP: 'true'
           VL_SETUP_TOKEN: ci-e2e-setup-token-0123456789abcdef

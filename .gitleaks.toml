@@ -19,8 +19,9 @@
     'da1ed84cbe380e8b2639006b5bdfcdce0ebc4775',
     '9f3b7c1d5e8a24609bd4f7a1c3e5079b2d6481fa',
     '4c1f8e05a9d73b62f0ae14d78c3b95206ea7d41f',
-    'ci-e2e-master-key-not-produc',
-    'Y2ktZTJlLW1hc3Rlci1rZXktbm90LXByb2R1Y3Rp',
+    # CI boot fixture master key (exactly 32 bytes; the previous readable
+    # fixture was 37 bytes and made every envelope seal 500).
+    'uL2hWy3aGmYKcQI4soDsYMdM2fABx/kO251Dx5uKAps=',
     # Fictional fixture master key ('not-a-real-master-key-0123456789') used
     # by ci/compose.env and the NEW-10 boot test.
     'bm90LWEtcmVhbC1tYXN0ZXIta2V5LTAxMjM0NTY3ODk=',
