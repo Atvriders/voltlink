@@ -514,7 +514,8 @@ jobs:
       - name: actionlint
         run: |
           set -e
-          curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- -d /tmp/actionlint-bin
+          mkdir -p /tmp/actionlint-bin
+          curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- latest /tmp/actionlint-bin
           /tmp/actionlint-bin/actionlint -color .github/workflows/*.yml
       - name: Structural gates (C0)
         run: |
