@@ -332,7 +332,7 @@ jobs:
           done
       - name: Upload e2e evidence (traces, screenshots, stack logs)
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75bde449cb0b069f1e10c8e86e1
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: e2e-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -633,7 +633,7 @@ jobs:
           echo "digest: ${{ needs.publish.outputs.digest }}"
       - name: Upload the digest artifact (tag runs reuse it — no rebuild)
         run: printf '%s' '${{ needs.publish.outputs.digest }}' > /tmp/image-digest.txt
-      - uses: actions/upload-artifact@ea165f8d65b6e75bde449cb0b069f1e10c8e86e1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: image-digest
           path: /tmp/image-digest.txt
