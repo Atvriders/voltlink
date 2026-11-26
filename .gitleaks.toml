@@ -22,6 +22,10 @@
     # CI boot fixture master key (exactly 32 bytes; the previous readable
     # fixture was 37 bytes and made every envelope seal 500).
     'uL2hWy3aGmYKcQI4soDsYMdM2fABx/kO251Dx5uKAps=',
+    # Retired CI master-key fixture: replaced by the key above, but the scan
+    # covers --all history, so the old string must stay allowlisted too.
+    'ci-e2e-master-key-not-produc',
+    'Y2ktZTJlLW1hc3Rlci1rZXktbm90LXByb2R1Y3Rp',
     # Fictional fixture master key ('not-a-real-master-key-0123456789') used
     # by ci/compose.env and the NEW-10 boot test.
     'bm90LWEtcmVhbC1tYXN0ZXIta2V5LTAxMjM0NTY3ODk=',
