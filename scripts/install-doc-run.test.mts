@@ -82,4 +82,36 @@ describe('install-doc-run (C5)', () => {
     const up = blocks.find((b) => b.name === 'quick-up')!;
     expect(substitute(up.body, { ciOverlay: 'docker-compose.ci.yml' })).toBe(up.body);
   });
+
+  // Item 2a: the guide's get-files block downloads the entry compose file too;
+  // without --entry-src that curl fetched the nonexistent v1.1.1 tag (404) and
+  // killed the image job. CI must supply every source, and the runner must
+  // refuse to execute a block that would still hit raw.githubusercontent.com.
+  it('CI mode substitutes every download in the guide and the README, no raw URL survives', () => {
+    const opts = {
+      composeSrc: '/checkout/compose.production.yml',
+      entrySrc: '/checkout/docker-compose.yml',
+      envExampleSrc: '/checkout/.env.example',
+    };
+    for (const file of ['docs/DOCKER_COMPOSE.md', 'README.md']) {
+      for (const b of parseGuideBlocks(readFileSync(`${repo}${file}`, 'utf8'))) {
+        const out = substitute(b.body, opts);
+        expect(out, `${file}#${b.name}`).not.toContain('raw.githubusercontent.com');
+        expect(out, `${file}#${b.name}`).not.toContain('curl -fsSL');
+      }
+    }
+  });
+
+  it('the runner fails a CI-mode block whose download source is missing', () => {
+    const block = parseGuideBlocks(readFileSync(`${repo}docs/DOCKER_COMPOSE.md`, 'utf8')).find(
+      (b) => b.name === 'get-files',
+    )!;
+    // --entry-src omitted: the docker-compose.yml curl would stay real.
+    expect(() =>
+      substitute(block.body, {
+        composeSrc: '/checkout/compose.production.yml',
+        envExampleSrc: '/checkout/.env.example',
+      }),
+    ).toThrow(/unsubstituted download URL.*docker-compose\.yml/);
+  });
 });

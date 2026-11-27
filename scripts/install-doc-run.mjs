@@ -78,6 +78,13 @@ export function substitute(block, opts) {
       `cp ${opts.envExampleSrc} .env.example`,
     );
   }
+  // In CI mode (any checkout source given) a surviving download URL would
+  // fetch a tag that may not exist yet — the v1.1.1 404 that killed the image
+  // job. Fail the run instead of letting curl do it.
+  if (opts.composeSrc || opts.entrySrc || opts.envExampleSrc) {
+    const left = body.match(/https:\/\/raw\.githubusercontent\.com\/\S+/);
+    if (left) throw new Error(`unsubstituted download URL remains: ${left[0]}`);
+  }
   return body;
 }
 
@@ -146,7 +153,13 @@ const main = () => {
       console.log(`\n== skip block ${block.name} ==`);
       continue;
     }
-    const body = substitute(block.body, opts);
+    let body;
+    try {
+      body = substitute(block.body, opts);
+    } catch (e) {
+      console.error(`block ${block.name}: ${e.message}`);
+      process.exit(1);
+    }
     console.log(`\n== run block ${block.name} ==`);
     console.log(body);
     if (opts.dryRun) continue;
