@@ -193,11 +193,12 @@ describe('install-doc-run (C5)', () => {
     );
     expect(existsSync(join(work, 'compose.production.yml'))).toBe(true);
     const compose = composeCmd();
-    if (!compose) {
+    const bin = compose?.[0];
+    if (!compose || !bin) {
       console.warn('no compose binary (set VOLTLINK_COMPOSE_BIN) — file copy asserted only');
       return;
     }
-    execFileSync(compose[0], [...compose.slice(1), 'config', '-q'], {
+    execFileSync(bin, [...compose.slice(1), 'config', '-q'], {
       cwd: work,
       env: { ...process.env, COMPOSE_FILE: 'compose.production.yml:docker-compose.ci.yml' },
       stdio: 'pipe',
