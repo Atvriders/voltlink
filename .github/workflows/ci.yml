@@ -770,7 +770,11 @@ jobs:
           # The exact commands tag-release runs at tag time, proven here on
           # main against the tag this run just published.
           set -e
-          TAG="ghcr.io/${{ github.repository }}:sha-${{ github.sha }}"
+          # GHCR references must be lowercase; github.repository keeps the
+          # owner's casing (Atvriders/voltlink). metadata-action lowercases the
+          # publish tags, so mirror that here.
+          REPO=$(printf '%s' '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
+          TAG="ghcr.io/${REPO}:sha-${{ github.sha }}"
           GOT=$(docker buildx imagetools inspect "$TAG" --format '{{json .Manifest.Digest}}' | tr -d '"')
           [ "$GOT" = "${{ needs.publish.outputs.digest }}" ] || { echo "::error::sha tag digest $GOT != publish digest ${{ needs.publish.outputs.digest }}"; exit 1; }
           LABELS=$(docker buildx imagetools inspect "$TAG" --format '{{json .Image.Labels}}')
@@ -819,8 +823,12 @@ jobs:
       - name: sha tag digest, package version and image label all agree
         run: |
           set -e
+          # GHCR references must be lowercase (github.repository keeps the
+          # owner's casing; metadata-action lowercased the publish tags).
+          REPO=$(printf '%s' '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
+          echo "REPO=$REPO" >> "$GITHUB_ENV"
           DIGEST=$(cat image-digest.txt)
-          SHA_TAG="ghcr.io/${{ github.repository }}:sha-${{ github.sha }}"
+          SHA_TAG="ghcr.io/${REPO}:sha-${{ github.sha }}"
           GOT=$(docker buildx imagetools inspect "$SHA_TAG" --format '{{json .Manifest.Digest}}' | tr -d '"')
           [ "$GOT" = "$DIGEST" ] || { echo "::error::sha tag digest $GOT != main's artifact digest $DIGEST"; exit 1; }
           VERSION="v$(node -p "require('./package.json').version")"
@@ -831,7 +839,7 @@ jobs:
           echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
       - name: Point the version tag at the verified digest (copy the index unchanged)
         run: |
-          REF="ghcr.io/${{ github.repository }}:${GITHUB_REF_NAME}"
+          REF="ghcr.io/${REPO}:${GITHUB_REF_NAME}"
           if docker buildx imagetools inspect "$REF" >/dev/null 2>&1; then
             EXISTING=$(docker buildx imagetools inspect "$REF" --format '{{json .Manifest.Digest}}' | tr -d '"')
             if [ "$EXISTING" = "$DIGEST" ]; then
@@ -840,19 +848,19 @@ jobs:
               echo "::error::version tag exists with a different digest ($EXISTING)"; exit 1
             fi
           else
-            docker buildx imagetools create --tag "$REF" "ghcr.io/${{ github.repository }}@$DIGEST"
+            docker buildx imagetools create --tag "$REF" "ghcr.io/${REPO}@$DIGEST"
           fi
       - name: Log out, then the anonymous registry fetch matches the digest
         run: |
           docker logout ghcr.io || true
           # Anonymous manifest fetch (what a pull does) must see the tag.
-          PULLED=$(docker buildx imagetools inspect "ghcr.io/${{ github.repository }}:${GITHUB_REF_NAME}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          PULLED=$(docker buildx imagetools inspect "ghcr.io/${REPO}:${GITHUB_REF_NAME}" --format '{{json .Manifest.Digest}}' | tr -d '"')
           [ "$PULLED" = "$DIGEST" ] || { echo "::error::anonymous fetch digest $PULLED != $DIGEST"; exit 1; }
       - name: Create the GitHub release
         run: |
           gh release create "${GITHUB_REF_NAME}" \
             --title "VoltLink ${GITHUB_REF_NAME}" \
-            --notes "Image: ghcr.io/${{ github.repository }}@$DIGEST" \
+            --notes "Image: ghcr.io/${REPO}@$DIGEST" \
             --target "${{ github.sha }}"
         env:
           GH_TOKEN: ${{ github.token }}
@@ -945,7 +953,12 @@ jobs:
           cp ../compose.production.yml compose.production.yml
           cp ../docker-compose.ci.yml docker-compose.ci.yml
           printf 'COMPOSE_FILE=compose.production.yml:docker-compose.ci.yml\n' >> .env
-          docker compose -p voltlink up -d --wait
+          # The new compose adds the egress network, so Compose recreates the
+          # project networks. Unchanged services are only stop/started and keep
+          # the OLD network attachment, and migrate then cannot resolve
+          # postgres ('getaddrinfo EAI_AGAIN postgres'). --force-recreate puts
+          # every container on the new networks; data stays in the volume.
+          docker compose -p voltlink up -d --wait --force-recreate
           # 5) same voltlink_pgdata volume, new migration rows, data + sign-in
           #    survive.
           AFTER=$(docker compose -p voltlink exec -T postgres psql -U voltlink -d voltlink -tAc "SELECT count(*) FROM _prisma_migrations")
