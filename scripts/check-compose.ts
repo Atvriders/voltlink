@@ -52,6 +52,9 @@ interface ComposeFile {
   volumesDeclared: string[];
   networksUsed: string[];
   volumesUsed: string[];
+  internalNets: string[];
+  serviceNets: Map<string, string[]>;
+  servicesWithPorts: string[];
   buildSeen: boolean;
   images: string[];
   errors: string[];
@@ -64,6 +67,10 @@ function parseCompose(src: string, file: string): ComposeFile {
   const volumesDeclared: string[] = [];
   const networksUsed: string[] = [];
   const volumesUsed: string[] = [];
+  const internalNets: string[] = [];
+  const serviceNets = new Map<string, string[]>();
+  const servicesWithPorts = new Set<string>();
+  let netMember = '';
   let buildSeen = false;
   const images: string[] = [];
   const errors: string[] = [];
@@ -90,6 +97,13 @@ function parseCompose(src: string, file: string): ComposeFile {
       const m = line.match(/^ {2}([\w-]+):\s*$/);
       if (m) {
         networksDeclared.push(m[1]!);
+        netMember = m[1]!;
+        continue;
+      }
+      // `internal: true` on the current network member (published ports are
+      // silently not applied on internal-only networks).
+      if (netMember && /^\s{4}internal:\s*true\s*$/.test(line)) {
+        internalNets.push(netMember);
         continue;
       }
     }
@@ -151,11 +165,20 @@ function parseCompose(src: string, file: string): ComposeFile {
     }
     const mNets = line.match(/^ {4}networks:\s*\[(.*)\]$/);
     if (mNets) {
+      const names: string[] = [];
       for (const n of mNets[1]!.split(',')) {
         const name = n.trim();
-        if (name) networksUsed.push(name);
+        if (name) {
+          networksUsed.push(name);
+          names.push(name);
+        }
       }
+      if (role) serviceNets.set(role, names);
       continue;
+    }
+    // A service that publishes a host port (block or inline list).
+    if (/^ {4}ports:/.test(line)) {
+      if (role) servicesWithPorts.add(role);
     }
     const mVols = line.match(/^ {4}volumes:\s*\[(.*)\]$/);
     if (mVols) {
@@ -221,6 +244,9 @@ function parseCompose(src: string, file: string): ComposeFile {
     volumesDeclared,
     networksUsed,
     volumesUsed,
+    internalNets,
+    serviceNets,
+    servicesWithPorts: [...servicesWithPorts],
     buildSeen,
     images,
     errors,
@@ -276,6 +302,20 @@ async function main(): Promise<void> {
       if (!parsed.volumesDeclared.includes(v) && !v.startsWith('.') && v !== 'pgdata') {
         failed = true;
         console.error(`✖ ${file}: service uses undeclared volume '${v}'.`);
+      }
+    }
+
+    // Docker records a port binding on internal-only containers and never
+    // applies it: `HostConfig.PortBindings` shows the mapping while
+    // `NetworkSettings.Ports` stays null and nothing answers on the host.
+    // The status role shipped this way once; the documented URL was dead.
+    for (const svc of parsed.servicesWithPorts) {
+      const nets = parsed.serviceNets.get(svc) ?? [];
+      if (nets.length > 0 && nets.every((n) => parsed.internalNets.includes(n))) {
+        failed = true;
+        console.error(
+          `✖ ${file}: service '${svc}' publishes ports but joins only internal networks (${nets.join(', ')}) — Docker silently never applies the binding; add a non-internal network.`,
+        );
       }
     }
 

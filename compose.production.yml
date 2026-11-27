@@ -214,7 +214,13 @@ services:
     environment:
       <<: *app_env
       VL_ROLE: status
-    networks: [internal]
+    # NOT internal-only: Docker does not publish a port for a container that
+    # is attached only to an `internal: true` network (the binding is
+    # recorded in HostConfig and silently left unapplied, so the documented
+    # host URL never answers). The status role is the public page and also
+    # reaches providers for its own checks, so it joins egress like the other
+    # app roles; backend traffic stays on `internal`.
+    networks: [internal, egress]
     depends_on:
       postgres:
         condition: service_healthy
