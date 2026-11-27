@@ -24,12 +24,34 @@ function prismaCli(): string {
 export async function runMigrations(): Promise<void> {
   await withAdvisoryLock('voltlink:migrations', async () => {
     // Direct SQL connection check first — if the DB is down, fail fast with a
-    // clear message instead of a stack of Prisma noise.
-    const client = await pool.connect();
-    try {
-      await client.query('SELECT 1');
-    } finally {
-      client.release();
+    // clear message instead of a stack of Prisma noise. Transient resolver
+    // failures are retried: Compose recreates the project networks on an
+    // in-place upgrade (the new stack adds `egress`), and the embedded DNS
+    // can answer EAI_AGAIN for a moment right after that. The other roles
+    // already poll for the schema; this role must not be the one that dies.
+    const deadline = Date.now() + 60_000;
+    for (;;) {
+      try {
+        const client = await pool.connect();
+        try {
+          await client.query('SELECT 1');
+        } finally {
+          client.release();
+        }
+        break;
+      } catch (err) {
+        const code = (err as { code?: string }).code ?? '';
+        const transient = [
+          'EAI_AGAIN',
+          'ENOTFOUND',
+          'ECONNREFUSED',
+          'ECONNRESET',
+          'ETIMEDOUT',
+        ].includes(code);
+        if (!transient || Date.now() >= deadline) throw err;
+        console.error(`[voltlink] database not reachable yet (${code}); retrying in 2s`);
+        await new Promise((r) => setTimeout(r, 2000));
+      }
     }
     const bin = prismaCli();
     if (bin.endsWith('.js')) {
