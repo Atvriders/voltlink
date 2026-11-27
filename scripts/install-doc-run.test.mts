@@ -131,6 +131,35 @@ describe('install-doc-run (C5)', () => {
     ).toThrow(/unsubstituted download URL.*docker-compose\.yml/);
   });
 
+  // Item 5: R2-52/TI-18 are proven by running the documented restore, not by
+  // `pg_restore … || true`. The doc's blocks must stay marked, must fail on
+  // real restore errors, and must compare restored row counts.
+  it('BACKUP_RESTORE.md is runnable and its restore cannot pass silently', () => {
+    const blocks = parseGuideBlocks(readFileSync(`${repo}docs/BACKUP_RESTORE.md`, 'utf8'));
+    expect(blocks.map((b) => b.name)).toEqual([
+      'backup',
+      'restore-create-db',
+      'restore-load',
+      'restore-verify',
+      'restore-boot',
+    ]);
+    const load = blocks.find((b) => b.name === 'restore-load')!;
+    // The restore command itself carries no `|| true` (the only tolerance is
+    // the named benign-error filter below it).
+    const lines = load.body.split('\n');
+    const at = lines.findIndex((l) => l.includes('pg_restore'));
+    expect(at).toBeGreaterThanOrEqual(0);
+    expect(lines[at]).not.toContain('|| true');
+    expect(lines[at + 1]).not.toContain('|| true');
+    expect(load.body).toContain('cannot drop table');
+    expect(load.body).toContain('exit 1');
+    const verify = blocks.find((b) => b.name === 'restore-verify')!;
+    for (const table of ['User', 'Organization', 'Vehicle', 'VehicleCommand']) {
+      expect(verify.body, table).toContain(table);
+    }
+    expect(verify.body).toContain('exit 1');
+  });
+
   // Item 2b: every block runs with cwd = workdir and
   // COMPOSE_FILE=compose.production.yml:docker-compose.ci.yml, so the overlay
   // must be in the workdir. Without the copy, Compose fails with

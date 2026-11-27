@@ -475,11 +475,12 @@ jobs:
       - name: Backup, restore and down/down -v per the docs (R2-52/R2-05)
         run: |
           cd compose-smoke
-          # backup per BACKUP_RESTORE.md
-          docker compose exec -T postgres pg_dump -U voltlink -d voltlink -Fc > backup.dump
-          # restore into a fresh database per BACKUP_RESTORE.md
-          docker compose exec -T postgres psql -U voltlink -d postgres -c 'CREATE DATABASE voltlink_restore'
-          docker compose exec -T postgres pg_restore -U voltlink -d voltlink_restore < backup.dump || true
+          # BACKUP_RESTORE.md's marked blocks run verbatim: dump, fresh
+          # database, restore (fails on anything but the four benign partition
+          # errors), row-count equality for User/Organization/Vehicle/
+          # VehicleCommand, and boot against the restored database.
+          node ../scripts/install-doc-run.mjs --guide ../docs/BACKUP_RESTORE.md \
+            --workdir . --ci-overlay docker-compose.ci.yml
           # 'down' keeps the volume; boot again and the account must still exist
           docker compose down
           docker compose up -d --wait
