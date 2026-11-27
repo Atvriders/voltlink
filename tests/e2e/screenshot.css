@@ -30,6 +30,10 @@ html,
 body,
 * {
   font-family: 'VLVisualTestFont', sans-serif !important;
+  /* Force grayscale antialiasing everywhere: fontconfig's subpixel order
+   * (rgba) differs between Debian and the ubuntu runner image, and the
+   * color fringes it produces move per-channel pixels around. */
+  -webkit-font-smoothing: antialiased !important;
 }
 
 [data-testid='vehicle-viewer'] canvas {

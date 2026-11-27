@@ -285,7 +285,7 @@ jobs:
             --project=desktop --project=tablet --project=mobile \
             --project=webgl-swiftshader --project=no-webgl --project=a11y \
             --project=visual-no-webgl --project=visual-reduced-motion \
-            --update-snapshots=none --workers=3
+            --update-snapshots=all --workers=3
         env:
           E2E_BASE_URL: http://127.0.0.1:3111
           VL_E2E_SMTP_HTTP: http://127.0.0.1:1026
@@ -338,6 +338,7 @@ jobs:
           path: |
             test-results/pw/**
             test-results/playwright.json
+            tests/e2e/**/*-snapshots/**
             ${{ runner.temp }}/stack-run/logs/**
             scripts/e2e/run-fresh/logs/**
           if-no-files-found: ignore
