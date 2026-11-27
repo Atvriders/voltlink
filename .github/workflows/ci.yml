@@ -501,6 +501,12 @@ jobs:
             -keyout tesla/proxy-tls/tls-key.pem -out tesla/proxy-tls/tls-cert.pem \
             -subj '/CN=tesla-proxy' -addext 'subjectAltName=DNS:tesla-proxy'
           openssl ecparam -name prime256v1 -genkey -noout -out tesla/keys/fleet-key.pem
+          # The proxy runs as uid 65532 and reads both private keys from
+          # read-only mounts; openssl writes them 0600 owned by the runner, so
+          # apply the ownership docs/TESLA_SETUP.md documents (the CI step used
+          # to skip it: 'Error: open /keys/fleet-key.pem: permission denied').
+          sudo chown 65532:65532 tesla/keys/fleet-key.pem tesla/proxy-tls/tls-key.pem
+          sudo chmod 0400 tesla/keys/fleet-key.pem tesla/proxy-tls/tls-key.pem
           docker compose --profile tesla up -d --wait
           # compose --wait is satisfied by 'running' for a service without a
           # healthcheck (tesla-proxy has none), so poll the real TLS probe.
