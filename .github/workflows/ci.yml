@@ -681,10 +681,22 @@ jobs:
           TOKEN=$(docker compose logs web 2>&1 | grep 'first-run setup token' | tail -1 | awk '{print $NF}')
           test -n "$TOKEN" || { echo 'no first-run token in web log'; exit 1; }
           SMOKE_SETUP_TOKEN="$TOKEN" node ../scripts/smoke.mjs
-          docker compose down -v
-      - name: The booted digest equals the publish output (I-V100)
+      - name: The booted digest equals the publish output, then clean up (I-V100)
         run: |
-          echo "digest: ${{ needs.publish.outputs.digest }}"
+          # The guide blocks boot VOLTLINK_IMAGE_DIGEST=@<publish digest>; prove
+          # the running web container really is that digest instead of only
+          # printing it (the stack is torn down here, after the check).
+          set -e
+          cd published-smoke
+          CID=$(docker compose ps -q web)
+          test -n "$CID" || { echo '::error::no web container'; exit 1; }
+          IMAGE_ID=$(docker inspect "$CID" --format '{{.Image}}')
+          REPOS=$(docker image inspect --format '{{json .RepoDigests}}' "$IMAGE_ID")
+          echo "booted web image: $IMAGE_ID $REPOS"
+          echo "$REPOS" | grep -Fq "@${{ needs.publish.outputs.digest }}" \
+            || { echo "::error::booted image does not carry @${{ needs.publish.outputs.digest }}"; exit 1; }
+          echo 'ok: booted web runs the published digest'
+          docker compose down -v
       - name: The sha tag digest and labels agree with this checkout (item 8)
         run: |
           # The exact commands tag-release runs at tag time, proven here on
