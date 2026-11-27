@@ -502,18 +502,31 @@ jobs:
             -subj '/CN=tesla-proxy' -addext 'subjectAltName=DNS:tesla-proxy'
           openssl ecparam -name prime256v1 -genkey -noout -out tesla/keys/fleet-key.pem
           docker compose --profile tesla up -d --wait
-          docker compose exec -T web node -e "
-            const https = require('https');
-            const req = https.request({ host: 'tesla-proxy', port: 4443, path: '/', ca: require('fs').readFileSync('/run/voltlink/tesla/proxy-tls/tls-cert.pem') }, (res) => { console.log('web->tesla-proxy status', res.statusCode); process.exit(res.statusCode < 500 ? 0 : 1); });
-            req.on('error', (e) => { console.error(e.message); process.exit(1); });
-            req.end();
-          "
-          docker compose exec -T worker node -e "
-            const https = require('https');
-            const req = https.request({ host: 'tesla-proxy', port: 4443, path: '/', ca: require('fs').readFileSync('/run/voltlink/tesla/proxy-tls/tls-cert.pem') }, (res) => { console.log('worker->tesla-proxy status', res.statusCode); process.exit(res.statusCode < 500 ? 0 : 1); });
-            req.on('error', (e) => { console.error(e.message); process.exit(1); });
-            req.end();
-          "
+          # compose --wait is satisfied by 'running' for a service without a
+          # healthcheck (tesla-proxy has none), so poll the real TLS probe.
+          probe_from() {
+            svc="$1"
+            attempt=1
+            while [ "$attempt" -le 20 ]; do
+              if docker compose exec -T "$svc" node -e "
+                const https = require('https');
+                const req = https.request({ host: 'tesla-proxy', port: 4443, path: '/', ca: require('fs').readFileSync('/run/voltlink/tesla/proxy-tls/tls-cert.pem') }, (res) => { console.log('$svc->tesla-proxy status', res.statusCode); process.exit(res.statusCode < 500 ? 0 : 1); });
+                req.on('error', (e) => { console.error(e.message); process.exit(1); });
+                req.end();
+              "; then
+                return 0
+              fi
+              echo "attempt $attempt/20: $svc -> tesla-proxy not ready"
+              attempt=$((attempt + 1))
+              sleep 3
+            done
+            echo "::error::$svc could not reach tesla-proxy" >&2
+            docker compose --profile tesla ps >&2 || true
+            docker compose --profile tesla logs --no-color --tail 60 tesla-proxy >&2 || true
+            return 1
+          }
+          probe_from web
+          probe_from worker
       - name: Backup, restore and down/down -v per the docs (R2-52/R2-05)
         run: |
           cd compose-smoke
@@ -526,7 +539,19 @@ jobs:
           # 'down' keeps the volume; boot again and the account must still exist
           docker compose down
           docker compose up -d --wait
-          curl -fsS http://127.0.0.1:3110/healthz
+          # Same rule as the status step: prove the published port, don't
+          # trust --wait's word after a recreate.
+          served=''
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3110/healthz; then served=yes; break; fi
+            echo "attempt $attempt/30: :3110 not answering yet"
+            sleep 2
+          done
+          [ -n "$served" ] || {
+            docker compose ps >&2 || true
+            docker compose logs --no-color --tail 80 web >&2 || true
+            exit 1
+          }
           docker compose down -v
 
   compose-validate:
