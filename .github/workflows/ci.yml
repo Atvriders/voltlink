@@ -636,7 +636,7 @@ jobs:
           tags: |
             type=sha,format=long
           # R10 step 6: revision/created/source come from the metadata action;
-          # the version label is package.json's (11.1.1 at tag time), which
+          # the version label is package.json's (1.1.1 at tag time), which
           # tag-release compares with the tag.
           labels: |
             org.opencontainers.image.version=${{ steps.ver.outputs.version }}
