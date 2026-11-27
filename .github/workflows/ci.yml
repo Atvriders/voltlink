@@ -789,8 +789,13 @@ jobs:
             printf 'PUBLIC_URL=http://127.0.0.1:3110\n'
             printf 'VL_ALLOW_INSECURE_HTTP=true\n'
           } > .env
-          BEFORE="$( (docker compose -p voltlink -f compose.production.yml exec -T postgres psql -U voltlink -d voltlink -tAc "SELECT count(*) FROM _prisma_migrations" 2>/dev/null) || true )"
           VOLTLINK_IMAGE_TAG=v1.0.0 docker compose -p voltlink -f compose.production.yml up -d --wait
+          # 7b: measure BEFORE only after v1.0.0 has booted (its migrate role
+          # has applied its own migrations); measuring earlier was always
+          # empty, so 'test AFTER -gt BEFORE' could never fail.
+          BEFORE=$(docker compose -p voltlink -f compose.production.yml exec -T postgres psql -U voltlink -d voltlink -tAc "SELECT count(*) FROM _prisma_migrations")
+          echo "v1.0.0 migration rows: $BEFORE"
+          test "${BEFORE:-0}" -ge 1
           # 3) v1.0.0 cannot bootstrap through its API (no setup token is
           #    logged and the UI has no field for one — CHANGELOG 1.1.0);
           #    seed with its migrate role (already run at boot) + SQL fixtures.
