@@ -793,9 +793,21 @@ jobs:
           # Push the tag right after main's green run so the docs' release URL
           # is broken for as short a window as possible; this post-tag check
           # proves the URL now serves exactly what this checkout shipped.
-          curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/${GITHUB_REF_NAME}/compose.production.yml" -o /tmp/release-compose.yml
+          URL="https://raw.githubusercontent.com/${{ github.repository }}/${GITHUB_REF_NAME}/compose.production.yml"
+          # raw.githubusercontent.com can serve 404 for a minute or two right
+          # after a tag push (CDN lag); retry ~2 minutes before failing.
+          served=''
+          for attempt in $(seq 1 24); do
+            if curl -fsSL "$URL" -o /tmp/release-compose.yml 2>/dev/null; then
+              served=yes
+              break
+            fi
+            echo "attempt $attempt/24: $URL not served yet; retrying in 5 s"
+            sleep 5
+          done
+          [ -n "$served" ] || { echo "::error::$URL did not serve a file within ~2 minutes"; exit 1; }
           diff -q compose.production.yml /tmp/release-compose.yml
-          echo "ok: https://raw.githubusercontent.com/${{ github.repository }}/${GITHUB_REF_NAME}/compose.production.yml serves the checkout file"
+          echo "ok: $URL serves the checkout file"
 
   upgrade-smoke:
     runs-on: ubuntu-latest
