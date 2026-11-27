@@ -2,12 +2,28 @@
 // block of docs/DOCKER_COMPOSE.md and nothing that is not in the guide. A test
 // proves the marker set, the substitutions and the environment the runner
 // exports (CI overlay + digest pin — the guide itself needs no COMPOSE_FILE).
-import { readFileSync } from 'node:fs';
+import { execFileSync, execSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseGuideBlocks, substitute, buildKeptEnv } from './install-doc-run.mjs';
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
+
+// The compose binary for the layout test: an explicit standalone binary via
+// VOLTLINK_COMPOSE_BIN (no daemon needed for `config`), else `docker compose`
+// if this machine has one.
+function composeCmd(): string[] | null {
+  if (process.env.VOLTLINK_COMPOSE_BIN) return [process.env.VOLTLINK_COMPOSE_BIN];
+  try {
+    execSync('docker compose version', { stdio: 'ignore' });
+    return ['docker', 'compose'];
+  } catch {
+    return null;
+  }
+}
 
 describe('install-doc-run (C5)', () => {
   it('the guide carries exactly the expected runnable blocks', () => {
@@ -113,5 +129,49 @@ describe('install-doc-run (C5)', () => {
         envExampleSrc: '/checkout/.env.example',
       }),
     ).toThrow(/unsubstituted download URL.*docker-compose\.yml/);
+  });
+
+  // Item 2b: every block runs with cwd = workdir and
+  // COMPOSE_FILE=compose.production.yml:docker-compose.ci.yml, so the overlay
+  // must be in the workdir. Without the copy, Compose fails with
+  // "stat …/docker-compose.ci.yml: no such file or directory".
+  it('the CI overlay lands in the work directory and compose config accepts the layout', () => {
+    const work = mkdtempSync(join(tmpdir(), 'docrun-overlay-'));
+    execFileSync(
+      process.execPath,
+      [
+        'scripts/install-doc-run.mjs',
+        '--workdir',
+        work,
+        '--compose-src',
+        join(repo, 'compose.production.yml'),
+        '--entry-src',
+        join(repo, 'docker-compose.yml'),
+        '--env-example-src',
+        join(repo, '.env.example'),
+        '--ci-overlay',
+        'docker-compose.ci.yml',
+        '--skip',
+        'env-lan,env-https,env-webauthn',
+        '--until',
+        'get-files', // materializes the downloaded files, runs no stack
+      ],
+      { cwd: repo, stdio: 'pipe' },
+    );
+    expect(existsSync(join(work, 'docker-compose.ci.yml'))).toBe(true);
+    expect(readFileSync(join(work, 'docker-compose.ci.yml'), 'utf8')).toBe(
+      readFileSync(join(repo, 'docker-compose.ci.yml'), 'utf8'),
+    );
+    expect(existsSync(join(work, 'compose.production.yml'))).toBe(true);
+    const compose = composeCmd();
+    if (!compose) {
+      console.warn('no compose binary (set VOLTLINK_COMPOSE_BIN) — file copy asserted only');
+      return;
+    }
+    execFileSync(compose[0], [...compose.slice(1), 'config', '-q'], {
+      cwd: work,
+      env: { ...process.env, COMPOSE_FILE: 'compose.production.yml:docker-compose.ci.yml' },
+      stdio: 'pipe',
+    });
   });
 });

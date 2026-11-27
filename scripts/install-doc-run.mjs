@@ -11,8 +11,10 @@
 //   3. the `.env.example` curl becomes `cp <--env-example-src> .env.example`.
 // `--ci-overlay` exports `COMPOSE_FILE=compose.production.yml:<overlay>` for
 // every block so the run boots the CI image swap instead of pulling from
-// GHCR (the guide stays bare `docker compose`); `--image-digest` exports
-// `VOLTLINK_IMAGE_DIGEST` for the same reason. Both are printed.
+// GHCR (the guide stays bare `docker compose`), and copies the overlay into
+// the work directory (Compose resolves COMPOSE_FILE entries relative to cwd);
+// `--image-digest` exports `VOLTLINK_IMAGE_DIGEST` for the same reason. Both
+// are printed.
 // `--skip` drops named blocks (CI skips the non-localhost PUBLIC_URL cases).
 // `--also` runs the marked quick-start blocks of an extra doc (README).
 //
@@ -24,7 +26,8 @@
 //        [--from name] [--until name] [--dry-run]
 
 import { execSync } from 'node:child_process';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { basename, join, resolve } from 'node:path';
 
 function parseArgs(argv) {
   const out = { guide: 'docs/DOCKER_COMPOSE.md' };
@@ -125,6 +128,14 @@ const main = () => {
     : [];
   const all = [...blocks, ...extra];
   if (opts.workdir) mkdirSync(opts.workdir, { recursive: true });
+  // The blocks run with cwd = workdir and
+  // COMPOSE_FILE=compose.production.yml:<overlay>; Compose resolves every
+  // COMPOSE_FILE entry relative to cwd, so the overlay must be copied in.
+  if (opts.ciOverlay) {
+    const dest = join(opts.workdir ?? '.', basename(opts.ciOverlay));
+    copyFileSync(resolve(opts.ciOverlay), dest);
+    console.log(`substitution: ${opts.ciOverlay} -> ${dest}`);
+  }
   const skip = new Set(opts.skip ?? []);
   const runFrom = opts.from ? all.findIndex((b) => b.name === opts.from) : 0;
   if (runFrom < 0) {
