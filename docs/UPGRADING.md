@@ -23,6 +23,18 @@
   docker compose up -d --wait
   ```
 
+- If the new release changes the compose networks (1.1.x adds the `egress`
+  network), Compose recreates them. Containers whose own definition did not
+  change are only stopped and started, and they keep the old network
+  attachment — the `migrate` role then cannot resolve `postgres`
+  (`getaddrinfo EAI_AGAIN postgres`). Run the first boot after such an
+  upgrade with `--force-recreate` (data lives in the `pgdata` volume, so
+  nothing is lost):
+
+  ```bash
+  docker compose up -d --wait --force-recreate
+  ```
+
 - The `migrate` service applies migrations on every boot under an advisory
   lock; the other roles wait for the migrations to be current.
 - Roll back by pinning the previous tag:
