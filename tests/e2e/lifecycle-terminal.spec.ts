@@ -80,6 +80,22 @@ async function waitForStatus(page: Page, commandId: string, status: string): Pro
   throw new Error(`command did not reach ${status} within 90s (last: ${last.status})`);
 }
 
+/** Poll until the command's confirmation field is written (a third worker
+ * write after the terminal status/event pair). */
+async function pollConfirmation(page: Page, commandId: string): Promise<string> {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const res = await page.request.get(`/api/v1/commands/${commandId}`);
+    expect(res.status(), 'command detail must be reachable').toBe(200);
+    const body = (await res.json()) as { data?: Cmd & { command?: Cmd } };
+    const data = body.data ?? ({} as Cmd & { command?: Cmd });
+    const cmd = data.command ?? data;
+    if (cmd.confirmation) return cmd.confirmation;
+    await page.waitForTimeout(500);
+  }
+  throw new Error('confirmation never landed within 30s');
+}
+
 test('@lifecycle R2-17: honk reaches accepted/not_observable with the full event chain (API + UI)', async ({
   page,
 }) => {
@@ -105,10 +121,14 @@ test('@lifecycle R2-17: honk reaches accepted/not_observable with the full event
 
   // API: terminal + event chain queued -> submitted -> accepted.
   const final = await waitTerminal(page, issued.id);
+  // R2-18: the worker writes the confirmation as a third write AFTER the
+  // terminal status/event pair; on a loaded runner it can land a beat later.
+  // Poll for it so the assertion never reads the command mid-write.
+  const confirmation = await pollConfirmation(page, issued.id);
   // commands-12: honk is not_observable — the spec is accepted AND the
   // confirmation field is not_observable, never the other way round.
   expect(final.status, 'honk terminal status').toBe('accepted');
-  expect(final.confirmation, 'honk confirmation').toBe('not_observable');
+  expect(confirmation, 'honk confirmation').toBe('not_observable');
   const events = (final.events ?? []).map((e) => e.event);
   const chain = ['queued', 'submitted'];
   for (const step of chain) {
