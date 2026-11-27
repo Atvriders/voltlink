@@ -445,16 +445,21 @@ jobs:
           docker compose --profile status up -d --wait
           curl -fsS http://127.0.0.1:3001/healthz
       - name: Tesla profile — throwaway TLS + proxy reachable from web/worker (R2-03)
+        # `-f` would REPLACE the job's COMPOSE_FILE (and with it the CI image
+        # swap), so the tesla mounts overlay is appended to it instead. The
+        # overlay is copied in because Compose resolves its ./tesla/... mounts
+        # relative to the overlay's own directory.
+        env:
+          COMPOSE_FILE: compose.production.yml:docker-compose.ci.yml:docker-compose.tesla-ci.yml
         run: |
           cd compose-smoke
+          cp ../docker-compose.tesla-ci.yml docker-compose.tesla-ci.yml
           mkdir -p tesla/proxy-tls tesla/keys
           openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
             -keyout tesla/proxy-tls/tls-key.pem -out tesla/proxy-tls/tls-cert.pem \
             -subj '/CN=tesla-proxy' -addext 'subjectAltName=DNS:tesla-proxy'
           openssl ecparam -name prime256v1 -genkey -noout -out tesla/keys/fleet-key.pem
-          # The CI overlay stays in COMPOSE_FILE; only the tesla mounts overlay
-          # is added on the command line.
-          docker compose -f ../docker-compose.tesla-ci.yml --profile tesla up -d --wait
+          docker compose --profile tesla up -d --wait
           docker compose exec -T web node -e "
             const https = require('https');
             const req = https.request({ host: 'tesla-proxy', port: 4443, path: '/', ca: require('fs').readFileSync('/run/voltlink/tesla/proxy-tls/tls-cert.pem') }, (res) => { console.log('web->tesla-proxy status', res.statusCode); process.exit(res.statusCode < 500 ? 0 : 1); });
