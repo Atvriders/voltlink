@@ -21,37 +21,30 @@ function prismaCli(): string {
   return path.join(prismaRoot, 'build', 'index.js');
 }
 
-export async function runMigrations(): Promise<void> {
+// Transient resolver/connection failures are retried: Compose recreates the
+// project networks on an in-place upgrade (the new stack adds `egress`), and
+// the container's embedded DNS can answer EAI_AGAIN for a moment right after
+// that. Every other role polls for the schema; this role must not be the one
+// that dies. The retry wraps the WHOLE pass because withAdvisoryLock acquires
+// its pooled client (the first thing that resolves `postgres`) before the
+// callback runs.
+const TRANSIENT_DB_CODES = new Set([
+  'EAI_AGAIN',
+  'ENOTFOUND',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+]);
+
+async function runMigrationPass(): Promise<void> {
   await withAdvisoryLock('voltlink:migrations', async () => {
     // Direct SQL connection check first — if the DB is down, fail fast with a
-    // clear message instead of a stack of Prisma noise. Transient resolver
-    // failures are retried: Compose recreates the project networks on an
-    // in-place upgrade (the new stack adds `egress`), and the embedded DNS
-    // can answer EAI_AGAIN for a moment right after that. The other roles
-    // already poll for the schema; this role must not be the one that dies.
-    const deadline = Date.now() + 60_000;
-    for (;;) {
-      try {
-        const client = await pool.connect();
-        try {
-          await client.query('SELECT 1');
-        } finally {
-          client.release();
-        }
-        break;
-      } catch (err) {
-        const code = (err as { code?: string }).code ?? '';
-        const transient = [
-          'EAI_AGAIN',
-          'ENOTFOUND',
-          'ECONNREFUSED',
-          'ECONNRESET',
-          'ETIMEDOUT',
-        ].includes(code);
-        if (!transient || Date.now() >= deadline) throw err;
-        console.error(`[voltlink] database not reachable yet (${code}); retrying in 2s`);
-        await new Promise((r) => setTimeout(r, 2000));
-      }
+    // clear message instead of a stack of Prisma noise.
+    const client = await pool.connect();
+    try {
+      await client.query('SELECT 1');
+    } finally {
+      client.release();
     }
     const bin = prismaCli();
     if (bin.endsWith('.js')) {
@@ -67,6 +60,21 @@ export async function runMigrations(): Promise<void> {
     }
     await runDataTasks();
   });
+}
+
+export async function runMigrations(): Promise<void> {
+  const deadline = Date.now() + 60_000;
+  for (;;) {
+    try {
+      await runMigrationPass();
+      return;
+    } catch (err) {
+      const code = (err as { code?: string }).code ?? '';
+      if (!TRANSIENT_DB_CODES.has(code) || Date.now() >= deadline) throw err;
+      console.error(`[voltlink] database not reachable yet (${code}); retrying in 2s`);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
 }
 
 export async function pendingMigrations(): Promise<string[]> {
