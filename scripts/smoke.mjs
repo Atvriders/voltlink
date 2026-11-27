@@ -10,11 +10,17 @@
 //  - Login reuse (post-restart smoke): SMOKE_EMAIL + SMOKE_PASSWORD log in
 //    with the existing instance instead of registering (no AppSetting rows
 //    are deleted, R2-27).
+//  - SMOKE_ALLOW_ACCEPTED=1 (ONLY the upgrade-smoke's pre-upgrade run):
+//    v1.0.0's demo provider answers {kind:'accepted'} and has no confirmation
+//    step, so 'accepted' is that release's terminal state. Never set it
+//    anywhere else — the post-upgrade run in the same job keeps the strict
+//    R2-27 check.
 
 const base = process.env.SMOKE_BASE ?? 'http://127.0.0.1:3110';
 const setupToken = process.env.SMOKE_SETUP_TOKEN ?? '';
 const loginEmail = process.env.SMOKE_EMAIL ?? '';
 const loginPassword = process.env.SMOKE_PASSWORD ?? '';
+const allowAccepted = process.env.SMOKE_ALLOW_ACCEPTED === '1';
 const TERMINAL = new Set(['confirmed', 'failed', 'rejected', 'timed_out', 'canceled']);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -123,7 +129,11 @@ async function main() {
     const data = await list.json();
     const rows = data.data?.items ?? data.data ?? [];
     for (const row of rows) {
-      if (row.completedAt || TERMINAL.has(row.status)) {
+      if (
+        row.completedAt ||
+        TERMINAL.has(row.status) ||
+        (allowAccepted && row.status === 'accepted')
+      ) {
         terminal = true;
         console.log('command terminal state', row.status, row.confirmation ?? '');
         break;
