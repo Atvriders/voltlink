@@ -269,6 +269,16 @@ test('R2-44: per-class pixels, presets and GPU memory return to baseline', async
       .poll(() => viewer.first().getAttribute('data-asset'), { timeout: 30000 })
       .toBe('glb');
   }
+  // The final remount reports data-asset=glb as soon as the GLB is loaded,
+  // but data-gpu-geometries stays 0 until the first scene build. Under load
+  // that gap is wide enough to race the read below (baseline 27 -> 0 on the
+  // shared runner), so wait for the geometry counters to come back up.
+  await expect
+    .poll(async () => (await readMem()).geometries, {
+      timeout: 60_000,
+      message: 'final Aurora remount reports geometries again',
+    })
+    .toBeGreaterThan(0);
   const after = await readMem();
   expect(
     Math.abs(after.geometries - baseline.geometries),
