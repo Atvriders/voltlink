@@ -777,7 +777,12 @@ jobs:
           TAG="ghcr.io/${REPO}:sha-${{ github.sha }}"
           GOT=$(docker buildx imagetools inspect "$TAG" --format '{{json .Manifest.Digest}}' | tr -d '"')
           [ "$GOT" = "${{ needs.publish.outputs.digest }}" ] || { echo "::error::sha tag digest $GOT != publish digest ${{ needs.publish.outputs.digest }}"; exit 1; }
-          LABELS=$(docker buildx imagetools inspect "$TAG" --format '{{json .Image.Labels}}')
+          # Labels live in the image CONFIG, and this buildx's imagetools
+          # template has no .Image.Labels field ('can't evaluate field Labels
+          # in type *v1.Image'). The guide-runner step already pulled the
+          # digest, so read them from the real image config.
+          docker pull "ghcr.io/${REPO}@${{ needs.publish.outputs.digest }}" >/dev/null
+          LABELS=$(docker image inspect "ghcr.io/${REPO}@${{ needs.publish.outputs.digest }}" --format '{{json .Config.Labels}}')
           VERSION=$(node -p "require('./package.json').version")
           LABEL=$(printf '%s' "$LABELS" | jq -r '."org.opencontainers.image.version" // empty')
           [ "$LABEL" = "$VERSION" ] || { echo "::error::image version label '$LABEL' != package version $VERSION"; exit 1; }
@@ -834,7 +839,10 @@ jobs:
           VERSION="v$(node -p "require('./package.json').version")"
           [ "${GITHUB_REF_NAME}" = "$VERSION" ] || { echo "::error::tag ${GITHUB_REF_NAME} != package version $VERSION"; exit 1; }
           # The label carries the bare semver (package.json), not the 'v'.
-          LABEL=$(docker buildx imagetools inspect "$SHA_TAG" --format '{{json .Image.Labels}}' | jq -r '."org.opencontainers.image.version" // empty')
+          # imagetools' template has no .Image.Labels field, so pull the
+          # digest and read the image config's labels.
+          docker pull "ghcr.io/${REPO}@$DIGEST" >/dev/null
+          LABEL=$(docker image inspect "ghcr.io/${REPO}@$DIGEST" --format '{{json .Config.Labels}}' | jq -r '."org.opencontainers.image.version" // empty')
           [ "$LABEL" = "${GITHUB_REF_NAME#v}" ] || { echo "::error::image version label '$LABEL' != ${GITHUB_REF_NAME#v}"; exit 1; }
           echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
       - name: Point the version tag at the verified digest (copy the index unchanged)
