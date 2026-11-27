@@ -377,6 +377,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
+      - name: Read the package version (OCI version label, item 8)
+        id: ver
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
       - name: Build image (in-image selftest runs as a build step)
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
@@ -385,6 +388,8 @@ jobs:
           load: true
           push: false
           tags: voltlink:ci
+          build-args: |
+            VOLTLINK_VERSION=${{ steps.ver.outputs.version }}
       - name: Scan image (HIGH/CRITICAL fail, Trivy ignores honoured)
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8
         with:
@@ -619,6 +624,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Read the package version (OCI version label, item 8)
+        id: ver
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
       - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
         id: meta
         with:
@@ -627,6 +635,11 @@ jobs:
           # promote AFTER verify-published boots the digest (I-V100).
           tags: |
             type=sha,format=long
+          # R10 step 6: revision/created/source come from the metadata action;
+          # the version label is package.json's (11.1.1 at tag time), which
+          # tag-release compares with the tag.
+          labels: |
+            org.opencontainers.image.version=${{ steps.ver.outputs.version }}
       - id: push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
@@ -634,6 +647,9 @@ jobs:
           file: Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VOLTLINK_VERSION=${{ steps.ver.outputs.version }}
           provenance: true
           sbom: true
 
@@ -669,6 +685,23 @@ jobs:
       - name: The booted digest equals the publish output (I-V100)
         run: |
           echo "digest: ${{ needs.publish.outputs.digest }}"
+      - name: The sha tag digest and labels agree with this checkout (item 8)
+        run: |
+          # The exact commands tag-release runs at tag time, proven here on
+          # main against the tag this run just published.
+          set -e
+          TAG="ghcr.io/${{ github.repository }}:sha-${{ github.sha }}"
+          GOT=$(docker buildx imagetools inspect "$TAG" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          [ "$GOT" = "${{ needs.publish.outputs.digest }}" ] || { echo "::error::sha tag digest $GOT != publish digest ${{ needs.publish.outputs.digest }}"; exit 1; }
+          LABELS=$(docker buildx imagetools inspect "$TAG" --format '{{json .Image.Labels}}')
+          VERSION=$(node -p "require('./package.json').version")
+          LABEL=$(printf '%s' "$LABELS" | jq -r '."org.opencontainers.image.version" // empty')
+          [ "$LABEL" = "$VERSION" ] || { echo "::error::image version label '$LABEL' != package version $VERSION"; exit 1; }
+          REV=$(printf '%s' "$LABELS" | jq -r '."org.opencontainers.image.revision" // empty')
+          [ "$REV" = "${{ github.sha }}" ] || { echo "::error::image revision label '$REV' != ${{ github.sha }}"; exit 1; }
+          SRC=$(printf '%s' "$LABELS" | jq -r '."org.opencontainers.image.source" // empty')
+          case "$SRC" in https://github.com/*) ;; *) echo "::error::image source label '$SRC' missing"; exit 1;; esac
+          echo "ok: $TAG digest=$GOT version=$LABEL revision=$REV source=$SRC"
       - name: Upload the digest artifact (tag runs reuse it — no rebuild)
         run: printf '%s' '${{ needs.publish.outputs.digest }}' > /tmp/image-digest.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -712,8 +745,9 @@ jobs:
           [ "$GOT" = "$DIGEST" ] || { echo "::error::sha tag digest $GOT != main's artifact digest $DIGEST"; exit 1; }
           VERSION="v$(node -p "require('./package.json').version")"
           [ "${GITHUB_REF_NAME}" = "$VERSION" ] || { echo "::error::tag ${GITHUB_REF_NAME} != package version $VERSION"; exit 1; }
+          # The label carries the bare semver (package.json), not the 'v'.
           LABEL=$(docker buildx imagetools inspect "$SHA_TAG" --format '{{json .Image.Labels}}' | jq -r '."org.opencontainers.image.version" // empty')
-          [ "$LABEL" = "${GITHUB_REF_NAME}" ] || { echo "::error::image version label '$LABEL' != tag ${GITHUB_REF_NAME}"; exit 1; }
+          [ "$LABEL" = "${GITHUB_REF_NAME#v}" ] || { echo "::error::image version label '$LABEL' != ${GITHUB_REF_NAME#v}"; exit 1; }
           echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
       - name: Point the version tag at the verified digest (copy the index unchanged)
         run: |
@@ -761,6 +795,9 @@ jobs:
       # 7a: voltlink:ci is loaded only on the image job's runner; a fresh
       # runner cannot pull it, so build it here with the same input.
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
+      - name: Read the package version (OCI version label, item 8)
+        id: ver
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
       - name: Build voltlink:ci for this runner (7a)
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
@@ -769,6 +806,8 @@ jobs:
           load: true
           push: false
           tags: voltlink:ci
+          build-args: |
+            VOLTLINK_VERSION=${{ steps.ver.outputs.version }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 24

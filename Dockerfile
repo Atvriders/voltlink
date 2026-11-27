@@ -55,6 +55,9 @@ RUN --mount=type=cache,target=/root/.npm \
  && node -e "new (require('@prisma/client').PrismaClient)()"
 
 FROM os AS runtime
+# The release version, passed from package.json by CI (item 8/R10 step 6);
+# tag-release compares this label with the git tag.
+ARG VOLTLINK_VERSION
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /usr/local/bin/npm \
            /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-v* \
  && groupadd --system --gid 10001 voltlink \
@@ -75,7 +78,7 @@ COPY --from=build /app/scripts/healthcheck-probe.mjs /app/healthcheck-probe.mjs
 # Consistent product name in container labels (spec L108).
 LABEL org.opencontainers.image.title="VoltLink" \
       org.opencontainers.image.description="Self-hosted connected-vehicle platform" \
-      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.version="${VOLTLINK_VERSION}" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.vendor="VoltLink" \
       com.voltlink.role="multi (web|worker|scheduler|status|migrate|selftest)"
