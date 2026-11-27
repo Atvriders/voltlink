@@ -9,8 +9,13 @@ ARG NODE_IMAGE=node:24-bookworm-slim@sha256:c0a93797ee78814ae6d32fcca2561fdbbe42
 FROM ${NODE_IMAGE} AS os
 # openssl: Prisma 6 picks its engine from the detected OpenSSL.
 # tini: PID 1, forwards SIGTERM, reaps children (I-IMAGEBOOT init process).
+# libpam*: the pinned digest predates the libpam security update (CVE-2025-6020,
+# fixed in 1.5.2-6+deb12u3); the Trivy gate fails HIGH/CRITICAL when a fix
+# exists, so request the fixed bookworm-security versions explicitly.
 # hadolint ignore=DL3008
-RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates tini \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      openssl ca-certificates tini \
+      libpam0g libpam-modules libpam-modules-bin libpam-runtime \
  && rm -rf /var/lib/apt/lists/*
 ENV CHECKPOINT_DISABLE=1 PRISMA_HIDE_UPDATE_MESSAGE=1
 WORKDIR /app
