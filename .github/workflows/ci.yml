@@ -457,7 +457,35 @@ jobs:
         run: |
           cd compose-smoke
           docker compose --profile status up -d --wait
-          curl -fsS http://127.0.0.1:3001/healthz
+          # The healthcheck is in-container; the guide's URL is the published
+          # host port. compose --wait has been seen to return while the
+          # published port was not answering yet (status Healthy ~8 s after
+          # start, before its 30 s healthcheck interval), so poll for up to
+          # 60 s and then prove it, dumping state if it never answers.
+          served=''
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3001/healthz; then served=yes; break; fi
+            echo "attempt $attempt/30: :3001 not answering yet"
+            sleep 2
+          done
+          if [ -z "$served" ]; then
+            echo '--- status container state ---' >&2
+            docker compose --profile status ps >&2 || true
+            echo '--- published port ---' >&2
+            docker compose --profile status port status 3001 >&2 || true
+            echo '--- status logs (tail) ---' >&2
+            docker compose --profile status logs --no-color --tail 80 status >&2 || true
+            echo '--- host listeners on :3001 ---' >&2
+            ss -ltn | grep -E ':3001' >&2 || echo 'nothing listening on :3001' >&2
+            echo '--- in-container probe ---' >&2
+            docker compose --profile status exec -T status node -e "
+              fetch('http://127.0.0.1:3001/healthz')
+                .then((r) => r.text())
+                .then((t) => { console.log(t); process.exit(0); },
+                      (e) => { console.error(e.message); process.exit(1); });
+            " >&2 || true
+            exit 1
+          fi
       - name: Tesla profile — throwaway TLS + proxy reachable from web/worker (R2-03)
         # `-f` would REPLACE the job's COMPOSE_FILE (and with it the CI image
         # swap), so the tesla mounts overlay is appended to it instead. The
