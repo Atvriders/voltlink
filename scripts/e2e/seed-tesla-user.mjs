@@ -64,7 +64,28 @@ async function main() {
       }
       await new Promise((r) => setTimeout(r, 250));
     }
-    if (!token) throw new Error(`no verification email for ${email}`);
+    if (!token) {
+      // Registration answers 202 for an existing email too (no
+      // account enumeration) and sends no mail then. Prove readiness by
+      // signing in instead — a fresh CI database always gets the email
+      // branch, a reused local database always gets this one.
+      const login = await j(
+        fetch(`${BASE}/api/v1/auth/login`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            cookie,
+            'x-vl-csrf': csrf,
+          },
+          body: JSON.stringify({ email, password: PASSWORD }),
+        }),
+      );
+      if (login.status === 200) {
+        console.log(`user already verified; login works: ${email}`);
+        return;
+      }
+      throw new Error(`no verification email for ${email}`);
+    }
     const ver = await j(
       fetch(`${BASE}/api/v1/auth/verify-email`, {
         method: 'POST',

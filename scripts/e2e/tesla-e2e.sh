@@ -5,7 +5,10 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-RUN_DIR="${RUN_DIR:-$SCRIPT_DIR/run}"
+# R2-24: the run directory (fake-tesla URL/logs, stack PID file) lives OUTSIDE
+# the repo and is shared with start-stack.sh via the environment, so the
+# trap's `start-stack.sh stop` stops exactly the stack this script booted.
+export RUN_DIR="${RUN_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/voltlink-tesla.XXXXXX")}"
 mkdir -p "$RUN_DIR"
 export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
 

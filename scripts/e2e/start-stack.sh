@@ -108,6 +108,16 @@ export VL_SETUP_TOKEN="${VL_SETUP_TOKEN-e2e-local-setup-token-0123456789abcdef}"
 # Local stacks listen on plain HTTP; CI keeps this flag as-is.
 export VL_ALLOW_INSECURE_HTTP="${VL_ALLOW_INSECURE_HTTP:-true}"
 export VL_E2E_SMTP_HTTP="${VL_E2E_SMTP_HTTP:-http://127.0.0.1:$VL_SMTP_HTTP_PORT}"
+# R2-24: never boot over a port another process already owns — the readiness
+# loop below would otherwise curl the FOREIGN stack and bless a half-boot
+# (the Tesla-vs-visual port clash that broke e2e-fullstack for days).
+for PORT_NAME in PORT SMTP_PORT VL_SMTP_HTTP_PORT; do
+  PORT_VALUE="${!PORT_NAME}"
+  if ss -Hltn "sport = :${PORT_VALUE}" 2>/dev/null | grep -q .; then
+    echo "start-stack: ${PORT_NAME} ${PORT_VALUE} is already in use; stop the other stack first" >&2
+    exit 1
+  fi
+done
 # R2-24: cap the Prisma pool for the shared server (100 connections total).
 case "$DATABASE_URL" in
   *connection_limit=*) ;;
@@ -127,6 +137,13 @@ for _ in $(seq 1 20); do
   sleep 0.2
 done
 [ "$smtp_ready" = "1" ] || { echo "fake smtp did not come up" >&2; tail -20 "$LOG_DIR/smtp.log"; exit 1; }
+# R2-24: the healthy sink must be OUR process, not a foreign one on the same
+# port (the readiness curl alone cannot tell them apart).
+if ! ss -Hltnp "sport = :${VL_SMTP_HTTP_PORT}" 2>/dev/null | grep -q "pid=${SMTP_PID},"; then
+  echo "fake smtp port ${VL_SMTP_HTTP_PORT} is not served by our sink (pid ${SMTP_PID})" >&2
+  tail -20 "$LOG_DIR/smtp.log"
+  exit 1
+fi
 
 node dist/cli/migrate.cjs >"$LOG_DIR/migrate.log" 2>&1 || { tail -40 "$LOG_DIR/migrate.log"; exit 1; }
 
@@ -160,6 +177,13 @@ for i in $(seq 1 60); do
 done
 if [ "$ready" != "1" ]; then
   echo 'web API did not become healthy within 60s; last 60 lines of the API log:'
+  tail -60 "$LOG_DIR/api.log"
+  exit 1
+fi
+# R2-24: the healthy web on :PORT must be OUR process (pid=$API_PID), not a
+# foreign stack still holding the port.
+if ! ss -Hltnp "sport = :$PORT" 2>/dev/null | grep -q "pid=$API_PID,"; then
+  echo "web port $PORT is not served by our API (pid $API_PID)" >&2
   tail -60 "$LOG_DIR/api.log"
   exit 1
 fi

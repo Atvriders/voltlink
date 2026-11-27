@@ -298,6 +298,11 @@ jobs:
             echo "===== $f.log ====="
             tail -60 "$RUNNER_TEMP/stack-run/logs/$f.log" || true
           done
+      # The visual stack keeps port 3111 (and the SMTP ports); stop it so
+      # fresh-install and the Tesla stack can bind their own ports.
+      - name: Stop the visual stack
+        if: always()
+        run: RUN_DIR="$RUNNER_TEMP/stack-run" bash scripts/e2e/start-stack.sh stop
       - name: Fresh-install browser test (docs path, no API or SQL shortcuts)
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client >/dev/null
@@ -318,11 +323,7 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:3112
       - name: Tesla e2e against the fake Fleet API
-        run: |
-          # The matrix stack still owns port 3111; stop it so the Tesla
-          # stack's API can bind and the authorize route serves its own env.
-          RUN_DIR="$RUNNER_TEMP/stack-run" bash scripts/e2e/start-stack.sh stop
-          bash scripts/e2e/tesla-e2e.sh
+        run: bash scripts/e2e/tesla-e2e.sh
         env:
           E2E_BASE_URL: http://127.0.0.1:3111
           VL_E2E_SMTP_HTTP: http://127.0.0.1:1026
@@ -337,6 +338,15 @@ jobs:
           VL_ALLOW_INSECURE_HTTP: 'true'
           VL_SETUP_TOKEN: ci-e2e-setup-token-0123456789abcdef
           VL_QUEUE_PREFIX: voltlink-ci
+      - name: Tesla stack logs (api/smtp/fake-tesla)
+        if: always()
+        run: |
+          for f in api worker scheduler smtp; do
+            echo "===== $f.log ====="
+            tail -60 "$RUNNER_TEMP/tesla-run/logs/$f.log" || true
+          done
+          echo "===== fake-tesla.log ====="
+          tail -40 "$RUNNER_TEMP/tesla-run/fake-tesla.log" || true
       - name: Upload e2e evidence (traces, screenshots, stack logs)
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -347,6 +357,8 @@ jobs:
             test-results/playwright.json
             tests/e2e/**/*-snapshots/**
             ${{ runner.temp }}/stack-run/logs/**
+            ${{ runner.temp }}/tesla-run/logs/**
+            ${{ runner.temp }}/tesla-run/fake-tesla.log
             scripts/e2e/run-fresh/logs/**
           if-no-files-found: ignore
           retention-days: 14
