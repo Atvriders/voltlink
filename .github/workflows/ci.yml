@@ -376,6 +376,15 @@ jobs:
       COMPOSE_FILE: compose.production.yml:docker-compose.ci.yml
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      # The fresh-install step drives the browser with the repo's pinned
+      # Playwright. Without node_modules, `npx playwright` downloads a
+      # different `playwright` package from the registry and the spec dies
+      # with "Cannot find module '@playwright/test'".
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
       - name: Read the package version (OCI version label, item 8)
         id: ver
