@@ -25,10 +25,18 @@ async function main() {
   const csrf1 = await j(fetch(`${BASE}/api/v1/auth/csrf`));
   if (csrf1.status !== 200) throw new Error(`csrf: ${csrf1.status} ${JSON.stringify(csrf1.body)}`);
   const csrf = csrf1.body.data.token;
+  // Double-submit CSRF needs the cookie AND the header to match; node fetch
+  // has no cookie jar, so carry the Set-Cookie value through every request.
+  const cookie = csrf1.headers.get('set-cookie')?.split(';')[0] ?? '';
+  if (!cookie) throw new Error('csrf response carried no Set-Cookie');
   const reg = await j(
     fetch(`${BASE}/api/v1/auth/register`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-vl-csrf': csrf },
+      headers: {
+        'content-type': 'application/json',
+        cookie,
+        'x-vl-csrf': csrf,
+      },
       body: JSON.stringify({ name: 'Tesla E2E', email, password: PASSWORD }),
     }),
   );
@@ -60,7 +68,7 @@ async function main() {
     const ver = await j(
       fetch(`${BASE}/api/v1/auth/verify-email`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', cookie, 'x-vl-csrf': csrf },
         body: JSON.stringify({ token }),
       }),
     );
