@@ -368,6 +368,12 @@ jobs:
     needs: [checks, unit-int, migrations, e2e-fullstack]
     # Tag runs build nothing (C5.8).
     if: github.ref_type != 'tag'
+    # Every step after the guide runner runs a bare `docker compose` in
+    # compose-smoke; without this the overlay is lost and the next `up`
+    # recreates the app roles from the unpublished GHCR image. The runner
+    # copies docker-compose.ci.yml into compose-smoke (item 2b).
+    env:
+      COMPOSE_FILE: compose.production.yml:docker-compose.ci.yml
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
@@ -424,8 +430,10 @@ jobs:
           SMOKE_PASSWORD: smoke-password-12345
         run: |
           cd compose-smoke
-          # Bare `docker compose` — COMPOSE_FILE lives in .env (C6). The admin
-          # exists from the UI spec above, so this is the login-reuse mode.
+          # Bare `docker compose`: COMPOSE_FILE comes from the job env and the
+          # overlay is in this directory (items 2b/3), so the CI image swap
+          # survives into every later up/down. The admin exists from the UI
+          # spec above, so this is the login-reuse mode.
           SMOKE_EMAIL="$SMOKE_EMAIL" SMOKE_PASSWORD="$SMOKE_PASSWORD" node ../scripts/smoke.mjs
           # restart smoke: the same account signs in again and the command
           # reaches a terminal state.
