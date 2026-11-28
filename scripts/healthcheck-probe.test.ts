@@ -9,24 +9,30 @@ import { BEAT_BOUNDS, beatFresh, beatValueMs, configProblems } from './healthche
 
 describe('healthcheck probe (I-HEALTH)', () => {
   it('bounds worker beats to 90 s', () => {
+    // One clock read per assertion: two Date.now() calls drift by a millisecond
+    // or two under load, which is enough to push the 89_999 case past the
+    // bound and fail this test at random.
+    const now = Date.now();
     expect(BEAT_BOUNDS.worker).toBe(90_000);
-    expect(beatFresh('worker', String(Date.now()), Date.now())).toBe(true);
-    expect(beatFresh('worker', String(Date.now() - 89_999), Date.now())).toBe(true);
-    expect(beatFresh('worker', String(Date.now() - 90_001), Date.now())).toBe(false);
+    expect(beatFresh('worker', String(now), now)).toBe(true);
+    expect(beatFresh('worker', String(now - 89_999), now)).toBe(true);
+    expect(beatFresh('worker', String(now - 90_001), now)).toBe(false);
   });
 
   it('bounds scheduler beats to 5 minutes', () => {
+    const now = Date.now();
     expect(BEAT_BOUNDS.scheduler).toBe(5 * 60_000);
-    expect(beatFresh('scheduler', String(Date.now() - 4 * 60_000), Date.now())).toBe(true);
-    expect(beatFresh('scheduler', String(Date.now() - 5 * 60_000 - 1), Date.now())).toBe(false);
+    expect(beatFresh('scheduler', String(now - 4 * 60_000), now)).toBe(true);
+    expect(beatFresh('scheduler', String(now - 5 * 60_000 - 1), now)).toBe(false);
   });
 
   it('accepts epoch-ms and ISO strings, rejects missing or future beats', () => {
+    const now = Date.now();
     expect(beatValueMs('1750000000000')).toBe(1750000000000);
     expect(beatValueMs(new Date(1750000000000).toISOString())).toBe(1750000000000);
-    expect(beatFresh('worker', '', Date.now())).toBe(false);
-    expect(beatFresh('worker', 'not-a-date', Date.now())).toBe(false);
-    expect(beatFresh('worker', String(Date.now() + 10_000), Date.now())).toBe(false);
+    expect(beatFresh('worker', '', now)).toBe(false);
+    expect(beatFresh('worker', 'not-a-date', now)).toBe(false);
+    expect(beatFresh('worker', String(now + 10_000), now)).toBe(false);
   });
 
   it('fails when REDIS_URL is missing', () => {
