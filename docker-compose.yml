@@ -3,6 +3,27 @@
 # with exactly one service definition (Compose v2.20 or newer required; the
 # install guide states this minimum). It never builds anything.
 #
+# It deliberately holds no service definitions of its own: the authoritative
+# stack (images, environment, networks, volumes, healthchecks) lives in
+# compose.production.yml, which this file includes — one definition, no drift.
+# Download BOTH files from the same release tag, then:
+#
+#   docker compose pull          # ghcr.io/atvriders/voltlink:<release tag>
+#   docker compose up -d --wait  # boots everything below and waits for health
+#
+# What `up` starts (project 'voltlink', image
+# ghcr.io/atvriders/voltlink:${VOLTLINK_IMAGE_TAG:-v1.1.1}):
+#
+#   migrate    one-shot: applies migrations under an advisory lock, exits 0
+#   postgres   postgres:17-alpine — volume pgdata, the only persistent state
+#   redis      redis:7-alpine — queue and cache
+#   web        API + built SPA — http://127.0.0.1:3110
+#   worker     background jobs (commands, telemetry)
+#   scheduler  scheduled jobs (token refresh, automations)
+#
+# Optional profiles: `--profile status` adds the public status role on
+# http://127.0.0.1:3001; `--profile tesla` adds the Tesla Fleet API proxy.
+#
 # Everything a user runs pulls ghcr.io/atvriders/voltlink at the release
 # version. Building from source is a separate overlay: see
 # docker-compose.build.yml.
