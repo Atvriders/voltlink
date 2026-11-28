@@ -39,4 +39,20 @@ describe('keyring (R2-67)', () => {
     vi.stubEnv('VL_MASTER_KEY_VERSION', '2');
     expect(() => validateKeyRing()).not.toThrow();
   });
+
+  // The shipped default once was a 32-character hex string: a fine-looking
+  // secret that base64-decodes to 24 bytes, so web/worker/scheduler all
+  // crash-looped and the operator got "must be 32 bytes" with no clue why.
+  it('names the decoded length and the generator when the key is hex, not base64', () => {
+    vi.stubEnv('VL_MASTER_KEY', '9da8d8a9e9ec5944e9024477234836d9');
+    vi.stubEnv('VL_MASTER_KEY_VERSION', '');
+    expect(() => validateKeyRing()).toThrow(/\(got 24 bytes from 32 characters\)/);
+    expect(() => validateKeyRing()).toThrow(/openssl rand -base64 32/);
+  });
+
+  it('names the decoded length for a short VL_MASTER_KEYS entry', () => {
+    vi.stubEnv('VL_MASTER_KEY', KEY);
+    vi.stubEnv('VL_MASTER_KEYS', 'v2:9da8d8a9e9ec5944e9024477234836d9');
+    expect(() => validateKeyRing()).toThrow(/VL_MASTER_KEYS v2 must be 32 bytes .*got 24/);
+  });
 });

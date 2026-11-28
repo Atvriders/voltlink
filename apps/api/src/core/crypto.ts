@@ -43,7 +43,12 @@ const ALGORITHM = 'aes-256-gcm-envelope-v1';
 function masterKey(): Buffer {
   const raw = env.MASTER_KEY();
   const buf = Buffer.from(raw, 'base64');
-  if (buf.length !== 32) throw new Error('VL_MASTER_KEY must be 32 bytes when base64-decoded.');
+  if (buf.length !== 32)
+    throw new Error(
+      `VL_MASTER_KEY must be 32 bytes when base64-decoded (got ${buf.length} bytes ` +
+        `from ${raw.length} characters). Generate it with 'openssl rand -base64 32' — ` +
+        "a hex value ('openssl rand -hex 32') is not a 32-byte base64 key.",
+    );
   return buf;
 }
 

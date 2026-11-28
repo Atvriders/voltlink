@@ -21,7 +21,12 @@ function parseRing(): { active: number; keys: Map<number, Buffer> } {
   const keys = new Map<number, Buffer>();
   const raw = env.MASTER_KEY();
   const buf = Buffer.from(raw, 'base64');
-  if (buf.length !== 32) throw new Error('VL_MASTER_KEY must be 32 bytes when base64-decoded.');
+  if (buf.length !== 32)
+    throw new Error(
+      `VL_MASTER_KEY must be 32 bytes when base64-decoded (got ${buf.length} bytes ` +
+        `from ${raw.length} characters). Generate it with 'openssl rand -base64 32' — ` +
+        "a hex value ('openssl rand -hex 32') is not a 32-byte base64 key.",
+    );
   const active = Number(process.env.VL_MASTER_KEY_VERSION || '1');
   if (!Number.isInteger(active) || active < 1)
     throw new Error('VL_MASTER_KEY_VERSION must be a positive integer.');
@@ -35,7 +40,10 @@ function parseRing(): { active: number; keys: Map<number, Buffer> } {
       const kid = Number(m[1]);
       const kb = Buffer.from(m[2] ?? '', 'base64');
       if (kb.length !== 32)
-        throw new Error(`VL_MASTER_KEYS v${kid} must be 32 bytes when base64-decoded.`);
+        throw new Error(
+          `VL_MASTER_KEYS v${kid} must be 32 bytes when base64-decoded (got ${kb.length}). ` +
+            "Each entry is 'v<N>:<base64>', generated with 'openssl rand -base64 32'.",
+        );
       keys.set(kid, kb);
     }
   }
