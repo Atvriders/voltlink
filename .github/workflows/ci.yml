@@ -809,9 +809,18 @@ jobs:
     permissions:
       actions: read
       contents: write
-      packages: read
+      # Copying main's verified index to the version tag is a registry WRITE:
+      # packages: read answered the manifest PUT with 401 Unauthorized.
+      packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      # Registry writes need an authenticated session; the imagetools reads
+      # work anonymously, the create does not.
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Find main's successful CI run for the tagged commit
         run: |
           RUN_ID=$(curl -fsS -H "Authorization: Bearer ${{ github.token }}" \
