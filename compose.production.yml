@@ -10,7 +10,9 @@
 #   curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.2/compose.production.yml -o compose.production.yml
 #   docker compose up -d --wait
 #
-# Behind a Cloudflare Tunnel, add the connector overlay (optional third file):
+# Behind a Cloudflare Tunnel (connector on another host) or another TLS
+# terminator that sets X-Forwarded-*, add the overlay (optional third file);
+# it requires PUBLIC_URL and sets TRUST_PROXY=1 for the single proxy hop:
 #   curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.2/docker-compose.tunnel.yml -o docker-compose.tunnel.yml
 #   docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d --wait
 #

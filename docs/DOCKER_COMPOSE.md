@@ -186,33 +186,42 @@ server {
 
 Set `TRUST_PROXY=1` in `.env` for one proxy hop.
 
-**Cloudflare Tunnel** — the connector can run inside this stack, so the tunnel
-is the only way in and nothing new is published on the host:
+**Cloudflare Tunnel** — when `cloudflared` runs on another machine, the tunnel
+has to reach the origin over the network, and the app has to trust the
+forwarded scheme:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.2/docker-compose.tunnel.yml -o docker-compose.tunnel.yml
 docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d --wait
 ```
 
-That overlay requires two values from the environment (`.env` or the shell):
+The overlay needs two values from the environment (`.env` or the shell):
 
 ```
 PUBLIC_URL=https://voltlink.example.com
-CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoi...
+VOLTLINK_BIND_ADDRESS=192.168.1.67
 ```
 
-`PUBLIC_URL` must be the tunnel's public hostname; the token comes from Zero
-Trust → Networks → Tunnels → your tunnel → _Configure_. In the tunnel's public
-hostname rule, point the service at `http://web:3000` (the overlay puts the
-connector on the `internal` network, where that name resolves). The overlay
-sets `TRUST_PROXY=1` for you — one hop, the connector — which is what makes the
-app see `https` and keep the session cookie. Do not set that variable to the
-bare boolean value: the web role refuses to boot with it, because it would let
-any client choose its own `X-Forwarded-For`.
+`PUBLIC_URL` is the tunnel's public hostname and is required — the overlay
+fails fast without it, because the app uses it for absolute links, cookies and
+WebAuthn, and a wrong value is the difference between a working tunnel and a
+login loop. `VOLTLINK_BIND_ADDRESS` must be an address the connector can
+actually reach; the default `127.0.0.1` is visible only on this host. Keep it
+to the LAN address rather than `0.0.0.0` where you can, and firewall that port
+to the connector. It cannot be set by the overlay itself: port publishing is
+interpolated once, before any overlay is merged, and Compose concatenates
+`ports` across files — an override there would publish 3110 twice.
 
-Running `cloudflared` on the host instead? Skip the overlay: point that tunnel
+In the tunnel's public hostname rule, point the service at
+`http://192.168.1.67:3110` (your bind address). The overlay sets
+`TRUST_PROXY=1` for you — one hop, the connector — which is what makes the app
+see `https` and keep the session cookie. Do not set that variable to the bare
+boolean value: the web role refuses to boot with it, because it would let any
+client choose its own `X-Forwarded-For`.
+
+Connector on this host instead? You do not need the overlay: point that tunnel
 at `http://127.0.0.1:3110` and set only `PUBLIC_URL` and `TRUST_PROXY=1`.
-`VL_ALLOW_INSECURE_HTTP` is never needed for a tunnel: the public URL is https.
+Either way `VL_ALLOW_INSECURE_HTTP` stays off — the public URL is https.
 
 ## 9. Backups and upgrades
 

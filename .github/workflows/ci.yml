@@ -591,7 +591,7 @@ jobs:
         run: |
           set -e
           cp .env.example /tmp/cmp.env
-          printf 'POSTGRES_PASSWORD=ci-pg\nJWT_SECRET=%s\nVL_MASTER_KEY=%s\nPUBLIC_URL=https://voltlink.example.com\nCLOUDFLARE_TUNNEL_TOKEN=ci-not-a-real-tunnel-token\n' \
+          printf 'POSTGRES_PASSWORD=ci-pg\nJWT_SECRET=%s\nVL_MASTER_KEY=%s\nPUBLIC_URL=https://voltlink.example.com\n' \
             "$(openssl rand -hex 32)" "$(openssl rand -base64 32)" >> /tmp/cmp.env
           for spec in \
             'compose.production.yml|' \
@@ -660,17 +660,16 @@ jobs:
             if (tp !== '1') fail(`${role} TRUST_PROXY=${JSON.stringify(tp)} (expected the hop count 1)`);
             if (!svc[role].environment.PUBLIC_URL) fail(`${role} has no PUBLIC_URL`);
           }
-          const cf = svc.cloudflared;
-          if (!cf) fail('no cloudflared service in the merged config');
-          if (!/^cloudflare\/cloudflared:\d{4}\.\d+\.\d+$/.test(cf.image))
-            fail(`cloudflared is not pinned to a release tag: ${cf.image}`);
-          const nets = Object.keys(cf.networks ?? {});
-          for (const n of ['internal', 'egress']) if (!nets.includes(n)) fail(`cloudflared is not on ${n}`);
-          if ((cf.ports ?? []).length) fail('cloudflared publishes host ports; the tunnel must be the only way in');
-          if ((svc.web.ports ?? []).some((p) => p.host_ip !== '127.0.0.1'))
-            fail('the overlay changed the web port binding');
-          if (!String(cf.environment?.TUNNEL_TOKEN ?? '')) fail('cloudflared has no TUNNEL_TOKEN');
-          console.log('ok: tunnel overlay sets TRUST_PROXY=1, keeps 127.0.0.1 and publishes nothing new');
+          // The connector lives on another host, so the overlay must not
+          // pretend to add one, and it must not widen what is published: the
+          // bind address is an interpolation-time value that a merge cannot
+          // change (Compose concatenates `ports`, so an override here would
+          // publish the port twice).
+          if (svc.cloudflared) fail('the overlay adds a connector; it must only shape the app env');
+          const bindings = (svc.web.ports ?? []).map((p) => `${p.host_ip}:${p.published}`);
+          if (bindings.length !== 1 || bindings[0] !== '127.0.0.1:3110')
+            fail(`the overlay changed the web port binding: ${JSON.stringify(bindings)}`);
+          console.log('ok: tunnel overlay sets TRUST_PROXY=1 and leaves the port binding at 127.0.0.1');
           NODE
       - name: actionlint
         run: |
