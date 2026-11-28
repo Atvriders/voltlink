@@ -7,8 +7,13 @@
 //   - contains `build:` (the install path must pull the published image);
 //   - interpolates `${DATABASE_URL:-` (R2-70);
 //   - gives a VL_MASTER_KEY* variable an empty default (R2-67);
-//   - gives a required value anything but a `${VAR:?...}` (JWT_SECRET,
+//   - gives a required value anything but a `${VAR:-default}` (JWT_SECRET,
 //     VL_MASTER_KEY, POSTGRES_PASSWORD, PUBLIC_URL);
+//   - ships a default that the runtime validator rejects (VL_MASTER_KEY must
+//     base64-decode to exactly 32 bytes, JWT_SECRET needs 32+ characters,
+//     POSTGRES_PASSWORD 16+, PUBLIC_URL a real http(s) URL). A 32-character
+//     hex key is the trap that shipped once: structurally a fine default,
+//     but it decodes to 24 bytes and every app role crash-loops at boot;
 //   - names an image other than ghcr.io/atvriders/voltlink, or a default tag
 //     that differs from 'v' + package.json's version (I-V100);
 //   - drops VL_QUEUE_PREFIX from a role (R2-49, I-COMPOSEENV).
@@ -55,6 +60,8 @@ interface ComposeFile {
   internalNets: string[];
   serviceNets: Map<string, string[]>;
   servicesWithPorts: string[];
+  /** `${VAR:-default}` values, so the runtime validators can be replayed. */
+  envDefaults: Map<string, string>;
   buildSeen: boolean;
   images: string[];
   errors: string[];
@@ -70,6 +77,7 @@ function parseCompose(src: string, file: string): ComposeFile {
   const internalNets: string[] = [];
   const serviceNets = new Map<string, string[]>();
   const servicesWithPorts = new Set<string>();
+  const envDefaults = new Map<string, string>();
   let netMember = '';
   let buildSeen = false;
   const images: string[] = [];
@@ -216,6 +224,8 @@ function parseCompose(src: string, file: string): ComposeFile {
       }
       const key = mKey[1]!;
       const value = mKey[2]!;
+      const mDefault = value.match(/'?\$\{[A-Za-z0-9_]+:-([^'}]*)\}'\s*$/);
+      if (mDefault) envDefaults.set(key, mDefault[1]!);
       if (inAnchor) anchors.get(inAnchor)!.push(key);
       const r = roleOf();
       if (r) r.keys.add(key);
@@ -247,6 +257,7 @@ function parseCompose(src: string, file: string): ComposeFile {
     internalNets,
     serviceNets,
     servicesWithPorts: [...servicesWithPorts],
+    envDefaults,
     buildSeen,
     images,
     errors,
@@ -345,6 +356,55 @@ async function main(): Promise<void> {
       console.error(
         `✖ ${file}: interpolates '\${DATABASE_URL:-' — build the bundled URL from POSTGRES_PASSWORD (R2-70).`,
       );
+    }
+
+    // Replay the runtime validators against the exported defaults. A default
+    // that is structurally fine but that the app rejects still means every
+    // role crash-loops out of the box: VL_MASTER_KEY is base64 → 32 bytes
+    // (apps/api/src/core/keyring.ts), so a 32-character hex string — the
+    // obvious `openssl rand -hex 32`-style value — decodes to 24 bytes and
+    // refuses to boot. JWT_SECRET/POSTGRES_PASSWORD are length-gated in
+    // core/env.ts; PUBLIC_URL must parse as http(s).
+    const secret = (key: string) => parsed.envDefaults.get(key);
+    const masterKey = secret('VL_MASTER_KEY');
+    if (masterKey !== undefined) {
+      const bytes = Buffer.from(masterKey, 'base64').length;
+      if (bytes !== 32) {
+        failed = true;
+        console.error(
+          `✖ ${file}: default VL_MASTER_KEY decodes to ${bytes} bytes, not 32 — generate it with 'openssl rand -base64 32' (a hex value is not a base64 key).`,
+        );
+      }
+    }
+    const jwtSecret = secret('JWT_SECRET');
+    if (jwtSecret !== undefined && jwtSecret.length < 32) {
+      failed = true;
+      console.error(
+        `✖ ${file}: default JWT_SECRET is ${jwtSecret.length} characters; core/env.ts requires 32.`,
+      );
+    }
+    const pgPassword = secret('POSTGRES_PASSWORD');
+    if (pgPassword !== undefined && pgPassword.length < 16) {
+      failed = true;
+      console.error(
+        `✖ ${file}: default POSTGRES_PASSWORD is ${pgPassword.length} characters; use at least 16.`,
+      );
+    }
+    const publicUrl = secret('PUBLIC_URL');
+    if (publicUrl !== undefined) {
+      let ok: boolean;
+      try {
+        const u = new URL(publicUrl);
+        ok = u.protocol === 'http:' || u.protocol === 'https:';
+      } catch {
+        ok = false;
+      }
+      if (!ok) {
+        failed = true;
+        console.error(
+          `✖ ${file}: default PUBLIC_URL '${publicUrl}' is not an absolute http(s) URL.`,
+        );
+      }
     }
 
     const roles = parsed.roles.filter((r) => r.inherits);
