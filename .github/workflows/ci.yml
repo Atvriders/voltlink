@@ -586,17 +586,19 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.build.yml --env-file ci/compose.env config -q
           docker compose -f docker-compose.yml -f docker-compose.build.yml -f docker-compose.dev.yml --env-file ci/compose.env config -q
           docker compose -f compose.production.yml -f docker-compose.ci.yml --env-file ci/compose.env config -q
+          docker compose -f docker-compose.yml -f docker-compose.tunnel.yml --env-file ci/compose.env config -q
       - name: Renderer agrees with docker compose config (C3)
         run: |
           set -e
           cp .env.example /tmp/cmp.env
-          printf 'POSTGRES_PASSWORD=ci-pg\nJWT_SECRET=%s\nVL_MASTER_KEY=%s\nPUBLIC_URL=https://voltlink.example.com\n' \
+          printf 'POSTGRES_PASSWORD=ci-pg\nJWT_SECRET=%s\nVL_MASTER_KEY=%s\nPUBLIC_URL=https://voltlink.example.com\nCLOUDFLARE_TUNNEL_TOKEN=ci-not-a-real-tunnel-token\n' \
             "$(openssl rand -hex 32)" "$(openssl rand -base64 32)" >> /tmp/cmp.env
           for spec in \
             'compose.production.yml|' \
             'compose.production.yml|status' \
             'compose.production.yml|tesla' \
             'docker-compose.yml|' \
+            'docker-compose.yml docker-compose.tunnel.yml|' \
             'docker-compose.yml docker-compose.build.yml|' \
             'docker-compose.yml docker-compose.build.yml docker-compose.dev.yml|' \
             'compose.production.yml docker-compose.ci.yml|'; do
@@ -628,6 +630,7 @@ jobs:
             'compose.production.yml|status' \
             'compose.production.yml|tesla' \
             'docker-compose.yml|' \
+            'docker-compose.yml docker-compose.tunnel.yml|' \
             'docker-compose.yml docker-compose.build.yml|' \
             'docker-compose.yml docker-compose.build.yml docker-compose.dev.yml|' \
             'compose.production.yml docker-compose.ci.yml|'; do
@@ -641,6 +644,34 @@ jobs:
           test "$(wc -l < /tmp/names.txt)" = "1"
           grep -qx 'voltlink pgdata' /tmp/names.txt
           echo "ok: every invocation renders project voltlink + volume pgdata"
+      - name: Cloudflare Tunnel overlay keeps the proxy boundary honest
+        run: |
+          set -e
+          docker compose -f docker-compose.yml -f docker-compose.tunnel.yml \
+            --env-file ci/compose.env config --format json > /tmp/tunnel.json
+          node - <<'NODE'
+          const cfg = JSON.parse(require('fs').readFileSync('/tmp/tunnel.json', 'utf8'));
+          const fail = (m) => { console.error('FAIL: ' + m); process.exit(1); };
+          const svc = cfg.services;
+          for (const role of ['web', 'worker', 'scheduler']) {
+            const tp = svc[role]?.environment?.TRUST_PROXY;
+            // A hop count, never `true`: apps/api/src/core/env.ts refuses
+            // `true` at boot because a client could then choose its own address.
+            if (tp !== '1') fail(`${role} TRUST_PROXY=${JSON.stringify(tp)} (expected the hop count 1)`);
+            if (!svc[role].environment.PUBLIC_URL) fail(`${role} has no PUBLIC_URL`);
+          }
+          const cf = svc.cloudflared;
+          if (!cf) fail('no cloudflared service in the merged config');
+          if (!/^cloudflare\/cloudflared:\d{4}\.\d+\.\d+$/.test(cf.image))
+            fail(`cloudflared is not pinned to a release tag: ${cf.image}`);
+          const nets = Object.keys(cf.networks ?? {});
+          for (const n of ['internal', 'egress']) if (!nets.includes(n)) fail(`cloudflared is not on ${n}`);
+          if ((cf.ports ?? []).length) fail('cloudflared publishes host ports; the tunnel must be the only way in');
+          if ((svc.web.ports ?? []).some((p) => p.host_ip !== '127.0.0.1'))
+            fail('the overlay changed the web port binding');
+          if (!String(cf.environment?.TUNNEL_TOKEN ?? '')) fail('cloudflared has no TUNNEL_TOKEN');
+          console.log('ok: tunnel overlay sets TRUST_PROXY=1, keeps 127.0.0.1 and publishes nothing new');
+          NODE
       - name: actionlint
         run: |
           set -e

@@ -12,7 +12,7 @@
 #   docker compose up -d --wait  # boots everything below and waits for health
 #
 # What `up` starts (project 'voltlink', image
-# ghcr.io/atvriders/voltlink:${VOLTLINK_IMAGE_TAG:-v1.1.1}):
+# ghcr.io/atvriders/voltlink:${VOLTLINK_IMAGE_TAG:-v1.1.2}):
 #
 #   migrate    one-shot: applies migrations under an advisory lock, exits 0
 #   postgres   postgres:17-alpine — volume pgdata, the only persistent state

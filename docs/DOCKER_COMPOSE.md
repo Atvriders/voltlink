@@ -34,14 +34,14 @@ production file):
 <!-- run: get-files -->
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/docker-compose.yml -o docker-compose.yml
-curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/compose.production.yml -o compose.production.yml
-curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/.env.example -o .env.example
+curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.2/docker-compose.yml -o docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.2/compose.production.yml -o compose.production.yml
+curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.2/.env.example -o .env.example
 ```
 
 The image reference is `ghcr.io/atvriders/voltlink` — the exact image the
 GitHub Actions CI pipeline builds, verifies and publishes; the tag defaults to
-`v1.1.1` and nothing in the install path ever builds an image. Pin the exact
+`v1.1.2` and nothing in the install path ever builds an image. Pin the exact
 CI-verified digest for immutable deployments (see
 [Configuration](CONFIGURATION.md#image-reference)).
 
@@ -186,6 +186,34 @@ server {
 
 Set `TRUST_PROXY=1` in `.env` for one proxy hop.
 
+**Cloudflare Tunnel** — the connector can run inside this stack, so the tunnel
+is the only way in and nothing new is published on the host:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.2/docker-compose.tunnel.yml -o docker-compose.tunnel.yml
+docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d --wait
+```
+
+That overlay requires two values from the environment (`.env` or the shell):
+
+```
+PUBLIC_URL=https://voltlink.example.com
+CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoi...
+```
+
+`PUBLIC_URL` must be the tunnel's public hostname; the token comes from Zero
+Trust → Networks → Tunnels → your tunnel → _Configure_. In the tunnel's public
+hostname rule, point the service at `http://web:3000` (the overlay puts the
+connector on the `internal` network, where that name resolves). The overlay
+sets `TRUST_PROXY=1` for you — one hop, the connector — which is what makes the
+app see `https` and keep the session cookie. Do not set that variable to the
+bare boolean value: the web role refuses to boot with it, because it would let
+any client choose its own `X-Forwarded-For`.
+
+Running `cloudflared` on the host instead? Skip the overlay: point that tunnel
+at `http://127.0.0.1:3110` and set only `PUBLIC_URL` and `TRUST_PROXY=1`.
+`VL_ALLOW_INSECURE_HTTP` is never needed for a tunnel: the public URL is https.
+
 ## 9. Backups and upgrades
 
 Backup, restore and the migrate role: [BACKUP_RESTORE.md](BACKUP_RESTORE.md).
@@ -215,7 +243,7 @@ docker compose down
 docker compose down -v
 ```
 
-Remove the image with `docker image rm ghcr.io/atvriders/voltlink:v1.1.1`.
+Remove the image with `docker image rm ghcr.io/atvriders/voltlink:v1.1.2`.
 If the directory is not named `voltlink`, pass `-p voltlink` to every command
 so the project name (and the `voltlink_pgdata` volume) stays the same.
 

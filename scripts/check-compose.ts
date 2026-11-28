@@ -43,6 +43,7 @@ const ENV_EXAMPLE_INFRA = new Set([
   'VOLTLINK_IMAGE_DIGEST',
   'VOLTLINK_BIND_ADDRESS',
   'VOLTLINK_STATUS_PORT',
+  'CLOUDFLARE_TUNNEL_TOKEN',
 ]);
 
 interface RoleEnv {
@@ -434,7 +435,7 @@ async function main(): Promise<void> {
 
   const envExample = readFileSync('.env.example', 'utf8');
   for (const line of envExample.split('\n')) {
-    // Commented keys (`# VOLTLINK_IMAGE_TAG=v1.1.1`) are documentation, not
+    // Commented keys (`# VOLTLINK_IMAGE_TAG=v1.1.2`) are documentation, not
     // values; compose already defaults the image reference.
     if (/^\s*#/.test(line)) continue;
     const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=/);

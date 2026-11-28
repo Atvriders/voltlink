@@ -32,8 +32,8 @@ same commands, marked so CI's compose acceptance also runs them:
 <!-- run: quick-get-files -->
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/docker-compose.yml -o docker-compose.yml
-curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/compose.production.yml -o compose.production.yml
+curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.2/docker-compose.yml -o docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.2/compose.production.yml -o compose.production.yml
 ```
 
 <!-- run: quick-up -->

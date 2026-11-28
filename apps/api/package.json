@@ -1,6 +1,6 @@
 {
   "name": "@voltlink/api",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "description": "VoltLink API — Express 5, PostgreSQL/Prisma, cookie auth, provider adapters, telemetry, commands, automations, fleet, status, SSE.",
   "type": "module",

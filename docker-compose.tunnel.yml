@@ -1,0 +1,73 @@
+# VoltLink behind a Cloudflare Tunnel — the connector runs inside this stack.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d --wait
+#
+# Two values have no sensible default and must come from the environment (a
+# `.env` next to these files, or the shell):
+#
+#   PUBLIC_URL=https://voltlink.example.com   the tunnel's public hostname
+#   CLOUDFLARE_TUNNEL_TOKEN=...               Zero Trust → Networks → Tunnels
+#
+# What this overlay changes, and why:
+#
+#   - PUBLIC_URL becomes required and must be the tunnel hostname. It is what
+#     the app uses for absolute links, cookies and WebAuthn, so it cannot be
+#     guessed from inside the container.
+#   - TRUST_PROXY=1 — exactly one hop sets X-Forwarded-For/Proto: the
+#     connector. Without it the app never sees the request as https and logins
+#     loop. It must be a hop count, not `true`: `true` lets any client pick its
+#     own address, so the web role refuses to start with it (apps/api/src/
+#     core/env.ts, parseTrustProxy). Override with a list of connector
+#     addresses/CIDRs if you prefer.
+#   - adds `cloudflared`, pinned, joined to `internal` (to reach the web role)
+#     and `egress` (to reach Cloudflare). Nothing new is published on the host:
+#     the tunnel is the only way in, and the published-port binding stays
+#     127.0.0.1.
+#
+# `VL_ALLOW_INSECURE_HTTP` is NOT needed here: the tunnel's public URL is
+# https, so the production https requirement is already satisfied.
+#
+# Running cloudflared on the host instead? Then you do not need this file: set
+# PUBLIC_URL and TRUST_PROXY=1 on the plain stack and point that tunnel's
+# ingress at http://127.0.0.1:3110.
+
+x-tunnel-env: &tunnel-env
+  PUBLIC_URL: '${PUBLIC_URL:?set PUBLIC_URL to the tunnel hostname, for example https://voltlink.example.com}'
+  TRUST_PROXY: '${TRUST_PROXY:-1}'
+
+services:
+  web:
+    environment:
+      <<: *tunnel-env
+
+  worker:
+    environment:
+      <<: *tunnel-env
+
+  scheduler:
+    environment:
+      <<: *tunnel-env
+
+  status:
+    environment:
+      <<: *tunnel-env
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.11.2
+    restart: unless-stopped
+    # The token comes from TUNNEL_TOKEN in the environment, not from argv, so
+    # it does not show up in `docker inspect`'s command line. A remote-managed
+    # tunnel is identified by the token alone; the ingress rules (hostname →
+    # http://web:3000) live in the Cloudflare dashboard.
+    command: ['tunnel', '--no-autoupdate', 'run']
+    environment:
+      TUNNEL_TOKEN: '${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN to the tunnel token from the Cloudflare dashboard}'
+    networks: [internal, egress]
+    depends_on:
+      web:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp

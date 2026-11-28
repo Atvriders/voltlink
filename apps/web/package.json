@@ -1,6 +1,6 @@
 {
   "name": "@voltlink/web",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "description": "VoltLink SPA \u2014 React 19 + Vite 7 + React Router 7 + Tailwind + TanStack Query + MapLibre + React Three Fiber.",
   "type": "module",

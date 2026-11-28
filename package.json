@@ -1,7 +1,7 @@
 {
   "name": "voltlink",
   "private": true,
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "VoltLink \u2014 self-hosted connected-vehicle platform: vehicle telemetry, secure controls, drives, charging, battery analytics, automations, notifications, fleet management, and a full status platform.",
   "license": "MIT",
   "author": "Atvriders",

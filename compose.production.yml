@@ -6,9 +6,13 @@
 # download docker-compose.yml TOGETHER WITH this file (the entry file includes
 # this one) from the release tag's URL so file and image always match.
 #
-#   curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/docker-compose.yml -o docker-compose.yml
-#   curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/compose.production.yml -o compose.production.yml
+#   curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.2/docker-compose.yml -o docker-compose.yml
+#   curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.2/compose.production.yml -o compose.production.yml
 #   docker compose up -d --wait
+#
+# Behind a Cloudflare Tunnel, add the connector overlay (optional third file):
+#   curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.2/docker-compose.tunnel.yml -o docker-compose.tunnel.yml
+#   docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d --wait
 #
 # NO .env FILE IS NEEDED: every required value has a default right here. The
 # defaults are local-trial quality — the web role binds to 127.0.0.1 by
@@ -26,7 +30,7 @@ x-voltlink-common: &voltlink
   # VOLTLINK_IMAGE_DIGEST pins the exact digest (I-V100): the reference
   # becomes repo:tag@sha256:<digest> and verify-published boots by digest.
   # The default tag is the release this file ships with (v + package.json).
-  image: ghcr.io/atvriders/voltlink:${VOLTLINK_IMAGE_TAG:-v1.1.1}${VOLTLINK_IMAGE_DIGEST:-}
+  image: ghcr.io/atvriders/voltlink:${VOLTLINK_IMAGE_TAG:-v1.1.2}${VOLTLINK_IMAGE_DIGEST:-}
   restart: unless-stopped
   pull_policy: always
   init: true

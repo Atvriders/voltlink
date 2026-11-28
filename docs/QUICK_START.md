@@ -13,8 +13,8 @@ guide; anything not covered here follows the guide.
 ## 2. Get the files
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/docker-compose.yml -o docker-compose.yml
-curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.1/compose.production.yml -o compose.production.yml
+curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.2/docker-compose.yml -o docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/Atvriders/voltlink/v1.1.2/compose.production.yml -o compose.production.yml
 ```
 
 No `.env` file — every required value has a default inside the compose file
